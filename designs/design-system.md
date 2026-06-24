@@ -185,6 +185,7 @@ Define all design tokens as CSS custom properties derived from rem:
   --color-bg-elevated:   #181826;
   --color-bg-overlay:    rgba(0, 0, 0, 0.800);
   --color-tile-bg:       #1C1C28;
+  --color-service-tile-bg: #2E2E3C;
 
   /* Accents */
   --color-accent-amber:     #F5A623;
@@ -290,7 +291,8 @@ All color values are defined as design tokens. Reference them by token name in c
 | `bg-surface` | `#0F0F1A` | Slightly elevated surface (sidebar background alternative) |
 | `bg-elevated` | `#181826` | Cards, modals, settings sidebar |
 | `bg-overlay` | `#000000CC` | Translucent overlay behind modals |
-| `tile-bg` | `#1C1C28` | Placeholder background for tiles without artwork |
+| `tile-bg` | `#1C1C28` | Placeholder background for library tiles without artwork |
+| `service-tile-bg` | `#2E2E3C` | Service-tile card — slightly lighter than `tile-bg` so dark service logos read (e.g. Apple TV) |
 
 ### Accent Colors
 
@@ -559,8 +561,8 @@ Represents a streaming service on the Home Screen. Landscape / 16:9 artwork.
 #### Default state
 ```
 Container: vertical flex, gap 10px, align-items center, width 170px
-  Artwork frame: 170 × 96 px, border-radius 10px, fill: tile-bg (#1C1C28), clip
-    [Service logo / artwork fills frame]
+  Artwork frame: 170 × 96 px, border-radius 10px, fill: service-tile-bg (#2E2E3C), clip
+    [Service logo, object-fit: contain with padding — never cropped]
   Label text: 13px, text-secondary, Inter 400
 ```
 

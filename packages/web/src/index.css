@@ -15,6 +15,10 @@
   --color-bg-elevated: #181826;
   --color-bg-overlay: rgba(0, 0, 0, 0.8);
   --color-tile-bg: #1c1c28;
+  /* Service tiles use a slightly lighter card so dark service logos (e.g. Apple
+     TV) read better than on the near-black tile-bg (issue #110). Library
+     placeholder tiles keep --color-tile-bg. */
+  --color-service-tile-bg: #2e2e3c;
 
   /* Accents */
   --color-accent-amber: #f5a623;
@@ -62,6 +66,7 @@
   --color-bg-surface: #eceae2;
   --color-bg-elevated: #ffffff;
   --color-tile-bg: #e2dfd5;
+  --color-service-tile-bg: #ecebe4;
   --color-text-primary: #1a1820;
   --color-text-secondary: #4a4852;
   --color-text-muted: #7a7884;

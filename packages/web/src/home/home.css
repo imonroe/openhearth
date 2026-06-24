@@ -127,6 +127,8 @@
   width: 8.854rem;
   height: 5rem; /* 96px */
   border-radius: 10px;
+  /* Lighter than the default tile-bg so dark logos read (issue #110). */
+  background: var(--color-service-tile-bg);
 }
 /* Service tiles do not scale on focus (per §11) — only the ring changes. */
 .tile--library {
