@@ -116,6 +116,11 @@ Every message crossing the seam is a JSON object discriminated by `type`.
 | `event` | enum | `"state_changed"` in v1; new event types extend the enum. |
 | `state` | object | The full authoritative [state snapshot](#6-state-snapshot). |
 
+> The published JSON Schema types `state` loosely (an optional, open object) for
+> forward-compatibility with future event types that may carry a different
+> payload. For a `state_changed` event the server **always** sends a complete
+> [state snapshot](#6-state-snapshot), so clients can rely on that shape.
+
 ### 4.3 Error frame (WebSocket only)
 
 When a WS client sends a malformed frame, the server replies on the same socket
@@ -241,7 +246,7 @@ and errors are a JSON object `{ "status": "<code>", "errors"?: string[] }`.
 
 | Method · Path | Notes |
 |---|---|
-| `GET /search?q=&limit=` | `{ query, sections, total }`. v1 returns a single `library` section of normalized media items; future cross-service sources slot in as additional `source`-keyed sections without a breaking change. Empty/non-matching query → `sections: []`. |
+| `GET /search?q=&limit=` | `{ query, sections, total }`. v1 returns a single `library` section of normalized media items; future cross-service sources slot in as additional `source`-keyed sections without a breaking change. `limit` clamps to 1–100 (default 50). Empty/non-matching query → `sections: []`. |
 
 ---
 
