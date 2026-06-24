@@ -12,3 +12,4 @@ export const PROJECT_NAME = 'OpenHearth';
 
 export * from './protocol/index.js';
 export * from './config/index.js';
+export * from './catalog/index.js';

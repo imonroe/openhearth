@@ -12,9 +12,14 @@ let dir: string;
 let cfg: ConfigService;
 let app: FastifyInstance;
 
-async function makeApp(yaml?: string): Promise<void> {
+async function makeApp(yaml?: string, files: Record<string, string> = {}): Promise<void> {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-app-'));
   if (yaml !== undefined) fs.writeFileSync(path.join(dir, 'openhearth.yaml'), yaml);
+  for (const [rel, contents] of Object.entries(files)) {
+    const target = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, contents);
+  }
   cfg = new ConfigService({ configDir: dir });
   await cfg.load();
   app = buildApp({ configService: cfg, logLevel: 'silent' });
@@ -69,6 +74,41 @@ describe('GET /api/v1/config', () => {
     expect(body.valid).toBe(false);
     expect(body.errors.some((e: string) => e.includes('server.port'))).toBe(true);
     expect(body.config).toEqual({}); // last-good retained
+  });
+});
+
+describe('GET /api/v1/services', () => {
+  it('returns the ordered, grouped catalog merged from services.yaml + services.d', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n' +
+        '  - { id: netflix, name: Netflix, launch_url: "https://www.netflix.com/", group: Streaming, order: 10 }\n' +
+        '  - { id: youtube, name: YouTube, launch_url: "https://www.youtube.com/tv", group: Streaming, order: 20 }\n',
+      'services.d/disney.yaml':
+        'services:\n  - { id: disney, name: "Disney+", launch_url: "https://www.disneyplus.com/", group: Streaming, order: 30 }\n',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toEqual([]);
+    const streaming = body.groups.find((g: { group: string }) => g.group === 'Streaming');
+    expect(streaming.services.map((s: { id: string }) => s.id)).toEqual([
+      'netflix',
+      'youtube',
+      'disney', // overlay merged and ordered
+    ]);
+  });
+
+  it('reports a malformed entry without dropping the rest', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n' +
+        '  - { id: ok, name: OK, launch_url: "https://ok.example/" }\n' +
+        '  - { id: bad, name: Bad, launch_url: nope }\n',
+    });
+    const body = (await app.inject({ method: 'GET', url: '/api/v1/services' })).json();
+    expect(body.groups.flatMap((g: { services: unknown[] }) => g.services)).toHaveLength(1);
+    expect(body.errors.length).toBe(1);
   });
 });
 
