@@ -11,6 +11,7 @@ import { resolveKeyBindings } from './keybindings';
 import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
 import { Home } from './home/Home';
 import { LibraryDetail } from './detail/LibraryDetail';
+import { LibraryGrid } from './library/LibraryGrid';
 import { Player } from './player/Player';
 import type { LibraryEntry } from './library/libraryModel';
 import { launchService, defaultNavigate, type Navigate } from './launch';
@@ -182,13 +183,15 @@ function ReadyApp({
     for (const w of warnings) console.warn(`OpenHearth: ${w}`);
   }, [warnings]);
 
-  // Which screen is showing: the home grid, a library item's detail, or the
-  // player (which sits on top of the detail it was launched from).
+  // Which screen is showing: the home grid, the full-library grid overlay, a
+  // library item's detail, or the player. They stack home → grid → detail →
+  // player, so closing one reveals whatever is underneath.
+  const [grid, setGrid] = useState<{ label: string; entries: LibraryEntry[] } | null>(null);
   const [detail, setDetail] = useState<LibraryEntry | null>(null);
   const [player, setPlayer] = useState<LibraryItem | null>(null);
 
-  // select on home: launch a service tile (FR-A2) or open a library item's
-  // detail screen.
+  // select on home: launch a service tile (FR-A2), open the full-library grid
+  // (the leading "See all" tile, col 0), or open a library item's detail.
   const onSelect = useCallback(
     (pos: FocusPosition) => {
       const row = model.rows[pos.row];
@@ -196,7 +199,12 @@ function ReadyApp({
         const tile = row.tiles[pos.col];
         if (tile) launchService(tile, navigate);
       } else if (row?.kind === 'library') {
-        const entry = row.entries[pos.col];
+        if (row.seeAll && pos.col === 0) {
+          setGrid({ label: row.label, entries: row.entries });
+          return;
+        }
+        // Entries start after the "See all" tile when present.
+        const entry = row.entries[pos.col - (row.seeAll ? 1 : 0)];
         if (entry) setDetail(entry);
       }
     },
@@ -215,12 +223,14 @@ function ReadyApp({
         onHome={() => {
           setPlayer(null);
           setDetail(null);
+          setGrid(null);
         }}
       />
     );
   }
 
-  // A library detail screen owns its own focus grid; Back returns to home.
+  // A library detail screen owns its own focus grid; Back returns to whatever
+  // opened it — the full-library grid if it's still mounted, otherwise home.
   if (detail) {
     return (
       <LibraryDetail
@@ -229,6 +239,20 @@ function ReadyApp({
         dispatch={dispatch}
         onBack={() => setDetail(null)}
         onPlay={(item) => setPlayer(item)}
+      />
+    );
+  }
+
+  // The full-library grid overlay (#124): browse every item in a source as an
+  // alphabetical grid. Selecting a tile opens its detail; Back returns home.
+  if (grid) {
+    return (
+      <LibraryGrid
+        label={grid.label}
+        entries={grid.entries}
+        keyMap={keyMap}
+        onBack={() => setGrid(null)}
+        onOpen={(entry) => setDetail(entry)}
       />
     );
   }

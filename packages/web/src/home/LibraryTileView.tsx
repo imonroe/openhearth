@@ -51,6 +51,9 @@ export function LibraryTileView({
             src={poster}
             alt=""
             draggable={false}
+            // Off-screen posters in a long row / the full-library grid (#124)
+            // shouldn't all fetch at once on a large collection.
+            loading="lazy"
             onError={() => setFailed(true)}
           />
         ) : (

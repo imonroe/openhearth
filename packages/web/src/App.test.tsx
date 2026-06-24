@@ -189,9 +189,9 @@ describe('App shell', () => {
     const navigate = vi.fn();
     const { container } = render(<App navigate={navigate} />);
     await screen.findByText('Netflix');
-    // Move focus to the library row (waits for the move to actually land), then
-    // Enter — selecting a non-service tile must not launch anything.
-    await focusLibraryTile(container);
+    // Focus a library item, then Enter — opening a library item must not launch
+    // a service (it opens the detail screen, no navigate).
+    await focusLibraryTile(container, 'Arrival');
     fireEvent.keyDown(window, { key: 'Enter' });
     // Give any handler a tick.
     await new Promise((r) => setTimeout(r, 0));
@@ -215,17 +215,27 @@ describe('App shell', () => {
     expect(screen.getByText('The Wire')).toBeTruthy(); // episodes grouped into one show
   });
 
-  // Wait until focus has actually landed on a library tile (optionally one whose
-  // label matches), so we don't press Enter before the focus move has applied.
-  // The ArrowDown is issued inside the retry loop: if the first press lands before
-  // the focus engine's keydown listener has attached it's a no-op, and pressing
-  // again is harmless (ArrowDown clamps on the last row, preserving the column).
+  // Enter the library row and (optionally) step right to the tile whose label
+  // matches. The library row now leads with a "See all" tile (#124), so focus
+  // lands there first; a label walks right to the requested item.
   const focusLibraryTile = async (container: HTMLElement, label?: string): Promise<void> => {
+    // ArrowDown clamps on the last row, so issuing it inside the retry is
+    // idempotent — a press lost before the focus engine's keydown listener has
+    // attached is simply retried. Focus lands on the leading "See all" tile.
     await waitFor(() => {
       fireEvent.keyDown(window, { key: 'ArrowDown' }); // services row -> library row
+      expect(container.querySelector('.tile--library.is-focused')).toBeTruthy();
+    });
+    if (!label) return;
+    // Step right until the requested tile is focused. The listener is attached
+    // by now, so each ArrowRight is one deterministic move; the loop stops the
+    // moment the label matches, so it can't overshoot.
+    await waitFor(() => {
       const focused = container.querySelector('.tile--library.is-focused');
-      expect(focused).toBeTruthy();
-      if (label) expect(focused!.textContent).toContain(label);
+      if (!focused?.textContent?.includes(label)) {
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        throw new Error(`focus not yet on "${label}"`);
+      }
     });
   };
 
@@ -234,7 +244,7 @@ describe('App shell', () => {
     const { container } = render(<App dispatch={dispatch} />);
     await screen.findByText('Arrival');
 
-    await focusLibraryTile(container, 'Arrival'); // library row col 0
+    await focusLibraryTile(container, 'Arrival');
     fireEvent.keyDown(window, { key: 'Enter' });
     await screen.findByText('Play');
 
@@ -248,15 +258,8 @@ describe('App shell', () => {
     const { container } = render(<App dispatch={dispatch} />);
     await screen.findByText('Arrival');
 
-    // Down to library, right to the "The Wire" show tile (Arrival, Dune, Wire).
-    await focusLibraryTile(container);
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
-    await waitFor(() =>
-      expect(container.querySelector('.tile--library.is-focused')!.textContent).toContain(
-        'The Wire',
-      ),
-    );
+    // Walk to the aggregated "The Wire" show tile and open it.
+    await focusLibraryTile(container, 'The Wire');
     fireEvent.keyDown(window, { key: 'Enter' });
     await screen.findByText('Season 1');
     expect(screen.getByText('Season 2')).toBeTruthy();
@@ -276,6 +279,46 @@ describe('App shell', () => {
     await screen.findByText('Play'); // movie detail
     fireEvent.keyDown(window, { key: 'Escape' }); // reserved back
     await screen.findByText('Netflix'); // home again
+  });
+
+  // Focus the library row's leading "See all" tile (col 0). ArrowDown clamps on
+  // the last row, so retrying it is idempotent (covers the listener-attach race).
+  const focusSeeAll = async (container: HTMLElement): Promise<void> => {
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'ArrowDown' });
+      expect(container.querySelector('.tile--see-all.is-focused')).toBeTruthy();
+    });
+  };
+
+  it('opens the full-library grid from the See all tile, Back returns home (#124)', async () => {
+    const { container } = render(<App />);
+    await screen.findByText('Arrival');
+    await focusSeeAll(container);
+    fireEvent.keyDown(window, { key: 'Enter' }); // open the grid overlay
+    // The grid lists every title (3 in the mock library) as gridcells.
+    await screen.findByText('3 titles');
+    expect(screen.getByLabelText('Arrival')).toBeTruthy();
+    expect(screen.getByLabelText('Dune')).toBeTruthy();
+    // Back closes the overlay and returns to the home screen.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await screen.findByText('Netflix');
+  });
+
+  it('opens an item detail from the grid; Back steps grid → home (#124)', async () => {
+    const { container } = render(<App />);
+    await screen.findByText('Arrival');
+    await focusSeeAll(container);
+    fireEvent.keyDown(window, { key: 'Enter' }); // open the grid
+    await screen.findByText('3 titles');
+    // The first tile (Arrival, alphabetical) is focused; Enter opens its detail.
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await screen.findByText('Play'); // movie detail
+    // Back returns to the grid (still mounted beneath), not all the way home.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await screen.findByText('3 titles');
+    // Back again closes the grid → home.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await screen.findByText('Netflix');
   });
 
   it('honors a remapped navigation key from config (FR-R4)', async () => {

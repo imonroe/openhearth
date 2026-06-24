@@ -1,0 +1,96 @@
+/*
+ * Full-library grid overlay (#124) and the "See all" tile that opens it.
+ * Sizes in rem (scale with viewport); borders/radii/shadow blur in px.
+ * Reuses the Library Tile styles from home.css for the tiles themselves.
+ */
+
+/* --- "See all" tile (leads each library row) --- */
+/* Shares the .tile--library footprint so the row stays aligned; the poster
+   frame is replaced by a glyph + CTA on a subtle elevated fill. */
+.tile--see-all__frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.417rem;
+  background: var(--color-bg-elevated);
+}
+.tile--see-all__glyph {
+  font-size: 2.5rem;
+  line-height: 1;
+  color: var(--color-text-secondary);
+}
+.tile--see-all__cta {
+  font-size: 0.677rem;
+  font-weight: 600;
+  letter-spacing: 0.052rem;
+  color: var(--color-text-secondary);
+}
+.tile--see-all.is-focused .tile--see-all__glyph,
+.tile--see-all.is-focused .tile--see-all__cta {
+  color: var(--color-text-accent);
+}
+
+/* --- Full-library grid overlay --- */
+.library-grid {
+  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: var(--safe-v) var(--safe-h) 0 var(--safe-h);
+  background: var(--color-bg-primary);
+  background-image: radial-gradient(
+    60% 50% at 85% 0%,
+    var(--color-ambient-glow) 0%,
+    transparent 70%
+  );
+}
+.library-grid__head {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  flex: 0 0 auto;
+}
+.library-grid__title {
+  font-size: 1.667rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.library-grid__count {
+  font-size: 0.833rem;
+  color: var(--color-text-muted);
+}
+/* The grid scrolls vertically; focus drives the scroll position
+   (useScrollIntoViewOnFocus). Reserve room for the focus-ring glow with padding
+   and hide the native scrollbar — focus-driven, 10-foot UI. */
+.library-grid__scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.5rem;
+  margin: 0 -1.5rem;
+  scroll-padding-block: 1.5rem;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.library-grid__scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .library-grid__scroll {
+    scroll-behavior: auto;
+  }
+}
+.library-grid__grid {
+  display: grid;
+  /* Column count is supplied inline from GRID_COLUMNS so the visual grid and the
+     focus matrix can never drift apart. */
+  grid-template-columns: repeat(var(--grid-cols, 6), 7.708rem);
+  justify-content: center;
+  gap: 1.667rem 0.833rem; /* row gap a touch larger to separate title lines */
+}

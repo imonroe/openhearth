@@ -7,6 +7,7 @@ import type { HomeModel } from './homeModel';
 import { Header } from './Header';
 import { ServiceTileView } from './ServiceTileView';
 import { LibraryTileView } from './LibraryTileView';
+import { SeeAllTileView } from './SeeAllTileView';
 import { RowStrip } from './RowStrip';
 import { entryId } from '../library/libraryModel';
 
@@ -40,14 +41,20 @@ export function Home({ title, model }: { title: string; model: HomeModel }): Rea
                     row.entries.length === 0 ? (
                       <span className="row__empty">No media indexed yet</span>
                     ) : (
-                      row.entries.map((entry, col) => (
-                        <LibraryTileView
-                          key={entryId(entry)}
-                          entry={entry}
-                          row={rowIndex}
-                          col={col}
-                        />
-                      ))
+                      <>
+                        {/* "See all" leads the row (col 0); entries follow at col 1+. */}
+                        {row.seeAll ? (
+                          <SeeAllTileView count={row.entries.length} row={rowIndex} col={0} />
+                        ) : null}
+                        {row.entries.map((entry, index) => (
+                          <LibraryTileView
+                            key={entryId(entry)}
+                            entry={entry}
+                            row={rowIndex}
+                            col={row.seeAll ? index + 1 : index}
+                          />
+                        ))}
+                      </>
                     )
                   ) : null}
                 </RowStrip>
