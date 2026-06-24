@@ -19,6 +19,7 @@ const item: LibraryItem = {
 let resumeValue: { position_sec: number; updated_at: number } | null;
 let putBodies: string[];
 let deleteCount: number;
+let subsValue: Array<{ id: string; label: string; lang?: string | null; source: string }>;
 
 function videoEl(container: HTMLElement): HTMLVideoElement | null {
   return container.querySelector('video');
@@ -28,6 +29,7 @@ beforeEach(() => {
   resumeValue = null;
   putBodies = [];
   deleteCount = 0;
+  subsValue = [];
   // jsdom doesn't implement media playback — stub the methods we call.
   HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
   HTMLMediaElement.prototype.pause = vi.fn();
@@ -39,6 +41,9 @@ beforeEach(() => {
         if (opts?.method === 'DELETE') deleteCount += 1;
         const body = opts?.method ? { status: 'ok' } : resumeValue;
         return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+      }
+      if (url.includes('/subtitles')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(subsValue) });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     }),
@@ -120,6 +125,27 @@ describe('Player', () => {
     expect(dispatch).toHaveBeenCalledWith('seek', { delta: 10 });
     fireEvent.keyDown(window, { key: 'ArrowLeft' });
     expect(dispatch).toHaveBeenCalledWith('seek', { delta: -10 });
+  });
+
+  it('renders subtitle tracks and cycles them with Up (FR-C7)', async () => {
+    subsValue = [
+      { id: '0', label: 'Subtitles (en)', lang: 'en', source: 'sidecar' },
+      { id: '1', label: 'English', lang: 'eng', source: 'embedded' },
+    ];
+    const { container } = render(
+      <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
+    );
+    await waitFor(() => expect(container.querySelectorAll('track')).toHaveLength(2));
+    // Off by default.
+    expect(await screen.findByText('CC: Off')).toBeTruthy();
+
+    // Up cycles Off → first track → second → Off.
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(await screen.findByText('CC: Subtitles (en)')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(await screen.findByText('CC: English')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(await screen.findByText('CC: Off')).toBeTruthy();
   });
 
   it('Back exits and Home returns home', async () => {

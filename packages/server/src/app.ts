@@ -30,6 +30,7 @@ import { CatalogService } from './core/CatalogService.js';
 import { ControlService } from './core/ControlService.js';
 import type { LibraryService } from './core/LibraryService.js';
 import type { MediaStreamer } from './core/TranscodeService.js';
+import { SubtitleService } from './core/SubtitleService.js';
 import { decidePlayback, parseRange, containerMime } from './core/transcodeDecision.js';
 
 // Raster image types only. SVG is deliberately excluded: it can carry inline
@@ -140,6 +141,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
   const control = options.controlService ?? new ControlService();
+  const subtitles = streamer ? new SubtitleService(streamer) : null;
 
   const app = Fastify({
     logger: { level },
@@ -342,6 +344,39 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     libraryService?.clearResume(request.params.id);
     return { status: 'ok' };
   });
+
+  // Subtitle tracks for an item (FR-C7): list, then fetch one as WebVTT. Both
+  // require the file to be inside a library root (same containment as /stream).
+  app.get<{ Params: { id: string } }>('/api/v1/library/:id/subtitles', async (request, reply) => {
+    const item = libraryService?.get(request.params.id);
+    if (!item) return reply.code(404).send({ status: 'not_found' });
+    const roots = configService.config.library?.sources ?? [];
+    if (!subtitles || !isWithinLibraryRoots(item.path, roots)) return [];
+    return subtitles.list(item.path);
+  });
+
+  app.get<{ Params: { id: string; track: string } }>(
+    '/api/v1/library/:id/subtitles/:track',
+    async (request, reply) => {
+      const item = libraryService?.get(request.params.id);
+      if (!item || !subtitles) return reply.code(404).send({ status: 'not_found' });
+      const roots = configService.config.library?.sources ?? [];
+      if (!isWithinLibraryRoots(item.path, roots)) {
+        return reply.code(403).send({ status: 'forbidden' });
+      }
+      const opened = await subtitles.open(item.path, request.params.track);
+      if (!opened) return reply.code(404).send({ status: 'not_found' });
+
+      reply.header('Content-Type', 'text/vtt; charset=utf-8').header('Cache-Control', 'no-store');
+      if ('text' in opened) return reply.send(opened.text);
+      request.raw.on('close', opened.stream.kill);
+      opened.stream.stream.on('error', (err: unknown) => {
+        request.log.warn({ err }, 'subtitle extract stream error');
+        opened.stream.kill();
+      });
+      return reply.send(opened.stream.stream);
+    },
+  );
 
   // --- Control protocol (PRD §11) ----------------------------------------
   // Shape an envelope validation error into a uniform 400/event payload.

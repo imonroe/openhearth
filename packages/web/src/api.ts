@@ -9,6 +9,7 @@ import {
   type LibraryListResponse,
   type ResumePosition,
   type ServiceCatalog,
+  type SubtitleTrack,
 } from '@openhearth/shared';
 
 export interface ConfigResponse {
@@ -71,6 +72,22 @@ export function saveResume(id: string, positionSec: number): void {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ position_sec: Math.floor(positionSec) }),
   }).catch((err: unknown) => console.error('OpenHearth: save resume failed', err));
+}
+
+/** List an item's subtitle tracks (sidecar + embedded). Empty on failure. */
+export async function fetchSubtitles(id: string, signal?: AbortSignal): Promise<SubtitleTrack[]> {
+  try {
+    const res = await fetch(`/api/v1/library/${encodeURIComponent(id)}/subtitles`, { signal });
+    if (!res.ok) return [];
+    return (await res.json()) as SubtitleTrack[];
+  } catch {
+    return [];
+  }
+}
+
+/** URL for a subtitle track's WebVTT. */
+export function subtitleTrackUrl(id: string, trackId: string): string {
+  return `/api/v1/library/${encodeURIComponent(id)}/subtitles/${encodeURIComponent(trackId)}`;
 }
 
 /** Forget an item's resume position (fire-and-forget). */

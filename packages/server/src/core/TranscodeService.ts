@@ -13,6 +13,11 @@ import { extname } from 'node:path';
 import type { Readable } from 'node:stream';
 import type { TranscodeConfig } from '@openhearth/shared';
 import { buildFfmpegArgs, parseProbeJson, type ProbeResult } from './transcodeDecision.js';
+import {
+  buildSubtitleExtractArgs,
+  parseSubtitleStreams,
+  type EmbeddedSubtitle,
+} from './subtitles.js';
 
 export interface TranscodeStream {
   /** ffmpeg stdout (fragmented MP4). */
@@ -25,6 +30,10 @@ export interface TranscodeStream {
 export interface MediaStreamer {
   probe(path: string): Promise<ProbeResult>;
   openTranscode(path: string, opts?: { seekSec?: number }): TranscodeStream;
+  /** List embedded subtitle streams (FR-C7). Optional: omit = none. */
+  probeSubtitles?(path: string): Promise<EmbeddedSubtitle[]>;
+  /** Extract one embedded subtitle stream as WebVTT on stdout. */
+  openSubtitleExtract?(path: string, streamIndex: number): TranscodeStream;
 }
 
 type SpawnFn = typeof nodeSpawn;
@@ -80,8 +89,47 @@ export class TranscodeService implements MediaStreamer {
       ...(opts.seekSec != null ? { seekSec: opts.seekSec } : {}),
       ...(this.transcode ? { transcode: this.transcode } : {}),
     });
-    const child = this.spawn(this.ffmpegPath, args) as ChildProcessWithoutNullStreams;
-    // Drain stderr so the pipe buffer can't fill and stall ffmpeg.
+    return this.spawnStream(this.ffmpegPath, args);
+  }
+
+  /** List embedded subtitle streams via ffprobe (FR-C7). */
+  probeSubtitles(path: string): Promise<EmbeddedSubtitle[]> {
+    const args = [
+      '-v',
+      'error',
+      '-print_format',
+      'json',
+      '-show_streams',
+      '-select_streams',
+      's',
+      path,
+    ];
+    return new Promise((resolve, reject) => {
+      const child = this.spawn(this.ffprobePath, args) as ChildProcessWithoutNullStreams;
+      let out = '';
+      child.stdout.on('data', (d: Buffer) => (out += d.toString()));
+      child.stderr.on('data', () => {});
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code !== 0) return resolve([]); // no subtitle streams / probe noise → none
+        try {
+          resolve(parseSubtitleStreams(out));
+        } catch {
+          resolve([]);
+        }
+      });
+    });
+  }
+
+  /** Extract one embedded subtitle stream as WebVTT on stdout. */
+  openSubtitleExtract(path: string, streamIndex: number): TranscodeStream {
+    return this.spawnStream(this.ffmpegPath, buildSubtitleExtractArgs(path, streamIndex));
+  }
+
+  /** Spawn a process and expose stdout + a kill handle, draining stderr. */
+  private spawnStream(bin: string, args: string[]): TranscodeStream {
+    const child = this.spawn(bin, args) as ChildProcessWithoutNullStreams;
+    // Drain stderr so the pipe buffer can't fill and stall the process.
     child.stderr.on('data', () => {});
     return {
       stream: child.stdout,
