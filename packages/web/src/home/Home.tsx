@@ -7,6 +7,7 @@ import type { HomeModel } from './homeModel';
 import { Header } from './Header';
 import { ServiceTileView } from './ServiceTileView';
 import { LibraryTileView } from './LibraryTileView';
+import { RowStrip } from './RowStrip';
 import { entryId } from '../library/libraryModel';
 
 export function Home({ title, model }: { title: string; model: HomeModel }): ReactNode {
@@ -26,7 +27,7 @@ export function Home({ title, model }: { title: string; model: HomeModel }): Rea
             return (
               <section className="row" key={`${row.kind}-${label ?? index}-${rowIndex}`} role="row">
                 {label ? <h2 className="row__header">{label}</h2> : null}
-                <div className="row__strip">
+                <RowStrip>
                   {row.kind === 'services' ? (
                     row.tiles.length === 0 ? (
                       <span className="row__empty">No services in this group</span>
@@ -49,7 +50,7 @@ export function Home({ title, model }: { title: string; model: HomeModel }): Rea
                       ))
                     )
                   ) : null}
-                </div>
+                </RowStrip>
               </section>
             );
           })
