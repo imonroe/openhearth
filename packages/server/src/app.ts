@@ -14,6 +14,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { PROTOCOL_VERSION, redactConfig } from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
+import { CatalogService } from './core/CatalogService.js';
 
 export interface BuildAppOptions {
   /** Source of the effective config + validation errors. */
@@ -27,6 +28,7 @@ export interface BuildAppOptions {
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const { configService } = options;
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
+  const catalog = new CatalogService(configService);
 
   const app = Fastify({
     logger: { level },
@@ -53,6 +55,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       errors: configService.errors,
       valid: configService.errors.length === 0,
     };
+  });
+
+  // --- API: service tile catalog (ordered + grouped) ---------------------
+  app.get('/api/v1/services', async () => {
+    return catalog.getCatalog();
   });
 
   // --- Static SPA (optional; placeholder until the real bundle lands) -----
