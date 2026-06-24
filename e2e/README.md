@@ -25,8 +25,8 @@ app against a deterministic fixture catalog and drive it with a real browser.
 1. The built OpenHearth server (`packages/server/dist/main.js`) on **:8080**,
    serving the web bundle + API, reading the fixture config in
    `fixtures/config/` so the catalog is deterministic and offline.
-2. A stub service (`fixtures/stub-service.mjs`) on **:8090** — a *different
-   origin*, so the home-guard extension treats it as a foreign page and its
+2. A stub service (`fixtures/stub-service.mjs`) on **:8090** — a _different
+   origin_, so the home-guard extension treats it as a foreign page and its
    Home/Back interception runs for real.
 
 The Home/Back spec loads the unpacked `home-guard` extension via
