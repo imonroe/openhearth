@@ -92,3 +92,19 @@ export type ResumePosition = z.infer<typeof resumePositionSchema>;
 export const resumeUpdateSchema = z.object({ position_sec: z.number().nonnegative() }).strict();
 
 export type ResumeUpdate = z.infer<typeof resumeUpdateSchema>;
+
+/** A selectable subtitle track for an item (FR-C7). Always served as WebVTT. */
+export const subtitleTrackSchema = z
+  .object({
+    /** Opaque id used to fetch the track's VTT. */
+    id: z.string(),
+    /** Human label (e.g. "English", "Track 2"). */
+    label: z.string(),
+    /** BCP-47-ish language tag when known. */
+    lang: z.string().nullable().optional(),
+    /** Where the track comes from. */
+    source: z.enum(['sidecar', 'embedded']),
+  })
+  .strict();
+
+export type SubtitleTrack = z.infer<typeof subtitleTrackSchema>;

@@ -12,8 +12,15 @@
  * phone remote).
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActionName, LibraryItem } from '@openhearth/shared';
-import { libraryStreamUrl, fetchResume, saveResume, clearResume } from '../api';
+import type { ActionName, LibraryItem, SubtitleTrack } from '@openhearth/shared';
+import {
+  libraryStreamUrl,
+  fetchResume,
+  saveResume,
+  clearResume,
+  fetchSubtitles,
+  subtitleTrackUrl,
+} from '../api';
 import type { KeyMap } from '../keybindings';
 
 type Dispatch = (action: ActionName, params?: Record<string, unknown>) => void;
@@ -52,7 +59,32 @@ export function Player({
   const [paused, setPaused] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [subs, setSubs] = useState<SubtitleTrack[]>([]);
+  const [activeSub, setActiveSub] = useState(-1); // -1 = off
   const startSecRef = useRef(0);
+
+  // Load the item's subtitle tracks (sidecar + embedded).
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchSubtitles(item.id, controller.signal)
+      .then(setSubs)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [item.id]);
+
+  // Apply the active subtitle selection to the media element's text tracks.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !v.textTracks) return;
+    for (let i = 0; i < v.textTracks.length; i++) {
+      v.textTracks[i]!.mode = i === activeSub ? 'showing' : 'disabled';
+    }
+  }, [activeSub, phase, subs]);
+
+  // Cycle Off → track 0 → … → last → Off.
+  const cycleSubs = useCallback(() => {
+    setActiveSub((prev) => (prev + 1 >= subs.length ? -1 : prev + 1));
+  }, [subs.length]);
 
   // Load any saved resume position, then either prompt or start from the top.
   useEffect(() => {
@@ -161,6 +193,10 @@ export function Player({
           } else if (dir === 'right') {
             dispatch('seek', { delta: SEEK_STEP_SEC });
             seekBy(SEEK_STEP_SEC);
+          } else if (dir === 'up' || dir === 'down') {
+            // No vertical navigation in the player — repurpose Up to cycle
+            // subtitle tracks (Off → each track → Off).
+            cycleSubs();
           }
           return;
         }
@@ -171,7 +207,19 @@ export function Player({
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [keyMap, phase, promptIdx, resumeSec, item.id, goHome, exit, togglePlay, seekBy, dispatch]);
+  }, [
+    keyMap,
+    phase,
+    promptIdx,
+    resumeSec,
+    item.id,
+    goHome,
+    exit,
+    togglePlay,
+    seekBy,
+    cycleSubs,
+    dispatch,
+  ]);
 
   const start = useCallback((from: number) => {
     startSecRef.current = from;
@@ -231,7 +279,17 @@ export function Player({
           clearResume(item.id);
           onExit();
         }}
-      />
+      >
+        {subs.map((t) => (
+          <track
+            key={t.id}
+            kind="subtitles"
+            src={subtitleTrackUrl(item.id, t.id)}
+            label={t.label}
+            {...(t.lang ? { srcLang: t.lang } : {})}
+          />
+        ))}
+      </video>
       <div className="player__osd" aria-hidden="true">
         <div className="player__osd-title">{item.title}</div>
         <div className="player__progress">
@@ -245,6 +303,11 @@ export function Player({
           <span className="player__osd-time">
             {fmt(current)} / {fmt(duration)}
           </span>
+          {subs.length > 0 ? (
+            <span className="player__osd-subs">
+              CC: {activeSub >= 0 ? (subs[activeSub]?.label ?? 'On') : 'Off'}
+            </span>
+          ) : null}
         </div>
       </div>
     </div>
