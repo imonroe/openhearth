@@ -1,0 +1,4 @@
+# Deliberately broken config (malformed YAML syntax) for the NFR-4 must-pass
+# test — an unterminated flow sequence the parser cannot read.
+server:
+  port: [8080

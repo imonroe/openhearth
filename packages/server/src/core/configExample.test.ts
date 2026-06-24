@@ -30,4 +30,15 @@ describe('config.example contract', () => {
     expect(snap.services.base).toBeTruthy();
     expect(Object.keys(snap.services.overlays).length).toBeGreaterThanOrEqual(1);
   });
+
+  it('is internally coherent: every ui library row references a defined source', async () => {
+    const svc = new ConfigService({ configDir: exampleDir });
+    const { config } = await svc.load();
+    const sourceIds = new Set((config.library?.sources ?? []).map((s) => s.id));
+    const libraryRows = (config.ui?.rows ?? []).filter((r) => r.type === 'library');
+    for (const row of libraryRows) {
+      expect(row.source, 'library row missing source').toBeTruthy();
+      expect(sourceIds.has(row.source as string)).toBe(true);
+    }
+  });
 });
