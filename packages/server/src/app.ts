@@ -149,6 +149,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     disableRequestLogging: false,
   });
 
+  // API responses are dynamic (config hot-reloads, the library index changes as
+  // it scans) — never let the browser serve a stale cached copy. Without this a
+  // library fetch made before the boot scan finishes could be cached and reused
+  // on reload, hiding freshly-indexed items. Routes that set their own
+  // Cache-Control (icons, stream) override this.
+  app.addHook('onSend', async (request, reply) => {
+    if (request.url.startsWith('/api/') && !reply.hasHeader('Cache-Control')) {
+      reply.header('Cache-Control', 'no-store');
+    }
+  });
+
   // --- API: liveness/readiness -------------------------------------------
   app.get('/api/v1/health', async () => {
     return {

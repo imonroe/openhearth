@@ -24,6 +24,7 @@ const STUB_PORT = 8090;
 
 export default defineConfig({
   testDir: here,
+  globalSetup: path.join(here, 'global-setup.ts'),
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
@@ -34,6 +35,9 @@ export default defineConfig({
   use: {
     baseURL: HOME_URL,
     trace: 'on-first-retry',
+    // Mirror the kiosk launch flag so the player can autostart media without a
+    // per-item user gesture (a real OpenHearth kiosk sets this — see #49).
+    launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
   },
   webServer: [
     {
@@ -42,6 +46,9 @@ export default defineConfig({
       command: 'node packages/server/dist/main.js',
       cwd: repoRoot,
       url: `${HOME_URL}/api/v1/health`,
+      // Surface server logs (boot scan summary / cache warnings) in the CI log.
+      stdout: 'pipe',
+      stderr: 'pipe',
       // Locally we reuse an already-running :8080 to speed iteration; see the
       // README caveat — a dev server on :8080 with a *different* config would be
       // used instead of the fixtures. CI always starts fresh (false).
@@ -49,6 +56,9 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         OPENHEARTH_CONFIG_DIR: path.join(here, 'fixtures/config'),
+        // Writable cache so the library index (and resume positions) work for
+        // the player spec; isolated from any real /cache.
+        OPENHEARTH_CACHE_DIR: path.join(here, '.cache'),
         WEB_ROOT: path.join(repoRoot, 'packages/web/dist'),
         PORT: '8080',
         HOST: '127.0.0.1',

@@ -8,6 +8,8 @@ pnpm-lock.yaml
 test-results/
 playwright-report/
 blob-report/
+e2e/.cache/
+e2e/fixtures/media/
 
 # Test fixtures are intentionally malformed/edge-case — don't reformat them.
 **/__fixtures__/**

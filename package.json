@@ -20,7 +20,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "e2e": "pnpm build && playwright test -c e2e/playwright.config.ts"
+    "e2e": "pnpm build && node e2e/generate-media-fixture.mjs && playwright test -c e2e/playwright.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

@@ -7,10 +7,20 @@ ui:
   theme: dark
   rows:
     - { type: services, group: Streaming }
+    - { type: library, source: media }
+
+# A library source pointing at the generated player E2E media fixture. The path
+# is repo-relative (the server runs with cwd = repo root). When ffmpeg isn't
+# available the dir is empty and the library row just renders no tiles.
+library:
+  sources:
+    - id: media
+      label: Media
+      path: e2e/fixtures/media
 
 server:
   port: 8080
-  logLevel: warn
+  logLevel: info
 
 keybindings:
   up: [ArrowUp]
