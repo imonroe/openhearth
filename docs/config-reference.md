@@ -122,7 +122,9 @@ metadata:
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `server.port` | integer (1–65535) | `8080` | TCP port the server binds. Changing it requires a restart. |
+| `server.host` | string | `0.0.0.0` | Bind address. `127.0.0.1` restricts to loopback. The `HOST` env var takes precedence. Restart to apply. |
 | `server.logLevel` | `silent` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `info` | Structured-log verbosity. Hot-reloadable. |
+| `server.auth.token` | string (secret) | _(unset)_ | Optional shared bearer token (§ Security). Unset = open on a trusted LAN. Use `${VAR}` to inject from the environment. |
 
 > **Port precedence & the container healthcheck.** `server.port` (when set)
 > takes precedence over the `PORT` environment variable. The bundled image's
@@ -138,6 +140,52 @@ server:
   port: 8080
   logLevel: info
 ```
+
+### Security: bind address & shared-token auth (PRD §17)
+
+OpenHearth assumes a **trusted home LAN** and ships with **no authentication by
+default** — loopback and LAN clients work out of the box. Two knobs harden a
+deployment on a shared or untrusted network:
+
+**1. Bind address (`server.host`).** By default the server listens on all
+interfaces (`0.0.0.0`). To keep it off the LAN entirely — e.g. a kiosk that only
+ever talks to `localhost` — bind to loopback:
+
+```yaml
+server:
+  host: 127.0.0.1
+```
+
+(The `HOST` environment variable, if set, overrides this.)
+
+**2. Shared-token auth (`server.auth.token`).** Set a token to require it on every
+API and WebSocket request. Keep the secret out of the YAML with `${VAR}`
+interpolation:
+
+```yaml
+server:
+  auth:
+    token: ${OPENHEARTH_TOKEN} # from the environment; never commit the literal
+```
+
+When a token is set, a client authenticates by presenting it in **any** of:
+
+- the `Authorization: Bearer <token>` HTTP header,
+- a `?token=<token>` query parameter (for the WebSocket handshake, or clients that
+  can't set headers), or
+- the protocol [`auth` field](protocol.md#41-command-client--server) on a control
+  command.
+
+`GET /api/v1/health` stays open (so container/liveness probes still work); the
+token is **redacted** from `GET /api/v1/config` and never logged. An unauthenticated
+request gets `401 { "status": "unauthorized" }`; an unauthenticated WebSocket
+upgrade is rejected.
+
+> **Kiosk note.** The bundled web UI does not yet thread the token through its own
+> API calls, so enabling `server.auth.token` is intended for protecting the API
+> from *other* clients (e.g. a phone remote) on an exposed network. For the
+> standard single-box kiosk, prefer binding to `127.0.0.1`. Threading the token
+> into the kiosk launch is covered by the kiosk deployment docs.
 
 ### `transcode`
 

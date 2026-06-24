@@ -19,12 +19,32 @@ export const logLevelSchema = z.enum(LOG_LEVELS);
 export type LogLevel = z.infer<typeof logLevelSchema>;
 
 /** Server runtime options. */
+/** Optional shared-token auth for the API/WS (#47; PRD §17). Off by default. */
+export const authConfigSchema = z
+  .object({
+    /**
+     * Shared bearer token. When set, API/WS access requires it (via the
+     * `Authorization: Bearer` header, a `?token=` query param, or the protocol
+     * `auth` field). Unset (default) = open on a trusted LAN. A secret — never
+     * returned over the API or logged. Supports `${VAR}` interpolation in YAML.
+     */
+    token: z.string().optional(),
+  })
+  .strict();
+
 export const serverConfigSchema = z
   .object({
     /** TCP port the brain listens on. */
     port: z.number().int().min(1).max(65535).optional(),
+    /**
+     * Bind address (#47). Default `0.0.0.0` (all interfaces, LAN-reachable). Set
+     * to `127.0.0.1` to restrict to loopback. The `HOST` env var takes precedence.
+     */
+    host: z.string().optional(),
     /** Structured-log verbosity. */
     logLevel: logLevelSchema.optional(),
+    /** Optional shared-token auth (off by default). */
+    auth: authConfigSchema.optional(),
   })
   .strict();
 
@@ -162,7 +182,7 @@ export const configJsonSchema = z.toJSONSchema(configSchema);
  * written to logs. Keep this in lockstep with the schema as secret fields are
  * added — it is the single registry of "what counts as a secret."
  */
-export const SECRET_CONFIG_PATHS = ['metadata.tmdbApiKey'] as const;
+export const SECRET_CONFIG_PATHS = ['metadata.tmdbApiKey', 'server.auth.token'] as const;
 
 /** Sentinel substituted for a redacted secret value. */
 export const REDACTED = '***';

@@ -38,6 +38,7 @@ import { SubtitleService } from './core/SubtitleService.js';
 import { decidePlayback, parseRange, containerMime } from './core/transcodeDecision.js';
 import { type MetadataService, metadataQueryForLibraryItem } from './core/MetadataService.js';
 import type { ArtworkCache } from './core/ArtworkCache.js';
+import { AuthGuard, tokenFromRequest } from './core/auth.js';
 
 // Raster image types only. SVG is deliberately excluded: it can carry inline
 // <script>, and a malicious community services.d/* icon served from this origin
@@ -197,6 +198,25 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.addHook('onSend', async (request, reply) => {
     if (request.url.startsWith('/api/') && !reply.hasHeader('Cache-Control')) {
       reply.header('Cache-Control', 'no-store');
+    }
+  });
+
+  // Optional shared-token auth (#47; PRD §17). Off unless `server.auth.token` is
+  // set — then every /api/ request needs the token (Authorization: Bearer or
+  // ?token=), so this gate also covers the WS upgrade (browsers pass ?token=).
+  // Exemptions: `/health` (liveness must stay reachable) and `/control/command`,
+  // which self-enforces so it can also accept the reserved `auth` envelope field.
+  // The static SPA is not gated — HTML/JS aren't secrets. Read from current
+  // config each request so a hot-reloaded token takes effect without a restart.
+  const authGuard = (): AuthGuard => new AuthGuard(configService.config.server?.auth?.token);
+  app.addHook('onRequest', async (request, reply) => {
+    const guard = authGuard();
+    if (!guard.enabled) return;
+    const url = request.url;
+    if (!url.startsWith('/api/')) return;
+    if (url.startsWith('/api/v1/health') || url.startsWith('/api/v1/control/command')) return;
+    if (!guard.accepts(tokenFromRequest(request))) {
+      return reply.code(401).send({ status: 'unauthorized' });
     }
   });
 
@@ -493,11 +513,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // GET current authoritative state snapshot.
   app.get('/api/v1/state', async () => control.getState());
 
-  // REST mirror: apply a single command, return the new state (FR-R2).
+  // REST mirror: apply a single command, return the new state (FR-R2). Auth is
+  // enforced here (not the onRequest gate) so the token can also arrive in the
+  // reserved `auth` envelope field — not just a header/query (#47).
   app.post('/api/v1/control/command', async (request, reply) => {
     const parsed = validateCommand(request.body);
     if (!parsed.ok) {
       return reply.code(400).send({ status: 'invalid', errors: parsed.errors });
+    }
+    const guard = authGuard();
+    if (guard.enabled && !guard.accepts(tokenFromRequest(request) ?? parsed.command.auth)) {
+      return reply.code(401).send({ status: 'unauthorized' });
     }
     return { status: 'ok', state: control.dispatch(parsed.command) };
   });
@@ -508,7 +534,15 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   void app.register(async (instance) => {
     // Cap the frame size explicitly — control messages are tiny.
     await instance.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
-    instance.get('/api/v1/control/ws', { websocket: true }, (socket) => {
+    instance.get('/api/v1/control/ws', { websocket: true }, (socket, request) => {
+      // Defense-in-depth: the onRequest gate already rejects an unauthenticated
+      // upgrade (browsers pass ?token=), but re-check here so the channel can
+      // never open without the token even if the gate is bypassed.
+      const guard = authGuard();
+      if (guard.enabled && !guard.accepts(tokenFromRequest(request))) {
+        socket.close(1008, 'unauthorized');
+        return;
+      }
       const send = (event: EventMessage): void => socket.send(JSON.stringify(event));
       // Send the current state on connect so the client starts authoritative.
       send(makeStateEvent(control.getState()));
