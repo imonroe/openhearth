@@ -117,9 +117,12 @@ describe('ConfigService env-value YAML injection resistance', () => {
 });
 
 describe('ConfigService hot-reload (NFR-4)', () => {
+  // These behavioral tests use native fs events (fast, reliable on the local
+  // test fs). Polling — the container default for bind mounts — is covered
+  // separately below.
   it('applies a valid edit without restart', async () => {
     write('openhearth.yaml', 'server:\n  port: 8080\n');
-    svc = new ConfigService({ configDir: dir, debounceMs: 20 });
+    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
     await svc.start();
     expect(svc.config.server?.port).toBe(8080);
 
@@ -136,7 +139,7 @@ describe('ConfigService hot-reload (NFR-4)', () => {
   it('retains last-good services when a services file becomes malformed', async () => {
     write('openhearth.yaml', 'server:\n  port: 8080\n');
     write('services.yaml', 'rows:\n  - id: streaming\n');
-    svc = new ConfigService({ configDir: dir, debounceMs: 20 });
+    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
     await svc.start();
     expect(svc.services.base).toEqual({ rows: [{ id: 'streaming' }] });
 
@@ -149,9 +152,28 @@ describe('ConfigService hot-reload (NFR-4)', () => {
     expect(svc.errors.some((e) => e.includes('services.yaml'))).toBe(true);
   });
 
+  // The container default: polling detects host edits across a bind mount where
+  // native fs events don't fire. Generous timeout — polling is slower than
+  // native events, especially under a loaded parallel test run.
+  it('hot-reloads by polling (container default for bind mounts)', async () => {
+    write('openhearth.yaml', 'server:\n  port: 8080\n');
+    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: true, pollInterval: 60 });
+    await svc.start();
+    expect(svc.config.server?.port).toBe(8080);
+
+    const changed = waitForChange(
+      svc,
+      (s) => (s.config as { server?: { port?: number } }).server?.port === 9090,
+      8000,
+    );
+    write('openhearth.yaml', 'server:\n  port: 9090\n');
+    await changed;
+    expect(svc.config.server?.port).toBe(9090);
+  });
+
   it('retains last-good config on an invalid edit and reports the error', async () => {
     write('openhearth.yaml', 'server:\n  port: 8080\n');
-    svc = new ConfigService({ configDir: dir, debounceMs: 20 });
+    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
     await svc.start();
 
     const changed = waitForChange(svc, (s) => s.errors.length > 0);

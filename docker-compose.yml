@@ -29,6 +29,9 @@ services:
       - ./cache:/cache # derived index/artwork/transcode cache (disposable)
     environment:
       - TMDB_API_KEY=${TMDB_API_KEY:-} # optional; app is fully usable without it
+      # Config hot-reload polls by default — native fs events don't cross bind
+      # mounts. Set to 0 only on a host where native events reach the container.
+      # - OPENHEARTH_CONFIG_POLL=1
     # GPU transcoding is opt-in and host-specific — CPU (libx264) is the default
     # and guaranteed path. To enable a backend, map the device here AND set
     # `transcode.hwaccel` in config/openhearth.yaml. Full per-host setup
