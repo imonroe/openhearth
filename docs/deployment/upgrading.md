@@ -31,6 +31,11 @@ docker compose pull        # fetch the new image for your tag
 docker compose up -d       # recreate the container on the new image
 ```
 
+> **Pull vs. build.** The reference [`docker-compose.yml`](../../docker-compose.yml)
+> keeps a `build:` block alongside `image:` for building from a checkout. To
+> consume the **published** image (so `pull` fetches rather than rebuilds locally),
+> delete that `build:` block — leaving just `image: ghcr.io/imonroe/openhearth:<tag>`.
+
 (Or bump the pinned tag in `docker-compose.yml`, then `pull && up -d`.) Pulling
 `:latest`/`:X.Y` gets the newer image; a pinned `:X.Y.Z` only changes when you
 edit it.
