@@ -13,6 +13,11 @@
  * the server maps provider results (e.g. TMDB) into the same shape. Zod is the
  * single source of truth (see ../README.md).
  *
+ * Scope (FR-B2 "where useful"): library items and metadata results map into this
+ * model. Service tiles deliberately keep their own `catalog` model — they are
+ * launchers, not media — so they are not projected here; their optional artwork
+ * fallback is handled at the UI layer (#42, FR-A6).
+ *
  * Isomorphic: depends only on `zod` and the shared library types.
  */
 import { z } from 'zod';

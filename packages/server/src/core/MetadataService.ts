@@ -67,7 +67,14 @@ export interface MetadataProvider {
  * provider-agnostic `series` kind.
  */
 export function mediaItemFromMetadata(result: MetadataResult): MediaItem {
-  const [provider, , externalId] = result.ref.split(':');
+  // The ref contract is exactly `<provider>:<kind>:<id>` (3 segments). Only
+  // derive an external id from a well-formed ref; an unexpected shape simply
+  // omits `ids` rather than capturing a partial/wrong id.
+  const segments = result.ref.split(':');
+  const ids =
+    segments.length === 3 && segments[0] && segments[2]
+      ? { [segments[0]]: segments[2] }
+      : undefined;
   const kind: MediaKind = result.kind === 'tv' ? 'series' : 'movie';
   const artwork: MediaItem['artwork'] = {
     ...(result.artwork.poster_url ? { poster_url: result.artwork.poster_url } : {}),
@@ -80,7 +87,7 @@ export function mediaItemFromMetadata(result: MetadataResult): MediaItem {
     ...(result.year != null ? { year: result.year } : {}),
     ...(result.overview ? { overview: result.overview } : {}),
     ...(Object.keys(artwork).length > 0 ? { artwork } : {}),
-    ...(provider && externalId ? { ids: { [provider]: externalId } } : {}),
+    ...(ids ? { ids } : {}),
   };
 }
 

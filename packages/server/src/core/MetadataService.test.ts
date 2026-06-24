@@ -126,6 +126,20 @@ describe('mediaItemFromMetadata (#40 normalized model)', () => {
     expect(item.artwork).toBeUndefined();
     expect(item.ids).toEqual({ tmdb: '1396' });
   });
+
+  it('omits ids for a ref that is not exactly <provider>:<kind>:<id>', () => {
+    expect(mediaItemFromMetadata(result({ ref: 'malformed', artwork: {} })).ids).toBeUndefined();
+    expect(
+      mediaItemFromMetadata(result({ ref: 'tmdb:movie:603:extra', artwork: {} })).ids,
+    ).toBeUndefined();
+  });
+
+  it('never populates the reserved availability slot', () => {
+    const item = mediaItemFromMetadata(
+      result({ ref: 'tmdb:movie:603', artwork: { poster_url: 'https://img/p.jpg' } }),
+    );
+    expect(item.availability).toBeUndefined();
+  });
 });
 
 describe('createMetadataProvider', () => {

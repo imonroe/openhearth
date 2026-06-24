@@ -77,8 +77,9 @@ describe('mediaItemFromLibraryItem', () => {
     expect(mediaItemFromLibraryItem(libraryItem({ year: null })).year).toBeUndefined();
   });
 
-  it('produces a schema-valid item', () => {
+  it('produces a schema-valid item and never populates reserved availability', () => {
     const item = mediaItemFromLibraryItem(libraryItem({ year: 1995 }));
     expect(mediaItemSchema.safeParse(item).success).toBe(true);
+    expect(item.availability).toBeUndefined();
   });
 });
