@@ -97,6 +97,9 @@ docs/
   config-reference.md   — config schema documentation
   deployment/           — windows-kiosk.md, linux-kiosk.md
 designs/                — wireframes, focus maps, visual language artifacts
+  designs_1.pen         — source designs (all 15 screens + components, Pencil format)
+  design-system.md      — authoritative visual spec and developer handoff reference
+  screen-inventory.md   — screen list, navigation map, per-screen design notes
 scripts/kiosk/          — example Chromium kiosk launch shortcuts/units
 ```
 
@@ -120,6 +123,49 @@ Secrets (TMDB API key, etc.) go in environment variables or `${VAR}` interpolati
 ## Branching Convention
 
 Feature branches target **`dev`**. Only tagged releases land on **`main`**. PRs to `dev` must pass CI (lint, typecheck, tests, image build) before merge.
+
+## Visual Design & Styling
+
+### Source of truth
+
+**[`designs/design-system.md`](designs/design-system.md) is the authoritative reference for all visual styling decisions.** Before writing any CSS, Tailwind classes, or inline styles for `packages/web`, read the relevant section of that document. It covers:
+
+- Color tokens (hex values and CSS custom property names)
+- Typography scale (font sizes, weights, letter-spacing, line-height per role)
+- Spacing scale and safe-area margins
+- Border radius values
+- Box-shadow / glow specifications for every elevation level
+- Focus system rules (the most critical part of the TV UI)
+- All component specifications (Service Tile, Library Tile, CTA buttons, Progress Bar, Modal, etc.)
+- Screen-by-screen layout measurements
+- Responsive scaling strategy (`font-size: 1vw` on `:root`; everything in `rem`)
+- Motion and transition timing
+
+### Responsive scaling rule
+
+The design was specified at 1920 × 1080 px. **All layout sizes, spacing, and typography must be implemented in `rem`, not `px`.** Set `font-size: 1vw` on `:root` so that `1rem = 1% of viewport width`. This makes the UI scale correctly from 720p to 4K without media queries. Only border widths, box-shadow values, and border-radius should remain in `px`. See `design-system.md` § 2 for the full conversion table and rationale.
+
+### CSS custom properties
+
+Implement the color palette and safe-area tokens as CSS custom properties on `:root`, exactly as specified in `design-system.md` § 2. Reference them by name throughout component styles — do not hardcode hex values in component files.
+
+### Screen inventory
+
+[`designs/screen-inventory.md`](designs/screen-inventory.md) lists all 15 screens, their states, navigation flows, and per-screen design notes. Refer to it when implementing a new screen to understand what states must be handled and how focus should enter and exit the screen.
+
+### Pencil design files
+
+The visual designs live in [`designs/designs_1.pen`](designs/designs_1.pen), a Pencil MCP format file. **The Pencil MCP tool may not be available in all environments.** When it is available, use `mcp__pencil__get_screenshot` or `mcp__pencil__get_editor_state` to inspect the designs directly. When it is not available, `design-system.md` contains all the information needed to implement every screen — it was written specifically to be a self-contained handoff document that does not require access to the `.pen` file.
+
+Never `Read` or `Grep` a `.pen` file directly — it is a binary/encrypted format. Go through Pencil MCP tools or `design-system.md` instead.
+
+### Focus system
+
+The focus system is the most critical part of this UI. Every interactive element must have a visible focus state. The rules are non-negotiable:
+- One focused element at all times — focus never disappears
+- Amber ring (`3px solid #F5A623`) + outer glow (`0 0 0 8px rgba(245,166,35,0.40), 0 0 20px rgba(245,166,35,0.40)`) on all focused elements
+- Focused tile label color changes to `#F5A623`
+- The `Home` key is always intercepted by the kiosk before reaching any launched service — this is enforced at the browser level, not in React
 
 ## Testing
 
