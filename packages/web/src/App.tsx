@@ -7,7 +7,7 @@ import type { ActionName, Config, LibraryItem, ServiceCatalog } from '@openheart
 import { fetchConfig, fetchServices, fetchLibrary, sendCommand } from './api';
 import { FocusProvider } from './focus/FocusProvider';
 import type { FocusPosition } from './focus/focusEngine';
-import { buildKeyMap } from './keybindings';
+import { resolveKeyBindings } from './keybindings';
 import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
 import { Home } from './home/Home';
 import { LibraryDetail } from './detail/LibraryDetail';
@@ -175,7 +175,12 @@ function ReadyApp({
 }): ReactNode {
   const lengths = useMemo(() => rowLengths(model), [model]);
   // Rebuild the key→action map whenever the configured bindings change (FR-R4).
-  const keyMap = useMemo(() => buildKeyMap(keybindings), [keybindings]);
+  const { keyMap, warnings } = useMemo(() => resolveKeyBindings(keybindings), [keybindings]);
+  // Surface keybinding problems (conflicts, unknown names, reserved overrides) as
+  // non-fatal warnings — a bad binding never breaks the UI (#46).
+  useEffect(() => {
+    for (const w of warnings) console.warn(`OpenHearth: ${w}`);
+  }, [warnings]);
 
   // Which screen is showing: the home grid, a library item's detail, or the
   // player (which sits on top of the detail it was launched from).
