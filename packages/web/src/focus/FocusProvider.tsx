@@ -5,8 +5,10 @@
  * listener that maps arrow keys to directional moves and `Enter` to select, and
  * exposes `isFocused(row, col)` to tiles. The reserved `home`/`back` keys
  * (FR-A3) are handled here too, at the capture phase with
- * stopImmediatePropagation, so nothing in-app can shadow them; the cross-service
- * guarantee is the kiosk home-guard extension (scripts/kiosk/home-guard).
+ * stopImmediatePropagation, so no *later-registered* in-app handler can shadow
+ * them (OpenHearth owns its own page and registers no earlier key listener). The
+ * cross-service guarantee is the kiosk home-guard extension
+ * (scripts/kiosk/home-guard).
  */
 import {
   createContext,
@@ -89,7 +91,7 @@ export function FocusProvider({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Reserved Home/Back first (FR-A3): handled at the capture phase and
-      // stopped so no other in-app handler can shadow them.
+      // stopped so no later-registered in-app handler can shadow them.
       if (isHomeKey(event.key)) {
         event.preventDefault();
         event.stopImmediatePropagation();

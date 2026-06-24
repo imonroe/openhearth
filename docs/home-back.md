@@ -22,9 +22,13 @@ situations:
 2. **Browser-level** — once a service page is loaded, the
    [`home-guard` extension](../scripts/kiosk/home-guard/) intercepts the same
    keys on that page (content script, `document_start`, capture phase,
-   `stopImmediatePropagation`) and navigates the kiosk back to OpenHearth. This
-   is the cross-service guarantee, and it **cannot be shadowed** because it runs
-   before any page script and in a separate world.
+   `stopImmediatePropagation`) and navigates the **top** frame back to
+   OpenHearth (so a key pressed inside a service's iframe still returns the whole
+   kiosk, not just the subframe). It runs before the page's later-registered
+   handlers and in a separate world — the most robust mechanism short of an
+   OS-level key grabber. (The isolated-world vs. a maximally adversarial
+   `document_start` page ordering is not a hard spec guarantee, but the content
+   script wins in practice.)
 
 ## Why not an iframe?
 

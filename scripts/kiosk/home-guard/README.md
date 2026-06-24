@@ -19,12 +19,27 @@ There are two interception layers, and both must exist:
 | In-app (`packages/web/src/reserved.ts` + `FocusProvider`) | OpenHearth SPA      | Home/Back while OpenHearth is the active page |
 | **This extension**                                        | Chromium, all pages | Home/Back **on a launched service page**      |
 
-## How it can't be shadowed
+## How it intercepts before the page
 
-`content.js` registers its `keydown` listener at `document_start` (before any
-page script runs), in the extension's isolated world, on the **capture phase**,
-and calls `stopImmediatePropagation()`. So it always runs first and the service
-page's own key handlers never receive the event. A page cannot opt out.
+`content.js` registers its `keydown` listener at `document_start` (before the
+page's own scripts run), in the extension's isolated world, on the **capture
+phase**, and calls `stopImmediatePropagation()`. So it runs before the page's
+later-registered handlers and they never receive the event. It runs in **every
+frame** (`all_frames`) and always navigates the **top** window — so a Home press
+while focus sits inside a service's iframe still returns the whole kiosk to
+OpenHearth, not just that subframe.
+
+(Strictly, the ordering between an isolated-world `document_start` listener and a
+maximally adversarial page that registers its own `document_start` capture
+listener is not a hard spec guarantee — but in practice the content script wins,
+and this is the most robust mechanism available short of an OS-level key grabber.)
+
+### Back keys
+
+Only `Home`/`BrowserHome` (and `BrowserBack` as a convenience) return to
+OpenHearth from a service page. `Escape` and `Backspace` are **deliberately not**
+hijacked here — services use them for fullscreen/overlays — so they remain
+in-app navigation only.
 
 ## Install (kiosk)
 
@@ -41,8 +56,12 @@ page's own key handlers never receive the event. A page cannot opt out.
 Some services capture or remap keys aggressively. Record anything discovered
 here so it can feed back into the catalog (`notes:` field) and these docs:
 
-- _None recorded yet._ When a service is found to need a different return key or
-  a per-service `user_agent`, note the service, the symptom, and the workaround.
+- **`Escape` / `Backspace` on a service page** are not intercepted by this guard
+  (they keep their service-defined meaning — e.g. exit fullscreen). Use **Home**
+  to return. `Backspace` may trigger the browser's history-back inside a service;
+  that's the service's own behavior, not OpenHearth's.
+- When a service is found to need a different return key or a per-service
+  `user_agent`, note the service, the symptom, and the workaround here.
 
 ## Reserved keys
 

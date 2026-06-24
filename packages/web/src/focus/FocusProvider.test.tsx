@@ -39,18 +39,23 @@ describe('FocusProvider reserved Home/Back (FR-A3)', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it('the reserved Home key cannot be shadowed by another handler', () => {
-    const shadow = vi.fn();
+  it('a later-registered handler (capture or bubble) cannot shadow the reserved key', () => {
+    const laterBubble = vi.fn();
+    const laterCapture = vi.fn();
     render(
       <FocusProvider rowLengths={[2]} initialPosition={{ row: 0, col: 0 }}>
         <Probe />
       </FocusProvider>,
     );
-    // A handler added after the provider must NOT receive the reserved key,
-    // because the provider intercepts it at the capture phase and stops it.
-    window.addEventListener('keydown', shadow);
+    // Handlers added AFTER the provider must NOT receive the reserved key,
+    // because the provider intercepts it at the capture phase and calls
+    // stopImmediatePropagation — in both the capture and bubble phases.
+    window.addEventListener('keydown', laterBubble);
+    window.addEventListener('keydown', laterCapture, true);
     fireEvent.keyDown(window, { key: 'Home' });
-    window.removeEventListener('keydown', shadow);
-    expect(shadow).not.toHaveBeenCalled();
+    window.removeEventListener('keydown', laterBubble);
+    window.removeEventListener('keydown', laterCapture, true);
+    expect(laterBubble).not.toHaveBeenCalled();
+    expect(laterCapture).not.toHaveBeenCalled();
   });
 });
