@@ -21,7 +21,7 @@ triaged as done or explicitly deferred to v1.x.
 | **FR-C4** | ffmpeg transcode when not direct-playable | ✅ | `core/TranscodeService.ts` · `transcodeDecision.test.ts`, `streamIntegration.test.ts` (mkv→fMP4, CI w/ ffmpeg) |
 | **FR-C5** | play / pause / seek / stop + resume | ✅ | `Player.tsx`, resume API + `core/CacheStore` resume_positions · `e2e/player.spec.ts`, `libraryApi.test.ts` (resume round-trip) |
 | **FR-B1** | Fetch + cache artwork/metadata from a provider | ✅ | `core/MetadataService.ts`, `core/TmdbProvider.ts`, `metadata_cache` + `core/ArtworkCache.ts` · `TmdbProvider.test.ts`, `metadata.integration.test.ts` |
-| **FR-B2** | Normalized internal metadata model | ✅ | `shared/src/models` (`MediaItem`) · `models/index.test.ts` |
+| **FR-B2**† | Normalized internal metadata model | ✅ | `shared/src/models` (`MediaItem`) · `models/index.test.ts` |
 | **FR-CFG1** | Load all settings from host-mapped YAML in `config/` | ✅ | `core/ConfigService.ts` · `ConfigService.test.ts` |
 | **FR-CFG2** | Validate config; surface errors without crashing the UI | ✅ | `shared/config` `validateConfig` + last-good fallback · `gracefulFailure.test.ts` (NFR-4 must-pass) |
 | **FR-CFG3** | Sensible defaults so first run works unedited | ✅ | `core/seedConfig.ts`, empty config valid, `config.example/` · `seedConfig.test.ts`, `configExample.test.ts` |
@@ -31,13 +31,17 @@ triaged as done or explicitly deferred to v1.x.
 | **FR-S1** | Single `docker-compose up` with documented volumes + ports | ✅ 📄 | `docker-compose.yml`, `docker/Dockerfile` · `docs/config-reference.md`, `docs/deployment/host-parity.md` (`docker-build` CI job builds the image) |
 | **FR-S2** | Health/readiness endpoint | ✅ | `GET /api/v1/health` (status/ready/components, #48) · `app.test.ts` |
 
-**All 19 Must FRs: ✅.** Plus the cross-cutting NFR Musts:
+† FR-B2 is a PRD §9 **Should**, listed here because plan §15 (Definition of Done)
+elevates FR-B1–B2 to a v1 requirement. It is implemented + tested regardless.
+
+**All 18 PRD Musts: ✅** (FR-A1–A4, C1–C5, B1, CFG1–3, R1–3, S1–S2), **plus FR-B2**
+(a Should elevated by DoD §15). Plus the cross-cutting NFR Musts:
 
 | NFR | Requirement | Status | Evidence |
 | --- | --- | --- | --- |
 | **NFR-4** | Config errors never crash the UI | ✅ | last-good fallback · `gracefulFailure.test.ts` |
 | **NFR-5** | Home/Back interception guarantee | ✅ | `e2e/home-back.spec.ts` (must-pass) + home-guard |
-| **NFR-9** | No telemetry / no phone-home | ✅ | source audit `nfr9Audit.test.ts`; only user-configured TMDB is outbound |
+| **NFR-9** | No telemetry / no phone-home | ✅ | `nfr9Audit.test.ts` (source-scan guard — flags outbound primitives outside the two user-config-gated modules); only user-configured TMDB is outbound |
 | **NFR-1..3** | Performance budget | 📄 | `docs/performance.md` — bundle + focus baselines met; wall-clock figures on reference hardware (manual, recorded there) |
 
 ## Should / Could triage
