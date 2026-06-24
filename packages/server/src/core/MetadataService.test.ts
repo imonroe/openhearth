@@ -10,6 +10,7 @@ import {
   createMetadataProvider,
   mediaItemFromMetadata,
   metadataCacheKey,
+  metadataQueryForLibraryItem,
   type MetadataProvider,
   type MetadataResult,
 } from './MetadataService.js';
@@ -165,6 +166,57 @@ describe('MetadataService.resolveMedia — caching (#41)', () => {
     const query = { title: 'The Matrix', year: 1999, kind: 'movie' as const };
     expect(await svc.resolveMedia(query)).toBeNull();
     expect(store.getMetadata(metadataCacheKey(query))).toBeUndefined();
+    store.close();
+  });
+});
+
+describe('metadataQueryForLibraryItem (#42)', () => {
+  it('maps library kind to the provider hint', () => {
+    const base = {
+      id: 'i',
+      source_id: 's',
+      path: '/p',
+      title: 'T',
+      mtime: 1,
+      indexed_at: 1,
+    } as const;
+    expect(metadataQueryForLibraryItem({ ...base, kind: 'movie', year: 1999 })).toEqual({
+      title: 'T',
+      year: 1999,
+      kind: 'movie',
+    });
+    expect(metadataQueryForLibraryItem({ ...base, kind: 'episode' })).toEqual({
+      title: 'T',
+      kind: 'tv',
+    });
+    // `other` searches both (no kind hint).
+    expect(metadataQueryForLibraryItem({ ...base, kind: 'other' })).toEqual({ title: 'T' });
+  });
+});
+
+describe('MetadataService.cachedMedia (#42, cache-only)', () => {
+  it('returns a fresh cached item and null on cold/expired', () => {
+    const store = new CacheStore(':memory:');
+    let clock = 1000;
+    const svc = new MetadataService(null, { cache: store, now: () => clock });
+    const query = { title: 'Heat', year: 1995, kind: 'movie' as const };
+    expect(svc.cachedMedia(query)).toBeNull(); // cold
+
+    store.setMetadata(metadataCacheKey(query), {
+      item: { id: 'tmdb:movie:949', title: 'Heat', kind: 'movie' },
+      fetched_at: clock,
+      expires_at: clock + 100,
+    });
+    expect(svc.cachedMedia(query)?.id).toBe('tmdb:movie:949');
+    clock += 200; // now expired
+    expect(svc.cachedMedia(query)).toBeNull();
+    store.close();
+  });
+
+  it('never fetches (no provider needed)', () => {
+    const store = new CacheStore(':memory:');
+    const svc = new MetadataService(null, { cache: store });
+    expect(svc.cachedMedia({ title: 'X' })).toBeNull();
     store.close();
   });
 });

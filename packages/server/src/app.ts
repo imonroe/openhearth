@@ -23,6 +23,7 @@ import {
   LIBRARY_PAGE_MAX,
   resumeUpdateSchema,
   type EventMessage,
+  type LibraryItem,
   type LibraryItemKind,
 } from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
@@ -32,6 +33,8 @@ import type { LibraryService } from './core/LibraryService.js';
 import type { MediaStreamer } from './core/TranscodeService.js';
 import { SubtitleService } from './core/SubtitleService.js';
 import { decidePlayback, parseRange, containerMime } from './core/transcodeDecision.js';
+import { type MetadataService, metadataQueryForLibraryItem } from './core/MetadataService.js';
+import type { ArtworkCache } from './core/ArtworkCache.js';
 
 // Raster image types only. SVG is deliberately excluded: it can carry inline
 // <script>, and a malicious community services.d/* icon served from this origin
@@ -134,10 +137,32 @@ export interface BuildAppOptions {
    * stream request without it (no ffmpeg) is a 503, never a crash.
    */
   streamer?: MediaStreamer;
+  /**
+   * Resolves cached artwork/metadata for library tiles (#42). Optional: absent
+   * (or no provider key) just means tiles render their filename title +
+   * placeholder, never an error.
+   */
+  metadataService?: MetadataService;
+  /** Caches resolved artwork on disk and serves it (#42). */
+  artworkCache?: ArtworkCache;
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
-  const { configService, libraryService, streamer } = options;
+  const { configService, libraryService, streamer, metadataService, artworkCache } = options;
+
+  /**
+   * Overlay the cached poster URL onto a library item (#42). Cache-only — never
+   * blocks the response on a provider call — so a cold cache simply omits art.
+   * The URL points back at our own by-id artwork route (no client-supplied URL,
+   * so no SSRF surface).
+   */
+  const withArtwork = (item: LibraryItem): LibraryItem => {
+    if (!metadataService?.enabled) return item;
+    const media = metadataService.cachedMedia(metadataQueryForLibraryItem(item));
+    const poster = media?.artwork?.poster_url;
+    if (!poster) return item;
+    return { ...item, artwork_url: `/api/v1/library/${encodeURIComponent(item.id)}/artwork` };
+  };
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
   const control = options.controlService ?? new ControlService();
@@ -265,7 +290,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     if (!libraryService) {
       return { items: [], total: 0, limit: lim, offset: off };
     }
-    const items = libraryService.list({ ...filter, limit: lim, offset: off });
+    const items = libraryService.list({ ...filter, limit: lim, offset: off }).map(withArtwork);
     const total = libraryService.count(filter);
     return { items, total, limit: lim, offset: off };
   });
@@ -274,7 +299,27 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.get<{ Params: { id: string } }>('/api/v1/library/:id', async (request, reply) => {
     const item = libraryService?.get(request.params.id);
     if (!item) return reply.code(404).send({ status: 'not_found' });
-    return item;
+    return withArtwork(item);
+  });
+
+  // Serve an item's poster (#42, FR-C2). The poster URL comes from our own
+  // metadata cache (never a client param → no SSRF), is downloaded once to
+  // /cache, and is served from disk thereafter. 404 when there's no cached art.
+  app.get<{ Params: { id: string } }>('/api/v1/library/:id/artwork', async (request, reply) => {
+    const item = libraryService?.get(request.params.id);
+    if (!item || !metadataService?.enabled || !artworkCache) {
+      return reply.code(404).send({ status: 'not_found' });
+    }
+    const media = metadataService.cachedMedia(metadataQueryForLibraryItem(item));
+    const poster = media?.artwork?.poster_url;
+    if (!poster) return reply.code(404).send({ status: 'not_found' });
+
+    const cached = await artworkCache.ensure(poster);
+    if (!cached) return reply.code(502).send({ status: 'artwork_unavailable' });
+    // Override the API no-store default: posters are content-addressed on disk.
+    reply.header('Cache-Control', 'public, max-age=86400');
+    reply.type(cached.contentType);
+    return reply.send(createReadStream(cached.path));
   });
 
   // Stream an item: direct-play with HTTP range when the browser can play it,

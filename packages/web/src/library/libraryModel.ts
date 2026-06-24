@@ -20,6 +20,8 @@ export interface ShowGroup {
   episodes: LibraryItem[];
   /** Unique season numbers present, ascending. */
   seasons: number[];
+  /** Poster URL (#42), taken from the first episode the server enriched. */
+  artwork_url?: string;
 }
 
 /** A browsable entry: a single item (movie / other) or an aggregated show. */
@@ -27,6 +29,11 @@ export type LibraryEntry = LibraryItem | ShowGroup;
 
 export function isShow(entry: LibraryEntry): entry is ShowGroup {
   return (entry as ShowGroup).kind === 'show';
+}
+
+/** Poster URL for an entry, or undefined when none was resolved (placeholder). */
+export function entryArtworkUrl(entry: LibraryEntry): string | undefined {
+  return entry.artwork_url ?? undefined; // null (no match) → undefined for the view
 }
 
 /** Title used for display and ordering (works for both entry shapes). */
@@ -67,6 +74,10 @@ export function buildLibraryEntries(items: readonly LibraryItem[]): LibraryEntry
       // Earliest known year for the series.
       if (item.year != null && (show.year == null || item.year < show.year)) {
         show.year = item.year;
+      }
+      // First enriched episode supplies the series poster.
+      if (show.artwork_url == null && item.artwork_url != null) {
+        show.artwork_url = item.artwork_url;
       }
     } else {
       singles.push(item);

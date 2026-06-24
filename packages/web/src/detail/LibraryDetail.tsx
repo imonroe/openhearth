@@ -8,8 +8,8 @@
  * lands in #35. Each detail screen runs under its own FocusProvider; Back
  * returns to the home screen.
  *
- * Artwork is a placeholder until metadata (Phase 4); the structure matches the
- * spec so posters can drop in without layout change.
+ * The poster shows the metadata artwork (#42) when resolved, falling back to a
+ * title-initial placeholder; both fill the same frame so there's no layout shift.
  */
 import { useCallback, useState, type ReactNode } from 'react';
 import type { ActionName, LibraryItem } from '@openhearth/shared';
@@ -18,6 +18,7 @@ import type { FocusPosition } from '../focus/focusEngine';
 import type { KeyMap } from '../keybindings';
 import {
   episodesInSeason,
+  entryArtworkUrl,
   isShow,
   type LibraryEntry,
   type ShowGroup,
@@ -48,13 +49,33 @@ export function LibraryDetail({ entry, keyMap, dispatch, onBack, onPlay }: Detai
   );
 }
 
-/** A poster placeholder showing the title's initial (no artwork yet). */
-function PosterPlaceholder({ title, className }: { title: string; className: string }): ReactNode {
+/** Poster: metadata artwork when resolved, else the title's initial. */
+function Poster({
+  title,
+  artworkUrl,
+  className,
+}: {
+  title: string;
+  artworkUrl: string | undefined;
+  className: string;
+}): ReactNode {
+  const [failed, setFailed] = useState(false);
+  const src = failed ? undefined : artworkUrl;
   return (
     <div className={className}>
-      <span className="detail__poster-initial" aria-hidden="true">
-        {title.charAt(0).toUpperCase()}
-      </span>
+      {src ? (
+        <img
+          className="detail__poster-art"
+          src={src}
+          alt=""
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="detail__poster-initial" aria-hidden="true">
+          {title.charAt(0).toUpperCase()}
+        </span>
+      )}
     </div>
   );
 }
@@ -91,7 +112,11 @@ function MovieDetail({
           ← Back
         </button>
         <div className="detail__body">
-          <PosterPlaceholder title={entry.title} className="detail__poster" />
+          <Poster
+            title={entry.title}
+            artworkUrl={entryArtworkUrl(entry)}
+            className="detail__poster"
+          />
           <div className="detail__meta">
             <h1 className="detail__title">{entry.title}</h1>
             {entry.year != null ? <div className="detail__submeta">{entry.year}</div> : null}
@@ -162,7 +187,11 @@ function ShowDetail({
           ← Back
         </button>
         <div className="detail__show-head">
-          <PosterPlaceholder title={show.title} className="detail__poster detail__poster--show" />
+          <Poster
+            title={show.title}
+            artworkUrl={show.artwork_url}
+            className="detail__poster detail__poster--show"
+          />
           <div className="detail__meta">
             <h1 className="detail__title">{show.title}</h1>
             <div className="detail__submeta">

@@ -1,12 +1,13 @@
 /**
  * Library Tile (design-system §11 "Library Tile (Portrait)"). Portrait poster
- * frame + title + year. Artwork isn't available yet (metadata is Phase 4), so we
- * render a placeholder poster with the title's initial; the structure and focus
- * ring match the spec so artwork can drop in later without layout change.
+ * frame + title + year. Renders the metadata poster (#42, FR-C2) when one has
+ * been resolved, falling back to a placeholder with the title's initial — both
+ * occupy the same frame, so artwork loading in causes no layout shift. A poster
+ * that fails to load also falls back to the placeholder.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useFocus } from '../focus/FocusProvider';
-import { isShow, type LibraryEntry } from '../library/libraryModel';
+import { entryArtworkUrl, isShow, type LibraryEntry } from '../library/libraryModel';
 
 export function LibraryTileView({
   entry,
@@ -19,6 +20,7 @@ export function LibraryTileView({
 }): ReactNode {
   const { isFocused } = useFocus();
   const focused = isFocused(row, col);
+  const [failed, setFailed] = useState(false);
   const className = ['tile', 'tile--library', focused ? 'is-focused' : '']
     .filter(Boolean)
     .join(' ');
@@ -28,13 +30,24 @@ export function LibraryTileView({
     : year != null
       ? String(year)
       : '';
+  const poster = failed ? undefined : entryArtworkUrl(entry);
 
   return (
     <div className={className} role="gridcell" aria-selected={focused} aria-label={entry.title}>
       <div className="tile__frame">
-        <span className="tile__placeholder" aria-hidden="true">
-          {entry.title.charAt(0).toUpperCase()}
-        </span>
+        {poster ? (
+          <img
+            className="tile__art"
+            src={poster}
+            alt=""
+            draggable={false}
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <span className="tile__placeholder" aria-hidden="true">
+            {entry.title.charAt(0).toUpperCase()}
+          </span>
+        )}
       </div>
       <div className="tile__info">
         <div className="tile__label">{entry.title}</div>
