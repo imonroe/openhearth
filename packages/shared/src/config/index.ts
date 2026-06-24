@@ -84,6 +84,8 @@ export const metadataConfigSchema = z
   })
   .strict();
 
+export type MetadataConfig = z.infer<typeof metadataConfigSchema>;
+
 /** Hardware-accelerated transcode backends (opt-in; CPU is the default path). */
 export const HWACCEL_BACKENDS = ['none', 'vaapi', 'nvenc', 'qsv'] as const;
 
