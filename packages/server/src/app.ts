@@ -18,11 +18,16 @@ import {
   redactConfig,
   commandMessageSchema,
   makeStateEvent,
+  LIBRARY_ITEM_KINDS,
+  LIBRARY_PAGE_DEFAULT,
+  LIBRARY_PAGE_MAX,
   type EventMessage,
+  type LibraryItemKind,
 } from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
 import { ControlService } from './core/ControlService.js';
+import type { LibraryService } from './core/LibraryService.js';
 
 // Raster image types only. SVG is deliberately excluded: it can carry inline
 // <script>, and a malicious community services.d/* icon served from this origin
@@ -35,6 +40,28 @@ const ICON_TYPES: Record<string, string> = {
   '.gif': 'image/gif',
 };
 
+function isLibraryKind(value: string): value is LibraryItemKind {
+  return (LIBRARY_ITEM_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Normalize a query value to a single string. Fastify parses a repeated param
+ * (`?source=a&source=b`) into an array; a bare array would otherwise reach the
+ * SQL layer and 500. Last value wins, matching duplicate-key intuition.
+ */
+function oneValue(raw: string | string[] | undefined): string | undefined {
+  if (Array.isArray(raw)) return raw[raw.length - 1];
+  return raw;
+}
+
+/** Parse a query int with a default and inclusive [min,max] clamp. */
+function clampInt(raw: string | undefined, fallback: number, min: number, max: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
 export interface BuildAppOptions {
   /** Source of the effective config + validation errors. */
   configService: ConfigService;
@@ -44,10 +71,16 @@ export interface BuildAppOptions {
   webRoot?: string;
   /** Optional shared ControlService (defaults to a fresh one). */
   controlService?: ControlService;
+  /**
+   * Local-media library (issue #31/#32). Optional: when the cache DB can't be
+   * opened the server still runs and the library endpoints degrade gracefully
+   * (empty listing, 404 detail) rather than erroring.
+   */
+  libraryService?: LibraryService;
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
-  const { configService } = options;
+  const { configService, libraryService } = options;
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
   const control = options.controlService ?? new ControlService();
@@ -127,6 +160,52 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       .header('Content-Security-Policy', "default-src 'none'")
       .type(type)
       .send(createReadStream(real));
+  });
+
+  // --- API: local-media library (FR-C2; issue #32) -----------------------
+  // Paginated listing, optionally filtered by source and/or kind. Degrades to
+  // an empty page when the library is disabled (cold/unwritable cache).
+  app.get<{
+    Querystring: {
+      source?: string | string[];
+      kind?: string | string[];
+      limit?: string | string[];
+      offset?: string | string[];
+    };
+  }>('/api/v1/library', async (request, reply) => {
+    // Coerce each param to a single string first: Fastify turns a repeated key
+    // into an array, which must not reach the SQL layer (would 500).
+    const source = oneValue(request.query.source);
+    const kind = oneValue(request.query.kind);
+    const limit = oneValue(request.query.limit);
+    const offset = oneValue(request.query.offset);
+
+    if (kind !== undefined && !isLibraryKind(kind)) {
+      return reply.code(400).send({
+        status: 'bad_request',
+        errors: [`kind must be one of ${LIBRARY_ITEM_KINDS.join(', ')}`],
+      });
+    }
+    const lim = clampInt(limit, LIBRARY_PAGE_DEFAULT, 1, LIBRARY_PAGE_MAX);
+    const off = clampInt(offset, 0, 0, Number.MAX_SAFE_INTEGER);
+
+    const filter = {
+      ...(source !== undefined ? { source_id: source } : {}),
+      ...(kind !== undefined ? { kind } : {}),
+    };
+    if (!libraryService) {
+      return { items: [], total: 0, limit: lim, offset: off };
+    }
+    const items = libraryService.list({ ...filter, limit: lim, offset: off });
+    const total = libraryService.count(filter);
+    return { items, total, limit: lim, offset: off };
+  });
+
+  // Single item detail (enough to drive the play decision in later phases).
+  app.get<{ Params: { id: string } }>('/api/v1/library/:id', async (request, reply) => {
+    const item = libraryService?.get(request.params.id);
+    if (!item) return reply.code(404).send({ status: 'not_found' });
+    return item;
   });
 
   // --- Control protocol (PRD §11) ----------------------------------------

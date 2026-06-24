@@ -86,9 +86,19 @@ export class LibraryService {
     return { sources: results, totalIndexed: this.store.countLibraryItems() };
   }
 
-  /** List items for a source by querying the store (used by the API layer). */
+  /** List items by querying the store (used by the API layer). */
   list(query: Parameters<CacheStore['listLibraryItems']>[0] = {}): LibraryItem[] {
     return this.store.listLibraryItems(query);
+  }
+
+  /** Count items matching a filter (for pagination totals). */
+  count(query: Parameters<CacheStore['countLibraryItems']>[0] = {}): number {
+    return this.store.countLibraryItems(query);
+  }
+
+  /** Fetch a single item by id, or undefined. */
+  get(id: string): LibraryItem | undefined {
+    return this.store.getLibraryItem(id);
   }
 
   private scanSource(source: LibrarySource): SourceScanResult {
