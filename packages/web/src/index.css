@@ -20,6 +20,10 @@
   --color-accent-amber: #f5a623;
   --color-accent-ember: #d4622c;
   --color-accent-amber-dim: rgba(245, 166, 35, 0.267);
+  /* Brand gradient (logo mark, primary buttons, progress fills) — §4. */
+  --brand-gradient: linear-gradient(180deg, #f5a623 0%, #d4622c 100%);
+  /* Subtle warm ambient glow behind the home screen. */
+  --color-ambient-glow: rgba(245, 166, 35, 0.08);
 
   /* Text */
   --color-text-primary: #f0eee8;

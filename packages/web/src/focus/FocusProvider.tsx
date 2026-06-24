@@ -38,6 +38,10 @@ export function FocusProvider({
   initialPosition,
   children,
 }: FocusProviderProps): ReactNode {
+  // The `{ 0, 0 }` last-resort fallback is only reached if the grid has no
+  // focusable cells at all. Callers must supply at least one non-empty row to
+  // honour the "one focused element at all times" invariant (the home screen's
+  // header row guarantees this).
   const [focused, setFocused] = useState<FocusPosition>(
     () => initialPosition ?? firstFocusable(rowLengths) ?? { row: 0, col: 0 },
   );

@@ -10,7 +10,7 @@
   /* Warm ambient glow, top-right, very subtle (screen spec 02). */
   background-image: radial-gradient(
     60% 50% at 85% 0%,
-    rgba(245, 166, 35, 0.08) 0%,
+    var(--color-ambient-glow) 0%,
     transparent 70%
   );
   display: flex;
@@ -34,7 +34,7 @@
   width: 1.667rem;
   height: 1.667rem;
   border-radius: 8px;
-  background: linear-gradient(180deg, #f5a623 0%, #d4622c 100%);
+  background: var(--brand-gradient);
 }
 .header__wordmark {
   font-size: 1.146rem; /* 22px */
@@ -115,6 +115,9 @@
   background: var(--color-tile-bg);
   border: var(--focus-ring-width) solid transparent; /* reserve space so focus doesn't shift layout */
   overflow: hidden;
+  transition:
+    width 150ms ease,
+    box-shadow 150ms ease;
 }
 .tile--service {
   width: 8.854rem; /* 170px */
@@ -125,14 +128,22 @@
   height: 5rem; /* 96px */
   border-radius: 10px;
 }
+/* Service tiles do not scale on focus (per §11) — only the ring changes. */
 .tile--library {
-  width: 7.292rem; /* 140px */
+  /* Reserve the focused (148px) footprint so neighbours don't reflow when the
+     poster scales up (§9.4). */
+  width: 7.708rem; /* 148px */
   gap: 0.417rem;
+  align-items: center;
 }
 .tile--library .tile__frame {
-  width: 7.292rem;
-  height: 10.938rem; /* 210px */
+  width: 7.292rem; /* 140px default */
+  aspect-ratio: 140 / 210; /* height derives, per §2 poster guidance */
   border-radius: 8px;
+}
+/* §9 rule 4: focused library poster scales up 140 -> 148px. */
+.tile--library.is-focused .tile__frame {
+  width: 7.708rem; /* 148px */
 }
 .tile__label {
   font-size: 0.677rem; /* 13px */
