@@ -62,9 +62,10 @@ calls at all** (NFR-9).
 ### The service catalog
 
 Service tiles come from `services.yaml` + drop-in files in `services.d/`. The
-first-run seed ships a curated **community catalog** (Netflix, YouTube, Disney+,
-Max, Prime Video, Hulu, Apple TV, Paramount+, Peacock, Spotify, …) under
-[`config.example/services.d/`](config.example/services.d/). Add your own by
+first-run seed ships a curated **community catalog** in
+[`config.example/`](config.example/) — Netflix and YouTube in `services.yaml`,
+plus drop-ins in [`services.d/`](config.example/services.d/) (Disney+, Max, Prime
+Video, Hulu, Apple TV, Paramount+, Peacock, Spotify, YouTube TV). Add your own by
 dropping a `services.d/<name>.yaml` into `config/` — see
 [config-reference § The community catalog](docs/config-reference.md#the-community-catalog-servicesd).
 
