@@ -124,6 +124,15 @@ metadata:
 | `server.port` | integer (1–65535) | `8080` | TCP port the server binds. Changing it requires a restart. |
 | `server.logLevel` | `silent` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `info` | Structured-log verbosity. Hot-reloadable. |
 
+> **Port precedence & the container healthcheck.** `server.port` (when set)
+> takes precedence over the `PORT` environment variable. The bundled image's
+> `HEALTHCHECK` and the reference compose port mapping target `8080`. If you set
+> `server.port` to a non-default value, also update the compose `ports:` mapping
+> and be aware the bundled healthcheck probes `$PORT` (default `8080`) — so a
+> changed `server.port` will report the container unhealthy unless `PORT` is set
+> to match. The simplest path is to leave `server.port` at `8080` and remap on
+> the host side (`ports: ["9000:8080"]`).
+
 ```yaml
 server:
   port: 8080
@@ -159,6 +168,12 @@ keybindings:
 The service tile catalog. A `services:` list of tile definitions; selecting a tile
 navigates the kiosk to its `launch_url`. Files in `services.d/` are drop-in
 definitions merged on top of `services.yaml` (the shareable community catalog).
+
+> **Not yet schema-validated.** In Phase 1 these files are loaded as raw catalog
+> data and are **not** validated against a schema — the "Required"/"Type" columns
+> below describe the contract the `CatalogService` will enforce (issue #23), not
+> what is checked today. A malformed `services.*` file is reported as a non-fatal
+> load error but its fields are not yet type-checked.
 
 | Field | Required | Type | Notes |
 |---|---|---|---|

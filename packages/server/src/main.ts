@@ -52,6 +52,15 @@ async function main(): Promise<void> {
     });
   }
 
+  // Surface a seed failure as a non-fatal warning — the server still came up on
+  // all-defaults rather than crashing (e.g. EACCES on a root-owned /config).
+  if (seed.reason === 'error') {
+    app.log.warn(
+      { configDir: CONFIG_DIR, error: seed.error },
+      'could not seed /config (check volume ownership); continuing with current config',
+    );
+  }
+
   try {
     await app.listen({ port, host: HOST });
   } catch (err) {

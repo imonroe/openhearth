@@ -9,7 +9,9 @@ import * as fs from 'node:fs';
 
 export interface SeedResult {
   seeded: boolean;
-  reason: 'seeded' | 'config-not-empty' | 'no-seed-dir';
+  reason: 'seeded' | 'config-not-empty' | 'no-seed-dir' | 'error';
+  /** Present when `reason === 'error'`: the failure message. Never thrown. */
+  error?: string;
 }
 
 function isEmptyOrMissing(dir: string): boolean {
@@ -20,6 +22,12 @@ function isEmptyOrMissing(dir: string): boolean {
   }
 }
 
+/**
+ * Seed `configDir` from `seedDir`. Never throws: a failure (e.g. EACCES on a
+ * root-owned bind mount) is returned as `reason: 'error'` so the caller can log
+ * a non-fatal warning and continue with all-defaults — config problems must
+ * never crash the server (NFR-4).
+ */
 export function seedConfigDir(configDir: string, seedDir: string): SeedResult {
   if (!isEmptyOrMissing(configDir)) {
     return { seeded: false, reason: 'config-not-empty' };
@@ -27,7 +35,11 @@ export function seedConfigDir(configDir: string, seedDir: string): SeedResult {
   if (!fs.existsSync(seedDir)) {
     return { seeded: false, reason: 'no-seed-dir' };
   }
-  fs.mkdirSync(configDir, { recursive: true });
-  fs.cpSync(seedDir, configDir, { recursive: true });
-  return { seeded: true, reason: 'seeded' };
+  try {
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.cpSync(seedDir, configDir, { recursive: true });
+    return { seeded: true, reason: 'seeded' };
+  } catch (err) {
+    return { seeded: false, reason: 'error', error: (err as Error).message };
+  }
 }

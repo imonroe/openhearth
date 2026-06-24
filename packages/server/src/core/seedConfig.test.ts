@@ -48,4 +48,15 @@ describe('seedConfigDir', () => {
     const result = seedConfigDir(path.join(root, 'config'), path.join(root, 'nope'));
     expect(result).toEqual({ seeded: false, reason: 'no-seed-dir' });
   });
+
+  it('returns an error result instead of throwing on a copy failure', () => {
+    // configDir is an existing *file*: isEmptyOrMissing() treats it as empty,
+    // then mkdir/cp fails — must be caught and reported, never thrown.
+    const asFile = path.join(root, 'config-as-file');
+    fs.writeFileSync(asFile, 'not a directory');
+    const result = seedConfigDir(asFile, seedDir);
+    expect(result.seeded).toBe(false);
+    expect(result.reason).toBe('error');
+    expect(typeof result.error).toBe('string');
+  });
 });
