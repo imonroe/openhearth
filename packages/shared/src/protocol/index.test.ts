@@ -21,8 +21,8 @@ describe('protocol', () => {
 
   it('validates a well-formed command message', () => {
     const sample: CommandMessage = {
-      protocolVersion: PROTOCOL_VERSION,
       type: 'command',
+      protocol_version: PROTOCOL_VERSION,
       action: 'navigate',
       params: { direction: 'down' },
     };
@@ -31,21 +31,21 @@ describe('protocol', () => {
 
   it('validates a well-formed event message', () => {
     const sample = {
-      protocolVersion: PROTOCOL_VERSION,
       type: 'event' as const,
+      protocol_version: PROTOCOL_VERSION,
       event: 'state_changed' as const,
-      payload: { focus: 'tile-3' },
+      state: { focus: 'tile-3' },
     };
     expect(parseProtocolMessage(sample)).toEqual(sample);
   });
 
   it('rejects an unknown action', () => {
-    const bad = { protocolVersion: 1, type: 'command', action: 'explode' };
+    const bad = { protocol_version: 1, type: 'command', action: 'explode' };
     expect(protocolMessageSchema.safeParse(bad).success).toBe(false);
   });
 
   it('rejects a mismatched protocol version', () => {
-    const bad = { protocolVersion: 2, type: 'command', action: 'home' };
+    const bad = { protocol_version: 2, type: 'command', action: 'home' };
     expect(protocolMessageSchema.safeParse(bad).success).toBe(false);
   });
 

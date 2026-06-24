@@ -43,8 +43,9 @@ export type ActionName = z.infer<typeof actionNameSchema>;
  * client correlate an acknowledgement/result with the command it sent.
  */
 export const commandMessageSchema = z.object({
-  protocolVersion: z.literal(PROTOCOL_VERSION),
   type: z.literal('command'),
+  // Wire key is snake_case to match the documented envelope (PRD §11.3).
+  protocol_version: z.literal(PROTOCOL_VERSION),
   id: z.string().optional(),
   action: actionNameSchema,
   params: z.record(z.string(), z.unknown()).optional(),
@@ -59,10 +60,11 @@ export const eventTypeSchema = z.enum(['state_changed']);
 export type EventType = z.infer<typeof eventTypeSchema>;
 
 export const eventMessageSchema = z.object({
-  protocolVersion: z.literal(PROTOCOL_VERSION),
   type: z.literal('event'),
+  protocol_version: z.literal(PROTOCOL_VERSION),
   event: eventTypeSchema,
-  payload: z.record(z.string(), z.unknown()).optional(),
+  // Wire key `state` matches the documented envelope (PRD §11.3).
+  state: z.record(z.string(), z.unknown()).optional(),
 });
 export type EventMessage = z.infer<typeof eventMessageSchema>;
 
