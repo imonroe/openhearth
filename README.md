@@ -38,5 +38,25 @@ pnpm test         # run package tests
 pnpm dev          # watch-build all packages
 ```
 
+## Continuous integration
+
+Every pull request to `dev` (and every push to `dev`) runs
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+
+- **build-test** — `pnpm install --frozen-lockfile` (with pnpm cache) →
+  Prettier check → lint → typecheck → test → build.
+- **docker-build** — builds the production image from `docker/Dockerfile`
+  (no push) with GitHub Actions layer caching.
+
+The workflow needs no secrets and makes no outbound calls beyond fetching
+dependencies and the base image (NFR-9). Any failing step fails the check.
+
+### Requiring CI before merge (branch protection)
+
+To make these checks mandatory, add a branch-protection rule for `dev`
+(Settings → Branches → Add rule) and mark the **`Lint, typecheck, test & build`**
+and **`Docker image build`** status checks as required. With protection on, a PR
+to `dev` cannot merge until both jobs pass.
+
 See [CLAUDE.md](CLAUDE.md) and [docs/implementation_plan.md](docs/implementation_plan.md)
 for architecture and the phased roadmap.
