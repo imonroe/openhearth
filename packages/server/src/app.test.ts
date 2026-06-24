@@ -52,6 +52,14 @@ describe('GET /api/v1/config', () => {
     expect(body.config.server).toEqual({ port: 9090, logLevel: 'debug' });
   });
 
+  it('redacts secrets (never echoes the TMDB key)', async () => {
+    await makeApp('metadata:\n  tmdbApiKey: super-secret-key-12345\n');
+    const res = await app.inject({ method: 'GET', url: '/api/v1/config' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain('super-secret-key-12345');
+    expect(res.json().config.metadata.tmdbApiKey).toBe('***');
+  });
+
   it('reports validation errors and stays up on an invalid config (NFR-4)', async () => {
     await makeApp('server:\n  port: 70000\n'); // out of range -> last-good empty
     const health = await app.inject({ method: 'GET', url: '/api/v1/health' });

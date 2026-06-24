@@ -19,19 +19,40 @@ async function main(): Promise<void> {
   const port = configService.config.server?.port ?? Number(process.env.PORT ?? 8080);
   const app = buildApp({ configService, webRoot: WEB_ROOT });
 
-  // Keep the active log level in sync with hot-reloaded config.
+  // Keep the active log level in sync with hot-reloaded config, and surface
+  // changes the running process can't apply live.
   configService.on('change', () => {
     const next = configService.config.server?.logLevel;
     if (next && app.log.level !== next) {
       app.log.level = next;
       app.log.info({ logLevel: next }, 'log level updated from config');
     }
+    const nextPort = configService.config.server?.port;
+    if (nextPort && nextPort !== port) {
+      app.log.warn(
+        { configuredPort: nextPort, activePort: port },
+        'server.port changed in config; a restart is required for it to take effect',
+      );
+    }
     if (configService.errors.length) {
       app.log.warn({ errors: configService.errors }, 'config reloaded with validation errors');
     }
   });
 
-  await app.listen({ port, host: HOST });
+  // Graceful shutdown: close the HTTP server and the config watcher.
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      app.log.info({ signal }, 'shutting down');
+      void Promise.allSettled([app.close(), configService.stop()]).then(() => process.exit(0));
+    });
+  }
+
+  try {
+    await app.listen({ port, host: HOST });
+  } catch (err) {
+    app.log.fatal({ err }, 'failed to bind server');
+    throw err;
+  }
 
   // Startup diagnostics.
   app.log.info(

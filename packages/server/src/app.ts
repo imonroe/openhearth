@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { PROTOCOL_VERSION } from '@openhearth/shared';
+import { PROTOCOL_VERSION, redactConfig } from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
 
 export interface BuildAppOptions {
@@ -47,7 +47,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // --- API: effective validated config snapshot --------------------------
   app.get('/api/v1/config', async () => {
     return {
-      config: configService.config,
+      // Secrets (e.g. metadata.tmdbApiKey) are redacted: this endpoint is
+      // unauthenticated, so it must never echo a secret back over the LAN.
+      config: redactConfig(configService.config),
       errors: configService.errors,
       valid: configService.errors.length === 0,
     };
