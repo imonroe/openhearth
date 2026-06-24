@@ -16,6 +16,7 @@ import type { ActionName, LibraryItem, SubtitleTrack } from '@openhearth/shared'
 import {
   libraryStreamUrl,
   fetchResume,
+  fetchPlaybackInfo,
   saveResume,
   clearResume,
   fetchSubtitles,
@@ -61,6 +62,9 @@ export function Player({
   const [paused, setPaused] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
+  // Server-probed duration (#122). For a transcode the media element's own
+  // duration is wrong, so this is the authoritative denominator when present.
+  const [serverDuration, setServerDuration] = useState(0);
   const [subs, setSubs] = useState<SubtitleTrack[]>([]);
   const [activeSub, setActiveSub] = useState(-1); // -1 = off
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -71,6 +75,16 @@ export function Player({
     const controller = new AbortController();
     fetchSubtitles(item.id, controller.signal)
       .then(setSubs)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [item.id]);
+
+  // Load the authoritative duration (#122). Transcodes report a bogus
+  // `<video>.duration`; the server's ffprobe value is the real length.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchPlaybackInfo(item.id, controller.signal)
+      .then((info) => setServerDuration(info?.duration_sec ?? 0))
       .catch(() => {});
     return () => controller.abort();
   }, [item.id]);
@@ -183,16 +197,21 @@ export function Player({
   }, []);
 
   // Mouse: click the progress bar to scrub to that fraction. Mirrors the keyboard
-  // `seek` to the control path so a click behaves like the remote.
+  // `seek` to the control path so a click behaves like the remote. Scrub against
+  // the authoritative duration (server-probed when available) so the fraction
+  // maps to the real timeline, not a transcode's bogus `<video>.duration` (#122).
   const seekToFraction = useCallback(
     (fraction: number) => {
       const v = videoRef.current;
-      if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
-      const target = Math.min(Math.max(0, fraction), 1) * v.duration;
+      if (!v) return;
+      const total =
+        serverDuration > 0 ? serverDuration : Number.isFinite(v.duration) ? v.duration : 0;
+      if (total <= 0) return;
+      const target = Math.min(Math.max(0, fraction), 1) * total;
       dispatch('seek', { delta: target - v.currentTime });
       v.currentTime = target;
     },
-    [dispatch],
+    [dispatch, serverDuration],
   );
 
   // Capture-phase key handling for the whole player. Reserved keys stop
@@ -312,6 +331,14 @@ export function Player({
     );
   }
 
+  // Authoritative total: prefer the server's ffprobe duration; fall back to the
+  // media element's own value for direct-play before the probe lands (#122).
+  const totalDuration = serverDuration > 0 ? serverDuration : duration;
+  // Elapsed can momentarily exceed a stale/bogus total — clamp so the bar and
+  // the "elapsed / total" readout never overshoot.
+  const elapsed = totalDuration > 0 ? Math.min(current, totalDuration) : current;
+  const progressPct = totalDuration > 0 ? Math.min((elapsed / totalDuration) * 100, 100) : 0;
+
   return (
     <div className="player" role="region" aria-label={`Playing ${item.title}`}>
       <video
@@ -360,15 +387,12 @@ export function Player({
             if (rect.width > 0) seekToFraction((e.clientX - rect.left) / rect.width);
           }}
         >
-          <div
-            className="player__progress-fill"
-            style={{ width: duration > 0 ? `${(current / duration) * 100}%` : '0%' }}
-          />
+          <div className="player__progress-fill" style={{ width: `${progressPct}%` }} />
         </div>
         <div className="player__osd-meta">
           <span className="player__osd-state">{paused ? '⏸' : '▶'}</span>
           <span className="player__osd-time">
-            {fmt(current)} / {fmt(duration)}
+            {fmt(elapsed)} / {fmt(totalDuration)}
           </span>
           {subs.length > 0 ? (
             <span className="player__osd-subs">

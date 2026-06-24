@@ -7,6 +7,7 @@ import {
   type ActionName,
   type Config,
   type LibraryListResponse,
+  type PlaybackInfo,
   type ResumePosition,
   type ServiceCatalog,
   type SubtitleTrack,
@@ -53,6 +54,24 @@ export async function fetchLibrary(
 export function libraryStreamUrl(id: string, startSec = 0): string {
   const base = `/api/v1/library/${encodeURIComponent(id)}/stream`;
   return startSec > 0 ? `${base}?t=${Math.floor(startSec)}` : base;
+}
+
+/**
+ * Fetch authoritative playback info (mode + real duration) for an item, or null
+ * on failure. A transcode's `<video>.duration` is unreliable, so the OSD uses
+ * this server-probed duration as the denominator instead (issue #122).
+ */
+export async function fetchPlaybackInfo(
+  id: string,
+  signal?: AbortSignal,
+): Promise<PlaybackInfo | null> {
+  try {
+    const res = await fetch(`/api/v1/library/${encodeURIComponent(id)}/playback`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as PlaybackInfo;
+  } catch {
+    return null;
+  }
 }
 
 /** Fetch the saved resume position for an item, or null if none. */

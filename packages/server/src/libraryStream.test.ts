@@ -45,8 +45,8 @@ const streamer: MediaStreamer = {
     // Everything except the .mkv transcode direct-plays in these tests.
     return Promise.resolve(
       p.endsWith('.mkv')
-        ? { container: 'mkv', videoCodec: 'hevc' }
-        : { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac' },
+        ? { container: 'mkv', videoCodec: 'hevc', durationSec: 3600 }
+        : { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', durationSec: 5400 },
     );
   },
   openTranscode: (_p: string, opts): TranscodeStream => {
@@ -173,6 +173,39 @@ describe('GET /api/v1/library/:id/stream — transcode', () => {
   // Note: kill-on-client-disconnect is wired via request.raw 'close' but can't be
   // exercised through light-my-request (it doesn't simulate a mid-stream socket
   // close); that path is covered by review, not by this harness.
+});
+
+describe('GET /api/v1/library/:id/playback — authoritative duration (#122)', () => {
+  it('reports the transcode mode and probed duration', async () => {
+    const res = await app.inject({ url: '/api/v1/library/trans/playback' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ mode: 'transcode', duration_sec: 3600 });
+  });
+
+  it('reports direct mode and probed duration', async () => {
+    const res = await app.inject({ url: '/api/v1/library/direct/playback' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ mode: 'direct', duration_sec: 5400 });
+  });
+
+  it('refuses an item that symlinks outside the library roots (403)', async () => {
+    expect((await app.inject({ url: '/api/v1/library/evil/playback' })).statusCode).toBe(403);
+  });
+
+  it('502s when ffprobe fails', async () => {
+    expect((await app.inject({ url: '/api/v1/library/badprobe/playback' })).statusCode).toBe(502);
+  });
+
+  it('404s an unknown id and a file missing on disk', async () => {
+    expect((await app.inject({ url: '/api/v1/library/nope/playback' })).statusCode).toBe(404);
+    expect((await app.inject({ url: '/api/v1/library/missing/playback' })).statusCode).toBe(404);
+  });
+
+  it('503s when no transcoder is wired', async () => {
+    await app.close();
+    await makeApp(/* withStreamer */ false);
+    expect((await app.inject({ url: '/api/v1/library/direct/playback' })).statusCode).toBe(503);
+  });
 });
 
 describe('GET /api/v1/library/:id/stream — security & errors', () => {

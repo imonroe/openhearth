@@ -94,6 +94,25 @@ export const resumePositionSchema = z
 
 export type ResumePosition = z.infer<typeof resumePositionSchema>;
 
+/**
+ * Authoritative playback info for an item (the `GET /api/v1/library/:id/playback`
+ * response). Transcoded streams use fragmented MP4 with `empty_moov`, so the
+ * browser's `<video>.duration` is unreliable (it reports the buffered fragment
+ * length, not the whole film). The server probes the source with ffprobe and
+ * reports the real duration here so the player OSD can compute an accurate
+ * elapsed/total and progress fraction (issue #122).
+ */
+export const playbackInfoSchema = z
+  .object({
+    /** Whether the server direct-plays or transcodes this item. */
+    mode: z.enum(['direct', 'transcode']),
+    /** Probed duration in seconds, or null when ffprobe couldn't determine it. */
+    duration_sec: z.number().nonnegative().nullable(),
+  })
+  .strict();
+
+export type PlaybackInfo = z.infer<typeof playbackInfoSchema>;
+
 /** Body of `PUT /api/v1/library/:id/resume`. */
 export const resumeUpdateSchema = z.object({ position_sec: z.number().nonnegative() }).strict();
 
