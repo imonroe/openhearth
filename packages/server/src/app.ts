@@ -46,6 +46,29 @@ function isLibraryKind(value: string): value is LibraryItemKind {
   return (LIBRARY_ITEM_KINDS as readonly string[]).includes(value);
 }
 
+/**
+ * True when `filePath` resolves (after following symlinks) inside one of the
+ * configured library source roots. Blocks symlink escapes from the media mount.
+ */
+function isWithinLibraryRoots(filePath: string, sources: ReadonlyArray<{ path: string }>): boolean {
+  let fileReal: string;
+  try {
+    fileReal = realpathSync(filePath);
+  } catch {
+    return false;
+  }
+  for (const source of sources) {
+    let rootReal: string;
+    try {
+      rootReal = realpathSync(resolve(source.path));
+    } catch {
+      continue;
+    }
+    if (fileReal === rootReal || fileReal.startsWith(rootReal + sep)) return true;
+  }
+  return false;
+}
+
 /** Serve a file directly with HTTP range support (206/200/416) for direct-play. */
 function sendDirectPlay(
   request: FastifyRequest,
@@ -253,6 +276,15 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       }
       if (!existsSync(item.path)) {
         return reply.code(404).send({ status: 'not_found' });
+      }
+
+      // Containment (defense-in-depth): the file must resolve inside a configured
+      // library source root. LibraryService follows symlinks, so without this a
+      // planted symlink (e.g. evil.mp4 -> /etc/shadow) could exfiltrate a
+      // server-side file through the stream endpoint.
+      if (!isWithinLibraryRoots(item.path, configService.config.library?.sources ?? [])) {
+        request.log.warn({ path: item.path }, 'stream blocked: outside library roots');
+        return reply.code(403).send({ status: 'forbidden' });
       }
 
       let probe;

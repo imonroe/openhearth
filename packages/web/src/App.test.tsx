@@ -206,13 +206,23 @@ describe('App shell', () => {
     expect(screen.getByText('The Wire')).toBeTruthy(); // episodes grouped into one show
   });
 
+  // Wait until focus has actually landed on a library tile (optionally one whose
+  // label matches), so we don't press Enter before the focus move has applied.
+  const focusLibraryTile = async (container: HTMLElement, label?: string): Promise<void> => {
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // services row -> library row
+    await waitFor(() => {
+      const focused = container.querySelector('.tile--library.is-focused');
+      expect(focused).toBeTruthy();
+      if (label) expect(focused!.textContent).toContain(label);
+    });
+  };
+
   it('opens a movie detail and starts playback via play_item (FR-C5 entry)', async () => {
     const dispatch = vi.fn();
-    render(<App dispatch={dispatch} />);
-    await screen.findByText('Netflix');
+    const { container } = render(<App dispatch={dispatch} />);
+    await screen.findByText('Arrival');
 
-    // Down into the library row (col 0 = "Arrival"), then select to open detail.
-    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await focusLibraryTile(container, 'Arrival'); // library row col 0
     fireEvent.keyDown(window, { key: 'Enter' });
     await screen.findByText('Play');
 
@@ -223,13 +233,18 @@ describe('App shell', () => {
 
   it('navigates a TV show detail by season and plays an episode', async () => {
     const dispatch = vi.fn();
-    render(<App dispatch={dispatch} />);
-    await screen.findByText('Netflix');
+    const { container } = render(<App dispatch={dispatch} />);
+    await screen.findByText('Arrival');
 
     // Down to library, right to the "The Wire" show tile (Arrival, Dune, Wire).
-    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await focusLibraryTile(container);
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() =>
+      expect(container.querySelector('.tile--library.is-focused')!.textContent).toContain(
+        'The Wire',
+      ),
+    );
     fireEvent.keyDown(window, { key: 'Enter' });
     await screen.findByText('Season 1');
     expect(screen.getByText('Season 2')).toBeTruthy();
@@ -242,9 +257,9 @@ describe('App shell', () => {
   });
 
   it('returns to home from a detail screen on Back', async () => {
-    render(<App />);
-    await screen.findByText('Netflix');
-    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    const { container } = render(<App />);
+    await screen.findByText('Arrival');
+    await focusLibraryTile(container, 'Arrival');
     fireEvent.keyDown(window, { key: 'Enter' });
     await screen.findByText('Play'); // movie detail
     fireEvent.keyDown(window, { key: 'Escape' }); // reserved back

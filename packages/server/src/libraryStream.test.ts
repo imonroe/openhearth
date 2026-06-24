@@ -37,13 +37,18 @@ function item(over: Partial<LibraryItem>): LibraryItem {
 }
 
 /** A fake streamer: directFile → direct-play; everything else → transcode. */
+let outsideFile: string;
+
 const streamer: MediaStreamer = {
-  probe: (p: string): Promise<ProbeResult> =>
-    Promise.resolve(
-      p === directFile
-        ? { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac' }
-        : { container: 'mkv', videoCodec: 'hevc' },
-    ),
+  probe: (p: string): Promise<ProbeResult> => {
+    if (p.includes('badprobe')) return Promise.reject(new Error('ffprobe failed'));
+    // Everything except the .mkv transcode direct-plays in these tests.
+    return Promise.resolve(
+      p.endsWith('.mkv')
+        ? { container: 'mkv', videoCodec: 'hevc' }
+        : { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac' },
+    );
+  },
   openTranscode: (_p: string, opts): TranscodeStream => {
     lastSeek = opts?.seekSec;
     return { stream: Readable.from([TRANSCODE_BYTES]), kill: () => {} };
@@ -56,6 +61,21 @@ async function makeApp(withStreamer = true): Promise<void> {
   transFile = path.join(dir, 'movie.mkv');
   fs.writeFileSync(directFile, Buffer.from('0123456789'.repeat(100))); // 1000 bytes
   fs.writeFileSync(transFile, Buffer.from('rawdata'));
+  fs.writeFileSync(path.join(dir, 'empty.mp4'), Buffer.alloc(0)); // 0 bytes
+  fs.writeFileSync(path.join(dir, 'badprobe.mp4'), Buffer.from('x'));
+
+  // A file OUTSIDE the library root, reachable only via a symlink planted inside
+  // it — the stream route must refuse to serve it (containment).
+  outsideFile = path.join(os.tmpdir(), `oh-secret-${path.basename(dir)}.txt`);
+  fs.writeFileSync(outsideFile, Buffer.from('TOP SECRET'));
+  fs.symlinkSync(outsideFile, path.join(dir, 'evil.mp4'));
+
+  // The config declares `dir` as a library source so containment passes for the
+  // real files in it (and fails for the symlink escape).
+  fs.writeFileSync(
+    path.join(dir, 'openhearth.yaml'),
+    `library:\n  sources:\n    - id: movies\n      path: ${dir}\n`,
+  );
 
   cfg = new ConfigService({ configDir: dir });
   await cfg.load();
@@ -64,6 +84,9 @@ async function makeApp(withStreamer = true): Promise<void> {
     item({ id: 'direct', path: directFile, container: 'mp4' }),
     item({ id: 'trans', path: transFile, kind: 'episode', container: 'mkv' }),
     item({ id: 'missing', path: path.join(dir, 'gone.mp4') }),
+    item({ id: 'empty', path: path.join(dir, 'empty.mp4') }),
+    item({ id: 'badprobe', path: path.join(dir, 'badprobe.mp4') }),
+    item({ id: 'evil', path: path.join(dir, 'evil.mp4') }),
   ]);
   const libraryService = new LibraryService({ store, getSources: () => [] });
   app = buildApp({
@@ -83,6 +106,7 @@ afterEach(async () => {
   await cfg?.stop();
   store?.close();
   await fsp.rm(dir, { recursive: true, force: true });
+  await fsp.rm(outsideFile, { force: true });
 });
 
 describe('GET /api/v1/library/:id/stream — direct play', () => {
@@ -114,6 +138,23 @@ describe('GET /api/v1/library/:id/stream — direct play', () => {
     expect(res.statusCode).toBe(416);
     expect(res.headers['content-range']).toBe('bytes */1000');
   });
+
+  it('serves a suffix range (last N bytes)', async () => {
+    const res = await app.inject({
+      url: '/api/v1/library/direct/stream',
+      headers: { range: 'bytes=-100' },
+    });
+    expect(res.statusCode).toBe(206);
+    expect(res.headers['content-range']).toBe('bytes 900-999/1000');
+    expect(res.rawPayload.length).toBe(100);
+  });
+
+  it('serves a 0-byte file without erroring', async () => {
+    const res = await app.inject({ url: '/api/v1/library/empty/stream' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-length']).toBe('0');
+    expect(res.rawPayload.length).toBe(0);
+  });
 });
 
 describe('GET /api/v1/library/:id/stream — transcode', () => {
@@ -128,9 +169,23 @@ describe('GET /api/v1/library/:id/stream — transcode', () => {
     await app.inject({ url: '/api/v1/library/trans/stream?t=90' });
     expect(lastSeek).toBe(90);
   });
+
+  // Note: kill-on-client-disconnect is wired via request.raw 'close' but can't be
+  // exercised through light-my-request (it doesn't simulate a mid-stream socket
+  // close); that path is covered by review, not by this harness.
 });
 
-describe('GET /api/v1/library/:id/stream — errors', () => {
+describe('GET /api/v1/library/:id/stream — security & errors', () => {
+  it('refuses to stream a file that symlinks outside the library roots (403)', async () => {
+    const res = await app.inject({ url: '/api/v1/library/evil/stream' });
+    expect(res.statusCode).toBe(403);
+    expect(res.rawPayload.toString()).not.toContain('TOP SECRET');
+  });
+
+  it('502s when ffprobe fails', async () => {
+    expect((await app.inject({ url: '/api/v1/library/badprobe/stream' })).statusCode).toBe(502);
+  });
+
   it('404s an unknown id', async () => {
     expect((await app.inject({ url: '/api/v1/library/nope/stream' })).statusCode).toBe(404);
   });

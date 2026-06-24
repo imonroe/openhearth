@@ -47,11 +47,14 @@ export function parseProbeJson(raw: string, ext: string): ProbeResult {
 
 /** Containers a browser `<video>` can play from directly. */
 const DIRECT_CONTAINERS = new Set(['mp4', 'm4v', 'mov', 'webm']);
+// Conservative codec sets: AV1 is deliberately excluded (decode support is
+// unreliable on the mini-PC / TV-box hardware OpenHearth targets), so AV1
+// transcodes to H.264 rather than risking a black screen with no fallback.
 /** Codecs that play directly inside an MP4-family container. */
-const MP4_VIDEO = new Set(['h264', 'avc1', 'av1']);
+const MP4_VIDEO = new Set(['h264', 'avc1']);
 const MP4_AUDIO = new Set(['aac', 'mp3', 'mp4a']);
 /** Codecs that play directly inside a WebM container. */
-const WEBM_VIDEO = new Set(['vp8', 'vp9', 'av1']);
+const WEBM_VIDEO = new Set(['vp8', 'vp9']);
 const WEBM_AUDIO = new Set(['opus', 'vorbis']);
 
 /** MIME type to serve for a direct-played container. */
