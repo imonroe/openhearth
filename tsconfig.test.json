@@ -5,12 +5,13 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "types": ["vitest/globals", "node"],
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "types": ["vitest/globals", "node"]
   },
   "include": [
-    "packages/*/src/**/*.test.ts",
-    "packages/*/src/**/*.spec.ts",
+    "packages/shared/src/**/*.test.ts",
+    "packages/shared/src/**/*.spec.ts",
+    "packages/server/src/**/*.test.ts",
+    "packages/server/src/**/*.spec.ts",
     "packages/*/vitest.config.ts",
     "vitest.config.base.ts"
   ]
