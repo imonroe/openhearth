@@ -1,0 +1,10 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: max
+    name: Max
+    launch_url: https://play.max.com/
+    group: Streaming
+    order: 40
+    notes: >-
+      Formerly HBO Max. Widevine-protected; L3 in a generic Chromium is commonly
+      capped at 720p. play.max.com is the web player entry point.

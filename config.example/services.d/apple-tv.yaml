@@ -1,0 +1,11 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: apple-tv
+    name: Apple TV
+    launch_url: https://tv.apple.com/
+    group: Streaming
+    order: 90
+    notes: >-
+      FairPlay on Safari, Widevine on Chromium. The web player works in Chromium
+      but L3 may cap resolution; some 4K/Dolby titles are Safari/Apple-device
+      only. D-pad navigation is workable.

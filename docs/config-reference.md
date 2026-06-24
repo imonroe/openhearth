@@ -175,11 +175,11 @@ definitions merged on top of `services.yaml` (the shareable community catalog).
 > community-catalog convention from PRD §10.3, so drop-in files match upstream
 > examples. `launch_url` must be an `http(s)` URL.
 
-> **Not yet schema-validated.** In Phase 1 these files are loaded as raw catalog
-> data and are **not** validated against a schema — the "Required"/"Type" columns
-> below describe the contract the `CatalogService` will enforce (issue #23), not
-> what is checked today. A malformed `services.*` file is reported as a non-fatal
-> load error but its fields are not yet type-checked.
+> **Per-entry validation.** Each tile is validated by the `CatalogService`
+> against the schema below. A malformed tile is reported as a non-fatal error and
+> skipped — the rest of the catalog still renders. `launch_url` must be an
+> `http(s)` URL and `icon` must be an `http(s)` URL or a safe relative filename
+> (no scheme, not absolute, no `..`).
 
 | Field | Required | Type | Notes |
 |---|---|---|---|
@@ -202,9 +202,51 @@ services:
     order: 10
 ```
 
-> The `services.*` files are loaded as raw catalog data in Phase 1 and parsed by
-> the `CatalogService` (see issue #23). The field reference above mirrors PRD
-> §10.3.
+> The field reference above mirrors PRD §10.3.
+
+### The community catalog (`services.d/`)
+
+OpenHearth ships a starter catalog so you don't have to re-author the same tiles
+everyone needs. It lives in `config.example/`:
+
+- `services.yaml` — the base tiles (Netflix, YouTube).
+- `services.d/*.yaml` — one drop-in file per service (Max, Disney+, Prime Video,
+  Hulu, Peacock, Paramount+, Apple TV, YouTube TV, Spotify, …).
+
+**How merging works.** On load the server reads `services.yaml` first, then each
+`services.d/*.yaml` in **filename order**. Tiles are keyed by `id`; a later
+definition with the same `id` **overrides** an earlier one. So to customize a
+shipped tile, drop a file later in the sort order (or edit the entry in place)
+that reuses its `id`.
+
+**Importing / extending the catalog.**
+
+1. Copy the tiles you want from `config.example/services.yaml` and
+   `config.example/services.d/` into your own `config/services.yaml` (or
+   `config/services.d/`). The first-run seed already copies these for you; you
+   only need to curate which tiles appear.
+2. Remove the tiles you don't subscribe to — every tile in the file becomes a
+   visible launcher tile.
+3. Add your own: a tile is just `id` + `name` + `launch_url` (+ optional
+   `icon`, `group`, `order`, `user_agent`, `notes`). Drop it in a new
+   `services.d/<your-service>.yaml`.
+4. Edits hot-reload — no restart needed.
+
+**Compatibility notes (`notes`).** Each shipped entry carries a `notes` field
+documenting known kiosk/DRM caveats (PRD §18) — the app ignores it, it's for
+you. The recurring ones:
+
+- **DRM is a hard wall.** Commercial services are Widevine/PlayReady-wrapped.
+  OpenHearth launches their players; it can't decode them, and it can't strip
+  ads inside an ad-tier plan.
+- **Widevine L3.** A generic Chromium usually only has Widevine **L3**, which
+  several services cap at 480p/720p. This is a property of your host browser's
+  CDM, not a per-tile setting — for 1080p+ you need an L1/CDM-capable browser.
+- **Kiosk detection / user agent.** A few services serve a different UI (or
+  refuse) to embedded/kiosk browsers. Set `user_agent` on the tile to present a
+  TV- or desktop-class UA if you get the wrong surface.
+- **Regional availability.** Several tiles (Hulu, Peacock, YouTube TV) are
+  region-locked or use region-specific URLs — adjust `launch_url` for yours.
 
 ---
 

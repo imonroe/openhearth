@@ -3,6 +3,14 @@
 # Each entry renders a tile; selecting it navigates the kiosk to `launch_url`.
 # Adding a service is declarative — see docs/config-reference.md § Services.
 # Additional tiles can be dropped into services.d/*.yaml (community catalog).
+#
+# `notes` is free-form text ignored by the app; it documents per-service kiosk
+# and DRM caveats (PRD §18). Common caveats:
+#   - DRM: commercial services are Widevine/PlayReady-wrapped. OpenHearth
+#     launches their players but cannot decode them — ad-tier ads inside the
+#     service remain.
+#   - Widevine L3: a generic Chromium often gets only L3, which several services
+#     cap at 480p/720p. This is a host/browser property, not a per-tile setting.
 
 services:
   - id: netflix
@@ -11,10 +19,17 @@ services:
     icon: netflix.png # file in config/, a URL, or omit for metadata fallback
     group: Streaming
     order: 10
+    notes: >-
+      Widevine L3 in a generic Chromium typically caps Netflix at 720p. For
+      1080p+ the host browser needs a Widevine L1/CDM path. Kiosk UA is accepted.
 
   - id: youtube
     name: YouTube
-    launch_url: https://www.youtube.com/tv # TV-optimized endpoint where one exists
+    launch_url: https://www.youtube.com/tv # TV-optimized "leanback" endpoint
     icon: youtube.png
     group: Streaming
     order: 20
+    notes: >-
+      Uses the /tv leanback surface, built for D-pad navigation. Some Chromium
+      builds need a TV-class user_agent to be served the leanback UI; set
+      `user_agent` if you get the desktop site instead.
