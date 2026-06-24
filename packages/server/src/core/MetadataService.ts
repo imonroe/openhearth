@@ -28,9 +28,16 @@ export interface MetadataCache {
 const DEFAULT_POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_NEGATIVE_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Stable cache key for a query — case/space-insensitive on the title. */
+/**
+ * Stable cache key for a query — case/space-insensitive on the title. JSON-encodes
+ * the parts so a title containing the delimiter can't collide across boundaries.
+ */
 export function metadataCacheKey(query: MetadataQuery): string {
-  return `${query.kind ?? 'any'}|${query.title.trim().toLowerCase()}|${query.year ?? ''}`;
+  return JSON.stringify([
+    query.kind ?? 'any',
+    query.title.trim().toLowerCase(),
+    query.year ?? null,
+  ]);
 }
 
 /** Caching + TTL options for {@link MetadataService} (#41). */

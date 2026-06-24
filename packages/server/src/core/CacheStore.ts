@@ -17,7 +17,14 @@ import {
   type MediaItem,
 } from '@openhearth/shared';
 
-/** Current cache schema version — bump when the table shapes change. */
+/**
+ * Current cache schema version, written to `user_version`. Currently
+ * informational only — it is not read back, and migrations are unnecessary
+ * because every table is additive (`CREATE TABLE IF NOT EXISTS`) and the cache
+ * is disposable (a cold/incompatible DB is simply rebuilt). A future
+ * *non-additive* shape change must wire this into an actual read + migration (or
+ * a wipe-and-rebuild) rather than assuming it's handled automatically.
+ */
 const SCHEMA_VERSION = 2;
 
 /**

@@ -169,6 +169,24 @@ describe('MetadataService.resolveMedia — caching (#41)', () => {
   });
 });
 
+describe('metadataCacheKey', () => {
+  it('is stable for the same query (trim + lowercase) and distinct across fields', () => {
+    expect(metadataCacheKey({ title: ' The Matrix ', year: 1999, kind: 'movie' })).toBe(
+      metadataCacheKey({ title: 'the matrix', year: 1999, kind: 'movie' }),
+    );
+    expect(metadataCacheKey({ title: 'X', year: 1999 })).not.toBe(
+      metadataCacheKey({ title: 'X', year: 2000 }),
+    );
+  });
+
+  it('does not collide when a title contains the delimiter', () => {
+    // A naive `${kind}|${title}|${year}` would let these two collide.
+    expect(metadataCacheKey({ title: 'a|movie|1', kind: 'movie' })).not.toBe(
+      metadataCacheKey({ title: 'a', kind: 'movie' }),
+    );
+  });
+});
+
 describe('mediaItemFromMetadata (#40 normalized model)', () => {
   it('maps a movie result, deriving ids from the ref and schema-valid output', () => {
     const item = mediaItemFromMetadata(
