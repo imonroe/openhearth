@@ -236,7 +236,15 @@ export class CacheStore {
     if (!row) return undefined;
     let item: MediaItem | null = null;
     if (row.payload !== null) {
-      const parsed = mediaItemSchema.safeParse(JSON.parse(row.payload));
+      // A corrupt row (non-JSON or a stale schema) is treated as absent so the
+      // read can never throw — the entry is simply refetched.
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(row.payload);
+      } catch {
+        return undefined;
+      }
+      const parsed = mediaItemSchema.safeParse(parsedJson);
       if (!parsed.success) return undefined; // stale/invalid shape → refetch
       item = parsed.data;
     }

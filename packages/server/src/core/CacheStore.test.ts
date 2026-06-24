@@ -100,15 +100,21 @@ describe('CacheStore — metadata cache (#41)', () => {
     store.close();
   });
 
-  it('treats an invalid stored payload as absent (stale schema → refetch)', () => {
+  it('treats a corrupt stored payload as absent (stale schema or non-JSON → refetch)', () => {
     const store = new CacheStore(':memory:');
-    store.setMetadata('k', { item: null, fetched_at: 1, expires_at: 2 });
-    // Simulate a payload written by an older schema: corrupt the row directly.
     const raw = store as unknown as {
       db: { prepare(sql: string): { run(...args: unknown[]): void } };
     };
-    raw.db.prepare('UPDATE metadata_cache SET payload = ? WHERE key = ?').run('{"bad":true}', 'k');
-    expect(store.getMetadata('k')).toBeUndefined();
+    const corrupt = (key: string, payload: string): void => {
+      store.setMetadata(key, { item: null, fetched_at: 1, expires_at: 2 });
+      raw.db.prepare('UPDATE metadata_cache SET payload = ? WHERE key = ?').run(payload, key);
+    };
+    // Valid JSON, wrong shape (older schema):
+    corrupt('schema', '{"bad":true}');
+    expect(store.getMetadata('schema')).toBeUndefined();
+    // Not even JSON — getMetadata must not throw:
+    corrupt('garbage', 'not json{');
+    expect(store.getMetadata('garbage')).toBeUndefined();
     store.close();
   });
 
