@@ -96,6 +96,11 @@ export class LibraryService {
     return this.store.countLibraryItems(query);
   }
 
+  /** Title substring search over the index (#43, FR-B3). */
+  search(query: string, limit?: number): LibraryItem[] {
+    return this.store.searchLibraryItems(query, limit);
+  }
+
   /** Fetch a single item by id, or undefined. */
   get(id: string): LibraryItem | undefined {
     return this.store.getLibraryItem(id);

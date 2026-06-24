@@ -78,6 +78,41 @@ describe('CacheStore', () => {
   });
 });
 
+describe('CacheStore — search (#43)', () => {
+  it('matches title substrings case-insensitively, ordered, with a limit', () => {
+    const store = new CacheStore(':memory:');
+    store.upsertLibraryItems([
+      item({ id: 'a', title: 'The Matrix' }),
+      item({ id: 'b', title: 'Matrix Reloaded' }),
+      item({ id: 'c', title: 'Heat' }),
+    ]);
+    const hits = store.searchLibraryItems('matrix');
+    expect(hits.map((h) => h.title)).toEqual(['Matrix Reloaded', 'The Matrix']); // title ASC
+    expect(store.searchLibraryItems('MATRIX')).toHaveLength(2); // case-insensitive
+    expect(store.searchLibraryItems('matrix', 1)).toHaveLength(1); // limit
+    store.close();
+  });
+
+  it('returns [] for an empty/whitespace query', () => {
+    const store = new CacheStore(':memory:');
+    store.upsertLibraryItems([item({ id: 'a', title: 'X' })]);
+    expect(store.searchLibraryItems('')).toEqual([]);
+    expect(store.searchLibraryItems('   ')).toEqual([]);
+    store.close();
+  });
+
+  it('treats LIKE metacharacters as literals (escaped)', () => {
+    const store = new CacheStore(':memory:');
+    store.upsertLibraryItems([
+      item({ id: 'a', title: '100% Wolf' }),
+      item({ id: 'b', title: '50 First Dates' }),
+    ]);
+    // A bare `%` would match everything; escaped, it matches only the literal.
+    expect(store.searchLibraryItems('100%').map((h) => h.id)).toEqual(['a']);
+    store.close();
+  });
+});
+
 describe('CacheStore — metadata cache (#41)', () => {
   it('cold read is undefined; round-trips a positive entry', () => {
     const store = new CacheStore(':memory:');

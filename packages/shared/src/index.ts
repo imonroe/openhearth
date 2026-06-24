@@ -15,3 +15,4 @@ export * from './config/index.js';
 export * from './catalog/index.js';
 export * from './library/index.js';
 export * from './models/index.js';
+export * from './search/index.js';

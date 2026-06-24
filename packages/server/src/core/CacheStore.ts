@@ -157,6 +157,22 @@ export class CacheStore {
     return row ? this.rowToItem(row) : undefined;
   }
 
+  /**
+   * Case-insensitive title substring search over the index (#43). The query's
+   * LIKE metacharacters are escaped so a literal `%` or `_` matches itself; an
+   * empty query returns []. Ordered by title for a stable result list.
+   */
+  searchLibraryItems(query: string, limit = 50): LibraryItem[] {
+    const q = query.trim();
+    if (!q) return [];
+    const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
+    const rows = this.stmt(
+      `SELECT * FROM library_items WHERE title LIKE @pattern ESCAPE '\\'
+       ORDER BY title ASC, season ASC, episode ASC LIMIT @limit`,
+    ).all({ pattern, limit }) as Row[];
+    return rows.map((r) => this.rowToItem(r));
+  }
+
   listLibraryItems(query: LibraryQuery = {}): LibraryItem[] {
     const where: string[] = [];
     const params: Record<string, unknown> = {};
