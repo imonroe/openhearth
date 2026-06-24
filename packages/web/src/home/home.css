@@ -1,0 +1,173 @@
+/*
+ * Home-screen layout & tile components (design-system §11, §12.02).
+ * Sizes in rem (scale with viewport); borders/radii/shadow blur in px.
+ */
+
+.app-shell {
+  height: 100vh;
+  width: 100vw;
+  background: var(--color-bg-primary);
+  /* Warm ambient glow, top-right, very subtle (screen spec 02). */
+  background-image: radial-gradient(
+    60% 50% at 85% 0%,
+    var(--color-ambient-glow) 0%,
+    transparent 70%
+  );
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- Header (§12.02) --- */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--safe-v) var(--safe-h) 1.25rem var(--safe-h);
+}
+.header__logo {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.header__logo-mark {
+  width: 1.667rem;
+  height: 1.667rem;
+  border-radius: 8px;
+  background: var(--brand-gradient);
+}
+.header__wordmark {
+  font-size: 1.146rem; /* 22px */
+  font-weight: 300;
+  letter-spacing: 0.313rem; /* 6px */
+  color: var(--color-text-primary);
+}
+.header__actions {
+  display: flex;
+  align-items: center;
+  gap: 1.667rem;
+}
+.header__clock {
+  font-size: 0.938rem;
+  color: var(--color-text-secondary);
+}
+.header__action {
+  display: flex;
+  align-items: center;
+  gap: 0.521rem;
+  padding: 0.521rem 1.042rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-separator);
+  color: var(--color-text-secondary);
+  font-size: 0.781rem;
+}
+.header__action--icon {
+  padding: 0.521rem;
+}
+
+/* --- Content area --- */
+.home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2.083rem; /* 40px between rows */
+  padding: 0.625rem var(--safe-h) var(--safe-v) var(--safe-h);
+  overflow: hidden;
+}
+.home__empty {
+  margin: auto;
+  color: var(--color-text-muted);
+  font-size: 1.25rem;
+  letter-spacing: 0.104rem;
+}
+
+/* --- Content row (§11 Content Row) --- */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.833rem; /* 16px */
+}
+.row__header {
+  font-size: 0.729rem; /* 14px */
+  font-weight: 600;
+  letter-spacing: 0.156rem; /* 3px */
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.row__strip {
+  display: flex;
+  gap: 0.833rem; /* 16px */
+  /* Fade-hint that the strip continues off the right edge (it doesn't scroll
+     the DOM; focus moves the logical position). */
+  -webkit-mask: linear-gradient(to right, black 88%, transparent 100%);
+  mask: linear-gradient(to right, black 88%, transparent 100%);
+}
+
+/* --- Tiles --- */
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.tile__frame {
+  background: var(--color-tile-bg);
+  border: var(--focus-ring-width) solid transparent; /* reserve space so focus doesn't shift layout */
+  overflow: hidden;
+  transition:
+    width 150ms ease,
+    box-shadow 150ms ease;
+}
+.tile--service {
+  width: 8.854rem; /* 170px */
+  gap: 0.521rem;
+}
+.tile--service .tile__frame {
+  width: 8.854rem;
+  height: 5rem; /* 96px */
+  border-radius: 10px;
+}
+/* Service tiles do not scale on focus (per §11) — only the ring changes. */
+.tile--library {
+  /* Reserve the focused (148px) footprint so neighbours don't reflow when the
+     poster scales up (§9.4). */
+  width: 7.708rem; /* 148px */
+  gap: 0.417rem;
+  align-items: center;
+}
+.tile--library .tile__frame {
+  width: 7.292rem; /* 140px default */
+  aspect-ratio: 140 / 210; /* height derives, per §2 poster guidance */
+  border-radius: 8px;
+}
+/* §9 rule 4: focused library poster scales up 140 -> 148px. */
+.tile--library.is-focused .tile__frame {
+  width: 7.708rem; /* 148px */
+}
+.tile__label {
+  font-size: 0.677rem; /* 13px */
+  color: var(--color-text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile--library .tile__label {
+  font-size: 0.625rem; /* 12px */
+  color: var(--color-text-primary);
+}
+
+/* --- Focus state (§9) --- */
+.is-focused .tile__frame,
+.header__action.is-focused {
+  border: var(--focus-ring-width) solid var(--color-focus-ring);
+  box-shadow: var(--focus-ring-glow);
+}
+.is-focused .tile__label {
+  color: var(--color-text-accent);
+  font-weight: 700;
+}
+.header__action.is-focused {
+  color: var(--color-text-accent);
+}

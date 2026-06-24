@@ -5,8 +5,15 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
+    "jsx": "react-jsx",
     "types": ["vitest/globals"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["packages/web/src/**/*.test.ts", "packages/web/src/**/*.spec.ts"]
+  "include": [
+    "packages/web/src/**/*.test.ts",
+    "packages/web/src/**/*.test.tsx",
+    "packages/web/src/**/*.spec.ts",
+    "packages/web/src/**/*.spec.tsx",
+    "packages/web/src/test-setup.ts"
+  ]
 }
