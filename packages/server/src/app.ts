@@ -8,11 +8,11 @@
  * Logging is structured JSON to stdout via Fastify's built-in pino, at a
  * configurable level. There is no telemetry and no outbound calls (NFR-9).
  */
-import { existsSync, createReadStream, realpathSync } from 'node:fs';
+import { existsSync, createReadStream, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep, extname } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import {
   PROTOCOL_VERSION,
   redactConfig,
@@ -28,6 +28,8 @@ import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
 import { ControlService } from './core/ControlService.js';
 import type { LibraryService } from './core/LibraryService.js';
+import type { MediaStreamer } from './core/TranscodeService.js';
+import { decidePlayback, parseRange, containerMime } from './core/transcodeDecision.js';
 
 // Raster image types only. SVG is deliberately excluded: it can carry inline
 // <script>, and a malicious community services.d/* icon served from this origin
@@ -42,6 +44,31 @@ const ICON_TYPES: Record<string, string> = {
 
 function isLibraryKind(value: string): value is LibraryItemKind {
   return (LIBRARY_ITEM_KINDS as readonly string[]).includes(value);
+}
+
+/** Serve a file directly with HTTP range support (206/200/416) for direct-play. */
+function sendDirectPlay(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  path: string,
+  mime: string,
+): FastifyReply {
+  const size = statSync(path).size;
+  const range = parseRange(request.headers.range, size);
+  reply.header('Accept-Ranges', 'bytes').header('Content-Type', mime);
+
+  if (range === 'unsatisfiable') {
+    return reply.code(416).header('Content-Range', `bytes */${size}`).send();
+  }
+  if (range) {
+    const { start, end } = range;
+    return reply
+      .code(206)
+      .header('Content-Range', `bytes ${start}-${end}/${size}`)
+      .header('Content-Length', end - start + 1)
+      .send(createReadStream(path, { start, end }));
+  }
+  return reply.code(200).header('Content-Length', size).send(createReadStream(path));
 }
 
 /**
@@ -77,10 +104,15 @@ export interface BuildAppOptions {
    * (empty listing, 404 detail) rather than erroring.
    */
   libraryService?: LibraryService;
+  /**
+   * Probes + transcodes local media for the stream endpoint (#34). Optional: a
+   * stream request without it (no ffmpeg) is a 503, never a crash.
+   */
+  streamer?: MediaStreamer;
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
-  const { configService, libraryService } = options;
+  const { configService, libraryService, streamer } = options;
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
   const control = options.controlService ?? new ControlService();
@@ -207,6 +239,50 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     if (!item) return reply.code(404).send({ status: 'not_found' });
     return item;
   });
+
+  // Stream an item: direct-play with HTTP range when the browser can play it,
+  // else transcode via ffmpeg to fragmented MP4 (FR-C3/FR-C4; PRD §12.1).
+  app.get<{ Params: { id: string }; Querystring: { t?: string | string[] } }>(
+    '/api/v1/library/:id/stream',
+    async (request, reply) => {
+      const item = libraryService?.get(request.params.id);
+      if (!item) return reply.code(404).send({ status: 'not_found' });
+      if (!streamer) {
+        // No ffmpeg/transcoder wired (e.g. cache disabled) — usable app, no media.
+        return reply.code(503).send({ status: 'unavailable' });
+      }
+      if (!existsSync(item.path)) {
+        return reply.code(404).send({ status: 'not_found' });
+      }
+
+      let probe;
+      try {
+        probe = await streamer.probe(item.path);
+      } catch (err) {
+        request.log.warn({ err, path: item.path }, 'ffprobe failed');
+        return reply.code(502).send({ status: 'probe_failed' });
+      }
+
+      if (decidePlayback(probe) === 'direct') {
+        return sendDirectPlay(request, reply, item.path, containerMime(probe.container));
+      }
+
+      // Transcode: stream fragmented MP4; restart from `t` seconds for seeking.
+      const seekSec = clampInt(oneValue(request.query.t), 0, 0, Number.MAX_SAFE_INTEGER);
+      const { stream, kill } = streamer.openTranscode(item.path, { seekSec });
+      // Kill ffmpeg if the client goes away, so we don't leak processes.
+      request.raw.on('close', kill);
+      stream.on('error', (err: unknown) => {
+        request.log.warn({ err }, 'transcode stream error');
+        kill();
+      });
+      return reply
+        .code(200)
+        .header('Content-Type', 'video/mp4')
+        .header('Cache-Control', 'no-store')
+        .send(stream);
+    },
+  );
 
   // --- Control protocol (PRD §11) ----------------------------------------
   // Shape an envelope validation error into a uniform 400/event payload.

@@ -12,6 +12,7 @@ import { ConfigService } from './core/ConfigService.js';
 import { seedConfigDir } from './core/seedConfig.js';
 import { CacheStore } from './core/CacheStore.js';
 import { LibraryService } from './core/LibraryService.js';
+import { TranscodeService } from './core/TranscodeService.js';
 
 const CONFIG_DIR = process.env.OPENHEARTH_CONFIG_DIR ?? '/config';
 const SEED_DIR = process.env.OPENHEARTH_SEED_DIR ?? '/app/config.example';
@@ -45,9 +46,15 @@ async function main(): Promise<void> {
     console.error('OpenHearth: could not open the cache DB; local library disabled', err);
   }
 
+  // Transcoder for the stream endpoint (uses the runtime image's ffmpeg/ffprobe).
+  const streamer = new TranscodeService({
+    ...(configService.config.transcode ? { transcode: configService.config.transcode } : {}),
+  });
+
   const app = buildApp({
     configService,
     webRoot: WEB_ROOT,
+    streamer,
     ...(libraryService ? { libraryService } : {}),
   });
 
