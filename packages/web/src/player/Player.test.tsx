@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { LibraryItem } from '@openhearth/shared';
-import { Player } from './Player';
+import { Player, CHROME_IDLE_MS } from './Player';
 import { buildKeyMap } from '../keybindings';
 
 const keyMap = buildKeyMap();
@@ -172,6 +172,54 @@ describe('Player', () => {
       expect(videoEl(container)!.getAttribute('src')).toBe('/api/v1/library/m1/stream'),
     );
     expect(deleteCount).toBe(1);
+  });
+
+  it('fades the chrome out after inactivity while playing and reveals it on input', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(
+        <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
+      );
+      // Flush the resume fetch so the player reaches the playing phase.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const osd = container.querySelector('.player__osd')!;
+      expect(osd.classList.contains('player__osd--hidden')).toBe(false);
+
+      // Idle long enough → chrome fades out.
+      act(() => void vi.advanceTimersByTime(CHROME_IDLE_MS));
+      expect(osd.classList.contains('player__osd--hidden')).toBe(true);
+
+      // A key press reveals it again, then it fades after the next idle period.
+      act(() => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+      expect(osd.classList.contains('player__osd--hidden')).toBe(false);
+      act(() => void vi.advanceTimersByTime(CHROME_IDLE_MS));
+      expect(osd.classList.contains('player__osd--hidden')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the chrome on screen while paused', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(
+        <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const osd = container.querySelector('.player__osd')!;
+      // Pausing keeps the chrome up no matter how long the user waits.
+      act(() => fireEvent.pause(container.querySelector('video')!));
+      act(() => void vi.advanceTimersByTime(CHROME_IDLE_MS * 3));
+      expect(osd.classList.contains('player__osd--hidden')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('Back exits and Home returns home', async () => {

@@ -28,6 +28,8 @@ type Phase = 'loading' | 'prompt' | 'playing';
 
 const SEEK_STEP_SEC = 10;
 const SAVE_INTERVAL_MS = 5000;
+/** Hide the player chrome after this long with no input while playing. */
+export const CHROME_IDLE_MS = 3000;
 
 function fmt(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -61,6 +63,7 @@ export function Player({
   const [duration, setDuration] = useState(0);
   const [subs, setSubs] = useState<SubtitleTrack[]>([]);
   const [activeSub, setActiveSub] = useState(-1); // -1 = off
+  const [chromeVisible, setChromeVisible] = useState(true);
   const startSecRef = useRef(0);
 
   // Load the item's subtitle tracks (sidecar + embedded).
@@ -117,6 +120,38 @@ export function Player({
     }, SAVE_INTERVAL_MS);
     return () => clearInterval(iv);
   }, [phase, item.id]);
+
+  // Auto-hide the chrome (OSD) during playback so it doesn't sit over the film.
+  // Any mouse movement or key press reveals it and restarts the idle timer; while
+  // paused the chrome stays up so the user can always see where they stopped.
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    const clear = (): void => {
+      if (hideTimer !== undefined) {
+        clearTimeout(hideTimer);
+        hideTimer = undefined;
+      }
+    };
+    const reveal = (): void => {
+      setChromeVisible(true);
+      clear();
+      if (!paused) hideTimer = setTimeout(() => setChromeVisible(false), CHROME_IDLE_MS);
+    };
+    // Establish the right state for the current pause status, then listen for input.
+    reveal();
+    const onMouseMove = (event: MouseEvent): void => {
+      if (event.movementX === 0 && event.movementY === 0) return;
+      reveal();
+    };
+    window.addEventListener('mousemove', onMouseMove, { passive: true });
+    window.addEventListener('keydown', reveal, true);
+    return () => {
+      clear();
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('keydown', reveal, true);
+    };
+  }, [phase, paused]);
 
   const saveNow = useCallback(() => {
     const v = videoRef.current;
@@ -313,7 +348,10 @@ export function Player({
           />
         ))}
       </video>
-      <div className="player__osd" aria-hidden="true">
+      <div
+        className={`player__osd ${chromeVisible ? '' : 'player__osd--hidden'}`}
+        aria-hidden="true"
+      >
         <div className="player__osd-title">{item.title}</div>
         <div
           className="player__progress"
