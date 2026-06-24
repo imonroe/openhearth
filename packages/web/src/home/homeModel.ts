@@ -3,19 +3,24 @@
  * catalog.
  *
  * Services rows are filled with real tiles from the catalog (grouped by
- * `ui.rows[].group`); library rows remain placeholders until LibraryService
- * lands (#31). Row 0 is always the header (Search + Settings) so Up from the top
- * content row reaches it (design-system §9).
+ * `ui.rows[].group`); library rows are filled with browse entries (movies +
+ * aggregated shows) from the LibraryService index (#31/#32). Row 0 is always the
+ * header (Search + Settings) so Up from the top content row reaches it
+ * (design-system §9).
  */
-import type { Config, ServiceCatalog, ServiceTile } from '@openhearth/shared';
-
-/** Placeholder tiles per library row until real content lands. */
-export const PLACEHOLDER_TILE_COUNT = 6;
+import type { Config, LibraryItem, ServiceCatalog, ServiceTile } from '@openhearth/shared';
+import { buildLibraryEntries, type LibraryEntry } from '../library/libraryModel';
 
 export type HomeRow =
   | { kind: 'header'; itemCount: number }
   | { kind: 'services'; label: string; tiles: ServiceTile[]; itemCount: number }
-  | { kind: 'library'; label: string; itemCount: number };
+  | {
+      kind: 'library';
+      label: string;
+      source?: string;
+      entries: LibraryEntry[];
+      itemCount: number;
+    };
 
 export interface HomeModel {
   rows: HomeRow[];
@@ -23,7 +28,11 @@ export interface HomeModel {
 
 const HEADER_ROW: HomeRow = { kind: 'header', itemCount: 2 }; // Search, Settings
 
-export function buildHomeModel(config: Config, catalog?: ServiceCatalog): HomeModel {
+export function buildHomeModel(
+  config: Config,
+  catalog?: ServiceCatalog,
+  libraryBySource?: Map<string, LibraryItem[]>,
+): HomeModel {
   const sourceLabels = new Map((config.library?.sources ?? []).map((s) => [s.id, s.label ?? s.id]));
   const tilesByGroup = new Map((catalog?.groups ?? []).map((g) => [g.group, g.services]));
 
@@ -34,7 +43,15 @@ export function buildHomeModel(config: Config, catalog?: ServiceCatalog): HomeMo
       return { kind: 'services', label, tiles, itemCount: tiles.length };
     }
     const label = row.source ? (sourceLabels.get(row.source) ?? row.source) : 'Library';
-    return { kind: 'library', label, itemCount: PLACEHOLDER_TILE_COUNT };
+    const items = row.source ? (libraryBySource?.get(row.source) ?? []) : [];
+    const entries = buildLibraryEntries(items);
+    return {
+      kind: 'library',
+      label,
+      ...(row.source ? { source: row.source } : {}),
+      entries,
+      itemCount: entries.length,
+    };
   });
 
   return { rows: [HEADER_ROW, ...contentRows] };

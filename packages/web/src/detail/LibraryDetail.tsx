@@ -1,0 +1,229 @@
+/**
+ * Library detail screen (design-system §13 "Movie Detail" / "TV Show Detail").
+ *
+ * A movie/other entry shows a poster + title + meta + a Play CTA. A show entry
+ * shows season tabs and an episode list. Selecting Play (movie) or an episode
+ * (show) dispatches the client-agnostic `play_item` action through the control
+ * path — the same vocabulary a phone remote uses; the native player itself
+ * lands in #35. Each detail screen runs under its own FocusProvider; Back
+ * returns to the home screen.
+ *
+ * Artwork is a placeholder until metadata (Phase 4); the structure matches the
+ * spec so posters can drop in without layout change.
+ */
+import { useCallback, useState, type ReactNode } from 'react';
+import type { ActionName } from '@openhearth/shared';
+import { FocusProvider, useFocus } from '../focus/FocusProvider';
+import type { FocusPosition } from '../focus/focusEngine';
+import type { KeyMap } from '../keybindings';
+import {
+  episodesInSeason,
+  isShow,
+  type LibraryEntry,
+  type ShowGroup,
+} from '../library/libraryModel';
+
+type Dispatch = (action: ActionName, params?: Record<string, unknown>) => void;
+
+interface DetailProps {
+  entry: LibraryEntry;
+  keyMap: KeyMap;
+  dispatch: Dispatch;
+  onBack: () => void;
+}
+
+export function LibraryDetail({ entry, keyMap, dispatch, onBack }: DetailProps): ReactNode {
+  return isShow(entry) ? (
+    <ShowDetail show={entry} keyMap={keyMap} dispatch={dispatch} onBack={onBack} />
+  ) : (
+    <MovieDetail entry={entry} keyMap={keyMap} dispatch={dispatch} onBack={onBack} />
+  );
+}
+
+/** A poster placeholder showing the title's initial (no artwork yet). */
+function PosterPlaceholder({ title, className }: { title: string; className: string }): ReactNode {
+  return (
+    <div className={className}>
+      <span className="detail__poster-initial" aria-hidden="true">
+        {title.charAt(0).toUpperCase()}
+      </span>
+    </div>
+  );
+}
+
+function MovieDetail({
+  entry,
+  keyMap,
+  dispatch,
+  onBack,
+}: {
+  entry: Exclude<LibraryEntry, ShowGroup>;
+  keyMap: KeyMap;
+  dispatch: Dispatch;
+  onBack: () => void;
+}): ReactNode {
+  const onSelect = useCallback(() => {
+    dispatch('play_item', { id: entry.id });
+  }, [dispatch, entry.id]);
+
+  return (
+    <FocusProvider
+      rowLengths={[1]}
+      initialPosition={{ row: 0, col: 0 }}
+      keyMap={keyMap}
+      onSelect={onSelect}
+      onBack={onBack}
+      onAction={dispatch}
+    >
+      <div className="detail" role="region" aria-label={`${entry.title} detail`}>
+        <button type="button" className="detail__back" onClick={onBack}>
+          ← Back
+        </button>
+        <div className="detail__body">
+          <PosterPlaceholder title={entry.title} className="detail__poster" />
+          <div className="detail__meta">
+            <h1 className="detail__title">{entry.title}</h1>
+            {entry.year != null ? <div className="detail__submeta">{entry.year}</div> : null}
+            <div className="detail__cta-row">
+              <PlayButton row={0} col={0} label="Play" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </FocusProvider>
+  );
+}
+
+function ShowDetail({
+  show,
+  keyMap,
+  dispatch,
+  onBack,
+}: {
+  show: ShowGroup;
+  keyMap: KeyMap;
+  dispatch: Dispatch;
+  onBack: () => void;
+}): ReactNode {
+  // The focused season tab drives which season's episodes are shown. Holding the
+  // index above the FocusProvider lets us recompute the grid's row lengths; the
+  // provider preserves focus when only the (unfocused) episode row changes.
+  // Known minor wart: moving Up from an episode lands on the season tab at the
+  // episode's column (the engine preserves column), which may differ from the
+  // season being browsed; behaviour stays self-consistent (the list follows the
+  // focused tab). A column-memory refinement is a follow-up.
+  const [seasonIdx, setSeasonIdx] = useState(0);
+  const season = show.seasons[seasonIdx] ?? show.seasons[0] ?? 1;
+  const episodes = episodesInSeason(show, season);
+  const rowLengths = [show.seasons.length, episodes.length];
+
+  const onFocusChange = useCallback((pos: FocusPosition) => {
+    if (pos.row === 0) setSeasonIdx(pos.col);
+  }, []);
+
+  const onSelect = useCallback(
+    (pos: FocusPosition) => {
+      if (pos.row === 1) {
+        const ep = episodes[pos.col];
+        if (ep) dispatch('play_item', { id: ep.id });
+      }
+    },
+    [episodes, dispatch],
+  );
+
+  return (
+    <FocusProvider
+      rowLengths={rowLengths}
+      initialPosition={{ row: 0, col: 0 }}
+      keyMap={keyMap}
+      onSelect={onSelect}
+      onBack={onBack}
+      onAction={dispatch}
+      onFocusChange={onFocusChange}
+    >
+      <div className="detail" role="region" aria-label={`${show.title} detail`}>
+        <button type="button" className="detail__back" onClick={onBack}>
+          ← Back
+        </button>
+        <div className="detail__show-head">
+          <PosterPlaceholder title={show.title} className="detail__poster detail__poster--show" />
+          <div className="detail__meta">
+            <h1 className="detail__title">{show.title}</h1>
+            <div className="detail__submeta">
+              {show.seasons.length} season{show.seasons.length === 1 ? '' : 's'}
+              {show.year != null ? ` · ${show.year}` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div className="detail__seasons" role="tablist" aria-label="Seasons">
+          {show.seasons.map((s, col) => (
+            <SeasonTab key={s} season={s} col={col} />
+          ))}
+        </div>
+
+        <div className="detail__episodes" role="list" aria-label={`Season ${season} episodes`}>
+          {episodes.length === 0 ? (
+            <span className="row__empty">No episodes</span>
+          ) : (
+            episodes.map((ep, col) => (
+              <EpisodeCard
+                key={ep.id}
+                col={col}
+                number={ep.episode ?? col + 1}
+                title={ep.episode_title ?? `Episode ${ep.episode ?? col + 1}`}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    </FocusProvider>
+  );
+}
+
+function PlayButton({ row, col, label }: { row: number; col: number; label: string }): ReactNode {
+  const { isFocused } = useFocus();
+  const className = ['detail__play', isFocused(row, col) ? 'is-focused' : '']
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <div className={className} role="button" aria-label={label}>
+      <span aria-hidden="true">▶</span> {label}
+    </div>
+  );
+}
+
+function SeasonTab({ season, col }: { season: number; col: number }): ReactNode {
+  const { isFocused } = useFocus();
+  const focused = isFocused(0, col);
+  const className = ['detail__season-tab', focused ? 'is-focused' : ''].filter(Boolean).join(' ');
+  return (
+    <div className={className} role="tab" aria-selected={focused}>
+      Season {season}
+    </div>
+  );
+}
+
+function EpisodeCard({
+  col,
+  number,
+  title,
+}: {
+  col: number;
+  number: number;
+  title: string;
+}): ReactNode {
+  const { isFocused } = useFocus();
+  const focused = isFocused(1, col);
+  const className = ['detail__episode', focused ? 'is-focused' : ''].filter(Boolean).join(' ');
+  return (
+    <div className={className} role="listitem">
+      <div className="detail__episode-thumb">
+        <span className="detail__episode-num" aria-hidden="true">
+          {number}
+        </span>
+      </div>
+      <div className="detail__episode-title">{title}</div>
+    </div>
+  );
+}

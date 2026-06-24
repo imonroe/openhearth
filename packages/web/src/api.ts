@@ -6,6 +6,7 @@ import {
   PROTOCOL_VERSION,
   type ActionName,
   type Config,
+  type LibraryListResponse,
   type ServiceCatalog,
 } from '@openhearth/shared';
 
@@ -29,6 +30,21 @@ export async function fetchServices(signal?: AbortSignal): Promise<ServiceCatalo
     throw new Error(`GET /api/v1/services failed: ${res.status}`);
   }
   return (await res.json()) as ServiceCatalog;
+}
+
+/** Fetch a library source's items (paginated; we request a generous page). */
+export async function fetchLibrary(
+  source: string,
+  signal?: AbortSignal,
+  limit = 500,
+): Promise<LibraryListResponse> {
+  const res = await fetch(`/api/v1/library?source=${encodeURIComponent(source)}&limit=${limit}`, {
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`GET /api/v1/library failed: ${res.status}`);
+  }
+  return (await res.json()) as LibraryListResponse;
 }
 
 /** Resolve the artwork URL for a tile: remote URL as-is, bare filename via the

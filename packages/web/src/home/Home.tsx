@@ -1,12 +1,13 @@
 /**
- * Home screen — renders the configured rows (real service tiles, placeholder
- * library tiles) driven by directional focus.
+ * Home screen — renders the configured rows (real service tiles + library
+ * browse tiles) driven by directional focus.
  */
 import type { ReactNode } from 'react';
 import type { HomeModel } from './homeModel';
 import { Header } from './Header';
-import { Tile } from './Tile';
 import { ServiceTileView } from './ServiceTileView';
+import { LibraryTileView } from './LibraryTileView';
+import { entryId } from '../library/libraryModel';
 
 export function Home({ title, model }: { title: string; model: HomeModel }): ReactNode {
   // Row 0 is the header; content rows follow.
@@ -34,11 +35,20 @@ export function Home({ title, model }: { title: string; model: HomeModel }): Rea
                         <ServiceTileView key={tile.id} tile={tile} row={rowIndex} col={col} />
                       ))
                     )
-                  ) : (
-                    Array.from({ length: row.itemCount }, (_, col) => (
-                      <Tile key={col} kind="library" row={rowIndex} col={col} />
-                    ))
-                  )}
+                  ) : row.kind === 'library' ? (
+                    row.entries.length === 0 ? (
+                      <span className="row__empty">No media indexed yet</span>
+                    ) : (
+                      row.entries.map((entry, col) => (
+                        <LibraryTileView
+                          key={entryId(entry)}
+                          entry={entry}
+                          row={rowIndex}
+                          col={col}
+                        />
+                      ))
+                    )
+                  ) : null}
                 </div>
               </section>
             );

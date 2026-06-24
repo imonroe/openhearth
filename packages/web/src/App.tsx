@@ -3,21 +3,33 @@
  * shell under the focus engine.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ActionName, Config, ServiceCatalog } from '@openhearth/shared';
-import { fetchConfig, fetchServices, sendCommand } from './api';
+import type { ActionName, Config, LibraryItem, ServiceCatalog } from '@openhearth/shared';
+import { fetchConfig, fetchServices, fetchLibrary, sendCommand } from './api';
 import { FocusProvider } from './focus/FocusProvider';
 import type { FocusPosition } from './focus/focusEngine';
 import { buildKeyMap } from './keybindings';
 import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
 import { Home } from './home/Home';
+import { LibraryDetail } from './detail/LibraryDetail';
+import type { LibraryEntry } from './library/libraryModel';
 import { launchService, defaultNavigate, type Navigate } from './launch';
+
+type LibraryBySource = Map<string, LibraryItem[]>;
 
 type State =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; config: Config; catalog: ServiceCatalog };
+  | { status: 'ready'; config: Config; catalog: ServiceCatalog; library: LibraryBySource };
 
 const EMPTY_CATALOG: ServiceCatalog = { groups: [], errors: [] };
+
+/** Library source ids referenced by the configured library rows (deduped). */
+function librarySources(config: Config): string[] {
+  const ids = (config.ui?.rows ?? [])
+    .filter((r) => r.type === 'library' && typeof r.source === 'string')
+    .map((r) => r.source as string);
+  return [...new Set(ids)];
+}
 
 /** How often the kiosk re-fetches config to pick up a server hot-reload (FR-R4). */
 const CONFIG_POLL_MS = 30_000;
@@ -43,7 +55,26 @@ export function App({
           console.error('OpenHearth: failed to load services', err);
           return EMPTY_CATALOG;
         });
-        setState({ status: 'ready', config: config.config, catalog });
+        // Library is non-essential to boot and per-source independent — a failed
+        // source degrades to empty rather than failing the load.
+        const library: LibraryBySource = new Map();
+        await Promise.all(
+          librarySources(config.config).map(async (source) => {
+            try {
+              const page = await fetchLibrary(source, controller.signal);
+              library.set(source, page.items);
+              if (page.total > page.items.length) {
+                console.warn(
+                  `OpenHearth: library "${source}" has ${page.total} items; showing the first ${page.items.length}`,
+                );
+              }
+            } catch (err) {
+              if (err instanceof DOMException && err.name === 'AbortError') return;
+              console.error(`OpenHearth: failed to load library "${source}"`, err);
+            }
+          }),
+        );
+        setState({ status: 'ready', config: config.config, catalog, library });
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         console.error('OpenHearth: failed to load config', err);
@@ -82,9 +113,10 @@ export function App({
   // the rowLengths array) would re-fire on every render.
   const config = state.status === 'ready' ? state.config : null;
   const catalog = state.status === 'ready' ? state.catalog : null;
+  const library = state.status === 'ready' ? state.library : null;
   const model = useMemo(
-    () => (config ? buildHomeModel(config, catalog ?? undefined) : null),
-    [config, catalog],
+    () => (config ? buildHomeModel(config, catalog ?? undefined, library ?? undefined) : null),
+    [config, catalog, library],
   );
   // Focus enters on the first tile of the first non-empty content row (the
   // header is row 0), matching the Home screen focus-entry spec.
@@ -144,18 +176,36 @@ function ReadyApp({
   // Rebuild the key→action map whenever the configured bindings change (FR-R4).
   const keyMap = useMemo(() => buildKeyMap(keybindings), [keybindings]);
 
-  // select on a focused service tile launches that service (FR-A2).
+  // Which screen is showing: the home grid, or a library item's detail.
+  const [detail, setDetail] = useState<LibraryEntry | null>(null);
+
+  // select on home: launch a service tile (FR-A2) or open a library item's
+  // detail screen.
   const onSelect = useCallback(
     (pos: FocusPosition) => {
       const row = model.rows[pos.row];
       if (row?.kind === 'services') {
         const tile = row.tiles[pos.col];
         if (tile) launchService(tile, navigate);
+      } else if (row?.kind === 'library') {
+        const entry = row.entries[pos.col];
+        if (entry) setDetail(entry);
       }
-      // Header / library selections are wired in later phases.
     },
     [model, navigate],
   );
+
+  // A library detail screen owns its own focus grid; Back returns to home.
+  if (detail) {
+    return (
+      <LibraryDetail
+        entry={detail}
+        keyMap={keyMap}
+        dispatch={dispatch}
+        onBack={() => setDetail(null)}
+      />
+    );
+  }
 
   return (
     <FocusProvider

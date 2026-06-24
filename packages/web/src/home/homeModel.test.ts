@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { Config, ServiceCatalog } from '@openhearth/shared';
-import { buildHomeModel, rowLengths, firstContentRow, PLACEHOLDER_TILE_COUNT } from './homeModel';
+import type { Config, LibraryItem, ServiceCatalog } from '@openhearth/shared';
+import { buildHomeModel, rowLengths, firstContentRow } from './homeModel';
 
 const config: Config = {
   ui: {
@@ -25,9 +25,33 @@ const catalog: ServiceCatalog = {
   ],
 };
 
+function libItem(over: Partial<LibraryItem>): LibraryItem {
+  return {
+    id: over.id ?? 'i',
+    source_id: 'movies',
+    kind: 'movie',
+    path: '/m/x.mkv',
+    title: 'X',
+    mtime: 1,
+    indexed_at: 1,
+    ...over,
+  };
+}
+
+const library = new Map<string, LibraryItem[]>([
+  [
+    'movies',
+    [
+      libItem({ id: 'm1', title: 'Alpha', year: 2001 }),
+      libItem({ id: 'm2', title: 'Bravo', year: 2002 }),
+      libItem({ id: 'm3', title: 'Charlie', year: 2003 }),
+    ],
+  ],
+]);
+
 describe('buildHomeModel', () => {
   it('places the header at row 0 and fills services rows from the catalog', () => {
-    const model = buildHomeModel(config, catalog);
+    const model = buildHomeModel(config, catalog, library);
     expect(model.rows[0]!.kind).toBe('header');
     const services = model.rows[1]!;
     expect(services.kind).toBe('services');
@@ -38,27 +62,34 @@ describe('buildHomeModel', () => {
     }
   });
 
-  it('uses the library source label and placeholder count for library rows', () => {
-    const library = buildHomeModel(config, catalog).rows[2]!;
-    expect(library.kind).toBe('library');
-    if (library.kind === 'library') {
-      expect(library.label).toBe('Movies');
-      expect(library.itemCount).toBe(PLACEHOLDER_TILE_COUNT);
+  it('fills library rows with entries from the indexed source', () => {
+    const lib = buildHomeModel(config, catalog, library).rows[2]!;
+    expect(lib.kind).toBe('library');
+    if (lib.kind === 'library') {
+      expect(lib.label).toBe('Movies');
+      expect(lib.source).toBe('movies');
+      expect(lib.entries.map((e) => e.title)).toEqual(['Alpha', 'Bravo', 'Charlie']);
+      expect(lib.itemCount).toBe(3);
     }
   });
 
+  it('library row is empty (itemCount 0) when the source has no indexed items', () => {
+    const lib = buildHomeModel(config, catalog).rows[2]!;
+    expect(lib.itemCount).toBe(0);
+  });
+
   it('renders an empty services row when the group has no catalog tiles', () => {
-    const model = buildHomeModel(config, { groups: [], errors: [] });
+    const model = buildHomeModel(config, { groups: [], errors: [] }, library);
     expect(model.rows[1]!.itemCount).toBe(0);
   });
 
   it('rowLengths includes the header count', () => {
-    expect(rowLengths(buildHomeModel(config, catalog))).toEqual([2, 2, PLACEHOLDER_TILE_COUNT]);
+    expect(rowLengths(buildHomeModel(config, catalog, library))).toEqual([2, 2, 3]);
   });
 
   it('firstContentRow skips the header and empty rows', () => {
-    expect(firstContentRow(buildHomeModel(config, catalog))).toBe(1);
+    expect(firstContentRow(buildHomeModel(config, catalog, library))).toBe(1);
     // When the services row is empty, focus enters on the library row (index 2).
-    expect(firstContentRow(buildHomeModel(config, { groups: [], errors: [] }))).toBe(2);
+    expect(firstContentRow(buildHomeModel(config, { groups: [], errors: [] }, library))).toBe(2);
   });
 });
