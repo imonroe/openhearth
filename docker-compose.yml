@@ -1,0 +1,27 @@
+# Reference docker-compose for OpenHearth. See PRD §15.1.
+#
+# Quick start:
+#   docker compose up --build
+# then open http://localhost:8080.
+#
+# `image:` points at the published container; uncomment `build:` instead to
+# build locally from this checkout.
+services:
+  openhearth:
+    image: ghcr.io/imonroe/openhearth:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: openhearth
+    ports:
+      - '8080:8080' # web UI + API + WS
+    volumes:
+      - ./config:/config # host-mapped YAML (read/write, source of truth)
+      - /path/to/media:/media:ro # library source(s), read-only
+      - ./cache:/cache # derived index/artwork/transcode cache (disposable)
+    environment:
+      - TMDB_API_KEY=${TMDB_API_KEY:-} # optional; app is fully usable without it
+    # GPU transcoding is opt-in and host-specific; documented separately.
+    # devices:
+    #   - /dev/dri:/dev/dri        # Linux VAAPI example
+    restart: unless-stopped
