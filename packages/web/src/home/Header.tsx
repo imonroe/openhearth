@@ -5,6 +5,7 @@
  */
 import type { ReactNode } from 'react';
 import { useFocus } from '../focus/FocusProvider';
+import { Clock } from './Clock';
 
 const HEADER_ROW = 0;
 
@@ -17,7 +18,7 @@ export function Header({ title }: { title: string }): ReactNode {
         <span className="header__wordmark">{title.toUpperCase()}</span>
       </div>
       <div className="header__actions" role="group" aria-label="Header actions">
-        <span className="header__clock">{/* clock wired in a later phase */}—:—</span>
+        <Clock />
         <button
           type="button"
           className={`header__action header__action--icon ${isFocused(HEADER_ROW, 0) ? 'is-focused' : ''}`}
