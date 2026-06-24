@@ -44,6 +44,15 @@ describe('GET /api/v1/health', () => {
     expect(body.config_valid).toBe(true);
     expect(typeof body.uptime_s).toBe('number');
   });
+
+  it('reports readiness + component diagnostics (#48)', async () => {
+    const body = (await app.inject({ url: '/api/v1/health' })).json();
+    expect(body.ready).toBe(true);
+    expect(body.config).toEqual({ valid: true, errors: 0 });
+    // No library/metadata services wired in this app → sensible defaults.
+    expect(body.library).toEqual({ enabled: false, items: 0 });
+    expect(body.metadata).toEqual({ provider: null });
+  });
 });
 
 describe('GET /api/v1/config', () => {

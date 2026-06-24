@@ -257,11 +257,21 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
 
   // --- API: liveness/readiness -------------------------------------------
   app.get('/api/v1/health', async () => {
+    const valid = configService.errors.length === 0;
     return {
       status: 'ok',
+      // Readiness: the server is up and serving from a loaded config (last-good
+      // on a validation error). Always true when this endpoint is reachable —
+      // OpenHearth degrades rather than refusing to serve (NFR-4).
+      ready: true,
       protocol_version: PROTOCOL_VERSION,
       uptime_s: Math.round(process.uptime()),
-      config_valid: configService.errors.length === 0,
+      // Component summaries for troubleshooting (#48).
+      config: { valid, errors: configService.errors.length },
+      // Retained for backward compatibility with existing clients.
+      config_valid: valid,
+      library: { enabled: Boolean(libraryService), items: libraryService?.count() ?? 0 },
+      metadata: { provider: metadataService?.providerName ?? null },
     };
   });
 
