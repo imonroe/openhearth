@@ -9,10 +9,12 @@ import {
   pickBestMatch,
   createMetadataProvider,
   mediaItemFromMetadata,
+  metadataCacheKey,
   type MetadataProvider,
   type MetadataResult,
 } from './MetadataService.js';
 import { mediaItemSchema } from '@openhearth/shared';
+import { CacheStore } from './CacheStore.js';
 import { TmdbProvider } from './TmdbProvider.js';
 
 function result(over: Partial<MetadataResult>): MetadataResult {
@@ -90,6 +92,80 @@ describe('pickBestMatch', () => {
     expect(pickBestMatch(list, { title: 'the thing' })?.ref).toBe('a'); // exact title, first
     expect(pickBestMatch(list, { title: 'nope' })?.ref).toBe('a'); // fallback: first
     expect(pickBestMatch([], { title: 'x' })).toBeNull();
+  });
+});
+
+describe('MetadataService.resolveMedia — caching (#41)', () => {
+  const matrix = result({ ref: 'tmdb:movie:603', title: 'The Matrix', year: 1999, artwork: {} });
+
+  function setup(search: MetadataProvider['search'] = vi.fn(async () => [matrix])) {
+    const provider = fakeProvider({ search });
+    const store = new CacheStore(':memory:');
+    let clock = 1_000;
+    const svc = new MetadataService(provider, { cache: store, now: () => clock });
+    return { svc, store, search, provider, advance: (ms: number) => (clock += ms) };
+  }
+
+  it('resolves once and serves the second load from cache (no repeat fetch)', async () => {
+    const { svc, search } = setup();
+    const first = await svc.resolveMedia({ title: 'The Matrix', year: 1999, kind: 'movie' });
+    expect(first).toMatchObject({ id: 'tmdb:movie:603', title: 'The Matrix', kind: 'movie' });
+
+    const second = await svc.resolveMedia({ title: 'The Matrix', year: 1999, kind: 'movie' });
+    expect(second).toEqual(first);
+    expect(search).toHaveBeenCalledTimes(1); // served from cache
+  });
+
+  it('caches a miss (negative) so an unmatched title is not refetched', async () => {
+    const { svc, search } = setup(vi.fn(async () => []));
+    expect(await svc.resolveMedia({ title: 'Nope', kind: 'movie' })).toBeNull();
+    expect(await svc.resolveMedia({ title: 'Nope', kind: 'movie' })).toBeNull();
+    expect(search).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches after the entry expires', async () => {
+    const { svc, search, advance } = setup();
+    await svc.resolveMedia({ title: 'The Matrix', year: 1999, kind: 'movie' });
+    advance(8 * 24 * 60 * 60 * 1000); // past the 7-day positive TTL
+    await svc.resolveMedia({ title: 'The Matrix', year: 1999, kind: 'movie' });
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache a transient provider error (retries next time)', async () => {
+    const search = vi
+      .fn<MetadataProvider['search']>()
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce([matrix]);
+    const { svc } = setup(search);
+    expect(await svc.resolveMedia({ title: 'The Matrix', kind: 'movie' })).toBeNull();
+    // Second call retries (error was not cached) and now succeeds.
+    expect(await svc.resolveMedia({ title: 'The Matrix', kind: 'movie' })).toMatchObject({
+      id: 'tmdb:movie:603',
+    });
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('a cold cache (disposable) refetches everything', async () => {
+    const { svc, store, search } = setup();
+    await svc.resolveMedia({ title: 'The Matrix', kind: 'movie' });
+    expect(search).toHaveBeenCalledTimes(1);
+    // Simulate clearing /cache: a brand-new store has no rows.
+    const fresh = new CacheStore(':memory:');
+    const search2 = vi.fn(async () => [matrix]);
+    const svc2 = new MetadataService(fakeProvider({ search: search2 }), { cache: fresh });
+    await svc2.resolveMedia({ title: 'The Matrix', kind: 'movie' });
+    expect(search2).toHaveBeenCalledTimes(1); // cold cache → refetch
+    store.close();
+    fresh.close();
+  });
+
+  it('with no provider returns null and never touches the cache (degradation)', async () => {
+    const store = new CacheStore(':memory:');
+    const svc = new MetadataService(null, { cache: store });
+    const query = { title: 'The Matrix', year: 1999, kind: 'movie' as const };
+    expect(await svc.resolveMedia(query)).toBeNull();
+    expect(store.getMetadata(metadataCacheKey(query))).toBeUndefined();
+    store.close();
   });
 });
 

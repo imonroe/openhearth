@@ -16,6 +16,31 @@
  */
 import type { MetadataConfig, MediaItem, MediaKind } from '@openhearth/shared';
 import { TmdbProvider } from './TmdbProvider.js';
+import type { MetadataCacheEntry } from './CacheStore.js';
+
+/** The cache surface MetadataService needs (CacheStore implements it). */
+export interface MetadataCache {
+  getMetadata(key: string): MetadataCacheEntry | undefined;
+  setMetadata(key: string, entry: MetadataCacheEntry): void;
+}
+
+/** Default TTLs: hits live a week, misses a day (so a new release re-resolves). */
+const DEFAULT_POSITIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_NEGATIVE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Stable cache key for a query — case/space-insensitive on the title. */
+export function metadataCacheKey(query: MetadataQuery): string {
+  return `${query.kind ?? 'any'}|${query.title.trim().toLowerCase()}|${query.year ?? ''}`;
+}
+
+/** Caching + TTL options for {@link MetadataService} (#41). */
+export interface MetadataServiceOptions {
+  cache?: MetadataCache;
+  positiveTtlMs?: number;
+  negativeTtlMs?: number;
+  /** Injectable clock (epoch ms); defaults to Date.now. */
+  now?: () => number;
+}
 
 /** What kind of title a result describes. */
 export type MetadataKind = 'movie' | 'tv';
@@ -111,7 +136,20 @@ export function pickBestMatch(
 }
 
 export class MetadataService {
-  constructor(private readonly provider: MetadataProvider | null) {}
+  private readonly cache?: MetadataCache;
+  private readonly positiveTtlMs: number;
+  private readonly negativeTtlMs: number;
+  private readonly now: () => number;
+
+  constructor(
+    private readonly provider: MetadataProvider | null,
+    opts: MetadataServiceOptions = {},
+  ) {
+    if (opts.cache) this.cache = opts.cache;
+    this.positiveTtlMs = opts.positiveTtlMs ?? DEFAULT_POSITIVE_TTL_MS;
+    this.negativeTtlMs = opts.negativeTtlMs ?? DEFAULT_NEGATIVE_TTL_MS;
+    this.now = opts.now ?? (() => Date.now());
+  }
 
   /** True when a usable provider is configured (a key is present). */
   get enabled(): boolean {
@@ -149,6 +187,44 @@ export class MetadataService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Resolve a library item to a normalized {@link MediaItem}, cached (#41).
+   *
+   * A fresh cache entry (hit or cached miss) is served without touching the
+   * network. On a cold/expired entry the provider is queried, the best match is
+   * normalized, and the outcome — positive or negative — is cached with a TTL.
+   * Transient provider errors return null *without* caching, so a flaky lookup
+   * is retried next time rather than poisoning the cache for a day.
+   *
+   * With no provider configured this returns null and never touches the cache:
+   * the library stays fully browsable on the filename-derived title (§13.2). The
+   * cache is disposable — a cold DB simply means everything refetches.
+   */
+  async resolveMedia(query: MetadataQuery): Promise<MediaItem | null> {
+    const key = metadataCacheKey(query);
+    const now = this.now();
+    const cached = this.cache?.getMetadata(key);
+    if (cached && cached.expires_at > now) return cached.item;
+
+    if (!this.provider) return null;
+
+    let item: MediaItem | null;
+    try {
+      const results = await this.provider.search(query);
+      const best = pickBestMatch(results, query);
+      item = best ? mediaItemFromMetadata(best) : null;
+    } catch {
+      return null; // transient failure: don't cache, retry next time
+    }
+
+    this.cache?.setMetadata(key, {
+      item,
+      fetched_at: now,
+      expires_at: now + (item ? this.positiveTtlMs : this.negativeTtlMs),
+    });
+    return item;
   }
 }
 
