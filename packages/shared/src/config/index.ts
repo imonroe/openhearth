@@ -84,6 +84,21 @@ export const metadataConfigSchema = z
   })
   .strict();
 
+/** Hardware-accelerated transcode backends (opt-in; CPU is the default path). */
+export const HWACCEL_BACKENDS = ['none', 'vaapi', 'nvenc', 'qsv'] as const;
+
+/** Local-media transcode options (Strategy C). GPU is opt-in and per-host (#37). */
+export const transcodeConfigSchema = z
+  .object({
+    /** Hardware encoder to use; `none` (default) is the guaranteed CPU path. */
+    hwaccel: z.enum(HWACCEL_BACKENDS).optional(),
+    /** Render device for VAAPI/QSV (e.g. `/dev/dri/renderD128`). */
+    device: z.string().optional(),
+  })
+  .strict();
+
+export type TranscodeConfig = z.infer<typeof transcodeConfigSchema>;
+
 /**
  * Keybindings: logical binding name → list of physical key names. Permissive for
  * now (a record of string arrays); #46 wires this end-to-end and may tighten the
@@ -101,6 +116,7 @@ export const configSchema = z
     ui: uiConfigSchema.optional(),
     library: libraryConfigSchema.optional(),
     metadata: metadataConfigSchema.optional(),
+    transcode: transcodeConfigSchema.optional(),
     keybindings: keybindingsSchema.optional(),
   })
   .strict();

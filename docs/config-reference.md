@@ -139,6 +139,29 @@ server:
   logLevel: info
 ```
 
+### `transcode`
+
+Local-media transcoding options (Strategy C). When a file's container/codecs are
+browser-playable it streams directly with HTTP range support; otherwise the
+server transcodes it to H.264/AAC fragmented MP4 with ffmpeg. **CPU is the
+default and the guaranteed path** — GPU acceleration is opt-in and per-host
+(full setup in the GPU deployment docs, issue #37).
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `transcode.hwaccel` | `none` \| `vaapi` \| `nvenc` \| `qsv` | `none` | Hardware encoder. `none` uses libx264 (CPU). |
+| `transcode.device` | path | — | Render node for VAAPI/QSV (e.g. `/dev/dri/renderD128`). |
+
+```yaml
+transcode:
+  hwaccel: none
+  # device: /dev/dri/renderD128
+```
+
+> The stream endpoint is `GET /api/v1/library/:id/stream`. It direct-plays with
+> `Range` support (206/416) when possible, and otherwise transcodes; a `?t=<sec>`
+> query starts a transcode at an offset (for resume/seek).
+
 ### `keybindings`
 
 A map of logical binding name → list of physical key names

@@ -44,6 +44,13 @@ server:
   port: 8080
   logLevel: info # silent | error | warn | info | debug | trace
 
+# Local-media transcoding (Strategy C). Browser-playable files stream directly;
+# anything else is transcoded to H.264/AAC by ffmpeg. CPU is the default and
+# guaranteed path. GPU acceleration is opt-in and per-host (see #37 docs).
+transcode:
+  hwaccel: none # none | vaapi | nvenc | qsv
+  # device: /dev/dri/renderD128  # VAAPI/QSV render node (when hwaccel needs it)
+
 keybindings: # logical binding -> physical keys; `home` is reserved
   up: [ArrowUp]
   down: [ArrowDown]
