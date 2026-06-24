@@ -63,6 +63,11 @@ export function App({
             try {
               const page = await fetchLibrary(source, controller.signal);
               library.set(source, page.items);
+              if (page.total > page.items.length) {
+                console.warn(
+                  `OpenHearth: library "${source}" has ${page.total} items; showing the first ${page.items.length}`,
+                );
+              }
             } catch (err) {
               if (err instanceof DOMException && err.name === 'AbortError') return;
               console.error(`OpenHearth: failed to load library "${source}"`, err);

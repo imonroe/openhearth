@@ -108,6 +108,10 @@ function ShowDetail({
   // The focused season tab drives which season's episodes are shown. Holding the
   // index above the FocusProvider lets us recompute the grid's row lengths; the
   // provider preserves focus when only the (unfocused) episode row changes.
+  // Known minor wart: moving Up from an episode lands on the season tab at the
+  // episode's column (the engine preserves column), which may differ from the
+  // season being browsed; behaviour stays self-consistent (the list follows the
+  // focused tab). A column-memory refinement is a follow-up.
   const [seasonIdx, setSeasonIdx] = useState(0);
   const season = show.seasons[seasonIdx] ?? show.seasons[0] ?? 1;
   const episodes = episodesInSeason(show, season);
@@ -152,13 +156,13 @@ function ShowDetail({
           </div>
         </div>
 
-        <div className="detail__seasons" role="row" aria-label="Seasons">
+        <div className="detail__seasons" role="tablist" aria-label="Seasons">
           {show.seasons.map((s, col) => (
             <SeasonTab key={s} season={s} col={col} />
           ))}
         </div>
 
-        <div className="detail__episodes" role="row" aria-label={`Season ${season} episodes`}>
+        <div className="detail__episodes" role="list" aria-label={`Season ${season} episodes`}>
           {episodes.length === 0 ? (
             <span className="row__empty">No episodes</span>
           ) : (
@@ -213,7 +217,7 @@ function EpisodeCard({
   const focused = isFocused(1, col);
   const className = ['detail__episode', focused ? 'is-focused' : ''].filter(Boolean).join(' ');
   return (
-    <div className={className} role="gridcell" aria-selected={focused}>
+    <div className={className} role="listitem">
       <div className="detail__episode-thumb">
         <span className="detail__episode-num" aria-hidden="true">
           {number}
