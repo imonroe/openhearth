@@ -364,7 +364,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       if (!isWithinLibraryRoots(item.path, roots)) {
         return reply.code(403).send({ status: 'forbidden' });
       }
-      const opened = await subtitles.open(item.path, request.params.track);
+      const opened = await subtitles.open(item.path, request.params.track, (sidecarPath) =>
+        isWithinLibraryRoots(sidecarPath, roots),
+      );
       if (!opened) return reply.code(404).send({ status: 'not_found' });
 
       reply.header('Content-Type', 'text/vtt; charset=utf-8').header('Cache-Control', 'no-store');

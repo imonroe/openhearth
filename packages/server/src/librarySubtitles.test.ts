@@ -111,4 +111,23 @@ describe('GET /api/v1/library/:id/subtitles/:track', () => {
   it('404s an unknown track id', async () => {
     expect((await app.inject({ url: '/api/v1/library/m1/subtitles/9' })).statusCode).toBe(404);
   });
+
+  it('refuses a sidecar that symlinks outside the library root (no leak)', async () => {
+    // Plant a secret outside the root and a sidecar symlink to it inside the root.
+    const secret = path.join(os.tmpdir(), `oh-sub-secret-${path.basename(dir)}.txt`);
+    fs.writeFileSync(secret, 'TOP SECRET SUBTITLE');
+    fs.symlinkSync(secret, path.join(dir, 'Heat (1995).hack.srt'));
+    try {
+      // The symlinked sidecar is listed (metadata only)…
+      const tracks = (await app.inject({ url: '/api/v1/library/m1/subtitles' })).json();
+      const hack = tracks.find((t: { lang?: string }) => t.lang === 'hack');
+      expect(hack).toBeTruthy();
+      // …but serving it is refused (containment), and the secret never leaks.
+      const res = await app.inject({ url: `/api/v1/library/m1/subtitles/${hack.id}` });
+      expect(res.statusCode).toBe(404);
+      expect(res.body).not.toContain('TOP SECRET');
+    } finally {
+      fs.rmSync(secret, { force: true });
+    }
+  });
 });

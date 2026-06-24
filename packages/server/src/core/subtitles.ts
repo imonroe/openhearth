@@ -26,16 +26,31 @@ interface FfprobeSubJson {
   streams?: Array<{
     index?: number;
     codec_type?: string;
+    codec_name?: string;
     tags?: { language?: string; title?: string };
   }>;
 }
 
-/** Parse embedded subtitle streams from `ffprobe -print_format json` output. */
+/**
+ * Bitmap subtitle codecs (image-based) can't be remuxed to WebVTT — only
+ * burning them in would work, which we don't do — so they're excluded from the
+ * offered tracks rather than listed as a track that silently fails to extract.
+ */
+const BITMAP_SUB_CODECS = new Set([
+  'hdmv_pgs_subtitle',
+  'dvd_subtitle',
+  'dvb_subtitle',
+  'dvbsub',
+  'xsub',
+]);
+
+/** Parse text-based embedded subtitle streams from `ffprobe ... json` output. */
 export function parseSubtitleStreams(raw: string): EmbeddedSubtitle[] {
   const json = JSON.parse(raw) as FfprobeSubJson;
   const out: EmbeddedSubtitle[] = [];
   for (const s of json.streams ?? []) {
     if (s.codec_type !== 'subtitle' || typeof s.index !== 'number') continue;
+    if (s.codec_name && BITMAP_SUB_CODECS.has(s.codec_name.toLowerCase())) continue;
     out.push({
       index: s.index,
       ...(s.tags?.language ? { lang: s.tags.language } : {}),

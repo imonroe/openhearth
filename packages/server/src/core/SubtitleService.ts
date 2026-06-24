@@ -71,15 +71,27 @@ export class SubtitleService {
     );
   }
 
-  /** Open one track by id as WebVTT, or null if the id is unknown/unavailable. */
-  async open(mediaPath: string, id: string): Promise<OpenedSubtitle | null> {
+  /**
+   * Open one track by id as WebVTT, or null if the id is unknown/unavailable.
+   * `isAllowed` gates sidecar reads on containment (a symlinked sidecar must not
+   * escape the library root) — it receives the sidecar's path and should resolve
+   * symlinks itself before deciding.
+   */
+  async open(
+    mediaPath: string,
+    id: string,
+    isAllowed: (sidecarPath: string) => boolean = () => true,
+  ): Promise<OpenedSubtitle | null> {
     const track = (await this.describe(mediaPath)).find((t) => t.id === id);
     if (!track) return null;
 
     if (track.source === 'sidecar' && track.sidecarFile) {
+      const abs = join(dirname(mediaPath), track.sidecarFile);
+      // Containment: a sidecar that symlinks outside the library root must not be
+      // served (it would exfiltrate an arbitrary server file as text/vtt).
+      if (!isAllowed(abs)) return null;
       try {
-        const raw = fs.readFileSync(join(dirname(mediaPath), track.sidecarFile), 'utf8');
-        return { text: srtToVtt(raw) }; // idempotent for files already in VTT
+        return { text: srtToVtt(fs.readFileSync(abs, 'utf8')) }; // idempotent for VTT
       } catch {
         return null;
       }

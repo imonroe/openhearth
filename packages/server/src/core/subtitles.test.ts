@@ -78,6 +78,21 @@ describe('parseSubtitleStreams', () => {
   it('returns [] when there are no subtitle streams', () => {
     expect(parseSubtitleStreams(JSON.stringify({ streams: [] }))).toEqual([]);
   });
+
+  it('excludes bitmap subtitle codecs (cannot be remuxed to WebVTT)', () => {
+    const raw = JSON.stringify({
+      streams: [
+        { index: 2, codec_type: 'subtitle', codec_name: 'subrip', tags: { language: 'eng' } },
+        {
+          index: 3,
+          codec_type: 'subtitle',
+          codec_name: 'hdmv_pgs_subtitle',
+          tags: { language: 'fre' },
+        },
+      ],
+    });
+    expect(parseSubtitleStreams(raw)).toEqual([{ index: 2, lang: 'eng' }]);
+  });
 });
 
 describe('buildSubtitleExtractArgs', () => {
