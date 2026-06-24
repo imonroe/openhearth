@@ -71,10 +71,17 @@ function first(value: unknown): string | undefined {
 }
 
 /**
- * Redact a `?token=` value from a URL string for logging, so the shared token
- * never lands in the request log (clients that can't set headers — e.g. the WS
- * handshake — pass it as a query param). Leaves everything else intact.
+ * Redact the `token` query value from a URL string for logging, so the shared
+ * token never lands in the request log (clients that can't set headers — e.g. the
+ * WS handshake — pass it as a query param). Parses the query so it's decode-aware:
+ * a percent-encoded param name (`%74oken=…`, which the query parser still reads as
+ * `token`) is redacted too, closing that bypass. Non-token params are preserved.
  */
 export function redactTokenInUrl(url: string): string {
-  return url.replace(/([?&]token=)[^&]*/gi, `$1${'***'}`);
+  const q = url.indexOf('?');
+  if (q === -1) return url;
+  const params = new URLSearchParams(url.slice(q + 1));
+  if (!params.has('token')) return url;
+  params.set('token', '***');
+  return `${url.slice(0, q)}?${params.toString()}`;
 }

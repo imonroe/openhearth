@@ -71,4 +71,12 @@ describe('redactTokenInUrl', () => {
     expect(redactTokenInUrl('/api/v1/library?source=movies')).toBe('/api/v1/library?source=movies');
     expect(redactTokenInUrl('/api/v1/health')).toBe('/api/v1/health');
   });
+
+  it('redacts a percent-encoded token param name (decode-aware, no bypass)', () => {
+    // `%74oken` decodes to `token`, which the query parser (and tokenFromRequest)
+    // accept — so it must be redacted too, not logged raw.
+    const out = redactTokenInUrl('/api/v1/library?%74oken=secret');
+    expect(out).not.toContain('secret');
+    expect(out).toContain('token=***');
+  });
 });
