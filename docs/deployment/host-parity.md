@@ -22,8 +22,11 @@ From the reference [`docker-compose.yml`](../../docker-compose.yml):
 | `/path/to/media:/media` | **read-only** (`:ro`) | Library source(s). |
 | `./cache:/cache` | read/write | Derived index/artwork/transcode cache — **disposable**. |
 
-The container runs as the unprivileged `node` user (**UID/GID 1000**) and serves
-on `8080` (`EXPOSE 8080`, `HEALTHCHECK` → `/api/v1/health`).
+The container runs as an unprivileged user (**UID/GID 1000** by default — the
+image's built-in `node` user) and serves on `8080` (`EXPOSE 8080`,
+`HEALTHCHECK` → `/api/v1/health`). Override the UID/GID with the `PUID`/`PGID`
+variables in `.env` (see [`.env.example`](../../.env.example)) so files written
+to `config`/`cache` are owned by your host user.
 
 ## Linux Docker
 
@@ -31,11 +34,13 @@ on `8080` (`EXPOSE 8080`, `HEALTHCHECK` → `/api/v1/health`).
   paths relative to the compose file) for `config`/`cache`, and the absolute media
   path for `/media:ro`.
 - **Permissions (the #1 Linux gotcha):** the container writes `config`/`cache` as
-  **UID 1000**. If the host directories are owned by another UID, the server can't
-  write the cache (library won't index) or seed config. Fix with
-  `sudo chown -R 1000:1000 ./config ./cache`, or run with a matching `user:` in
-  compose. `/media` is `:ro`, so its ownership only needs to be **readable** by
-  UID 1000.
+  its run-as user (**UID 1000** by default). If the host directories are owned by
+  another UID, the server can't write the cache (library won't index) or seed
+  config — and any files it does create end up owned by the wrong user. The fix is
+  to run as your host user: set `PUID`/`PGID` in `.env` to your `id -u`/`id -g`
+  (the compose file wires them into `user:`). Alternatively `sudo chown -R
+  1000:1000 ./config ./cache`. `/media` is `:ro`, so its ownership only needs to be
+  **readable** by the run-as user.
 - **GPU:** VAAPI/QSV via `devices: [/dev/dri:/dev/dri]` + the host `video`/`render`
   GIDs, or NVENC via the NVIDIA Container Toolkit. See
   [gpu-transcoding.md](gpu-transcoding.md).
