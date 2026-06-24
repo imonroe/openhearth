@@ -49,6 +49,8 @@ export const commandMessageSchema = z.object({
   id: z.string().optional(),
   action: actionNameSchema,
   params: z.record(z.string(), z.unknown()).optional(),
+  /** Reserved shared-token auth field (wired in #47); ignored in v1. */
+  auth: z.string().optional(),
 });
 export type CommandMessage = z.infer<typeof commandMessageSchema>;
 
@@ -82,3 +84,127 @@ export function parseProtocolMessage(input: unknown): ProtocolMessage {
 
 /** JSON Schema for the protocol message union (for non-TS clients / docs). */
 export const protocolMessageJsonSchema = z.toJSONSchema(protocolMessageSchema);
+
+// --- Authoritative control state ------------------------------------------
+
+export const playbackStatusSchema = z.enum(['stopped', 'playing', 'paused']);
+export type PlaybackStatus = z.infer<typeof playbackStatusSchema>;
+
+export const screenSchema = z.enum(['home', 'service', 'player']);
+export type Screen = z.infer<typeof screenSchema>;
+
+/**
+ * The authoritative UI/playback state the ControlService holds and broadcasts.
+ * Focus is a client-side concern (it depends on the rendered grid), so it is not
+ * part of the server snapshot; the snapshot tracks the state the server can
+ * reason about: screen, playback, and volume.
+ */
+export const stateSnapshotSchema = z
+  .object({
+    screen: screenSchema,
+    playback: z
+      .object({
+        status: playbackStatusSchema,
+        item_id: z.string().nullable(),
+        position_s: z.number().int().min(0),
+      })
+      .strict(),
+    /** Service most recently launched (Strategy A), or null. */
+    service_id: z.string().nullable(),
+    /** Output volume, 0–100. */
+    volume: z.number().int().min(0).max(100),
+  })
+  .strict();
+export type StateSnapshot = z.infer<typeof stateSnapshotSchema>;
+
+export const INITIAL_STATE: StateSnapshot = {
+  screen: 'home',
+  playback: { status: 'stopped', item_id: null, position_s: 0 },
+  service_id: null,
+  volume: 50,
+};
+
+const numParam = (command: CommandMessage, key: string): number | undefined => {
+  const value = command.params?.[key];
+  return typeof value === 'number' ? value : undefined;
+};
+const strParam = (command: CommandMessage, key: string): string | undefined => {
+  const value = command.params?.[key];
+  return typeof value === 'string' ? value : undefined;
+};
+
+/**
+ * Pure reducer: apply a validated command to the state, returning the next
+ * state. Isomorphic and side-effect-free so it can be unit-tested and (later)
+ * mirrored on clients for optimistic updates. Navigation/focus actions
+ * (`navigate`/`select`) don't change the server snapshot — focus is client-side
+ * — but they are still valid commands that trigger a `state_changed` broadcast.
+ */
+export function applyCommand(state: StateSnapshot, command: CommandMessage): StateSnapshot {
+  switch (command.action) {
+    case 'home':
+      return { ...state, screen: 'home' };
+    case 'back':
+      // One level up: player → service if a service is active, else → home.
+      if (state.screen === 'player') {
+        return { ...state, screen: state.service_id ? 'service' : 'home' };
+      }
+      return { ...state, screen: 'home' };
+    case 'launch_service':
+      return {
+        ...state,
+        screen: 'service',
+        service_id: strParam(command, 'service_id') ?? state.service_id,
+      };
+    case 'play_item':
+      return {
+        ...state,
+        screen: 'player',
+        playback: {
+          status: 'playing',
+          item_id: strParam(command, 'item_id') ?? null,
+          position_s: 0,
+        },
+      };
+    case 'play_pause': {
+      const status = state.playback.status;
+      if (status === 'playing')
+        return { ...state, playback: { ...state.playback, status: 'paused' } };
+      if (status === 'paused')
+        return { ...state, playback: { ...state.playback, status: 'playing' } };
+      return state; // nothing loaded
+    }
+    case 'stop':
+      return {
+        ...state,
+        playback: { status: 'stopped', item_id: null, position_s: 0 },
+      };
+    case 'seek': {
+      const position = numParam(command, 'position_s');
+      if (position === undefined || position < 0) return state;
+      return { ...state, playback: { ...state.playback, position_s: Math.floor(position) } };
+    }
+    case 'set_volume': {
+      const level = numParam(command, 'level');
+      if (level === undefined) return state;
+      return { ...state, volume: Math.max(0, Math.min(100, Math.floor(level))) };
+    }
+    case 'navigate':
+    case 'select':
+      return state; // focus is client-side; command is still broadcast
+    default:
+      return state;
+  }
+}
+
+/** Build a `state_changed` event carrying the given snapshot. */
+export function makeStateEvent(state: StateSnapshot): EventMessage {
+  return {
+    type: 'event',
+    protocol_version: PROTOCOL_VERSION,
+    event: 'state_changed',
+    // The event envelope types `state` as an open record; the snapshot is a
+    // concrete object that satisfies it structurally.
+    state: { ...state } as Record<string, unknown>,
+  };
+}

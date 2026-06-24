@@ -11,10 +11,18 @@
 import { existsSync, createReadStream, realpathSync } from 'node:fs';
 import { join, resolve, sep, extname } from 'node:path';
 import fastifyStatic from '@fastify/static';
+import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { PROTOCOL_VERSION, redactConfig } from '@openhearth/shared';
+import {
+  PROTOCOL_VERSION,
+  redactConfig,
+  commandMessageSchema,
+  makeStateEvent,
+  type EventMessage,
+} from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
+import { ControlService } from './core/ControlService.js';
 
 // Raster image types only. SVG is deliberately excluded: it can carry inline
 // <script>, and a malicious community services.d/* icon served from this origin
@@ -34,12 +42,15 @@ export interface BuildAppOptions {
   logLevel?: string;
   /** Directory of the built web bundle to serve as static files, if present. */
   webRoot?: string;
+  /** Optional shared ControlService (defaults to a fresh one). */
+  controlService?: ControlService;
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const { configService } = options;
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
+  const control = options.controlService ?? new ControlService();
 
   const app = Fastify({
     logger: { level },
@@ -116,6 +127,66 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       .header('Content-Security-Policy', "default-src 'none'")
       .type(type)
       .send(createReadStream(real));
+  });
+
+  // --- Control protocol (PRD §11) ----------------------------------------
+  // Shape an envelope validation error into a uniform 400/event payload.
+  const validateCommand = (
+    raw: unknown,
+  ):
+    | { ok: true; command: ReturnType<typeof commandMessageSchema.parse> }
+    | { ok: false; errors: string[] } => {
+    const result = commandMessageSchema.safeParse(raw);
+    if (result.success) return { ok: true, command: result.data };
+    return {
+      ok: false,
+      errors: result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+    };
+  };
+
+  // GET current authoritative state snapshot.
+  app.get('/api/v1/state', async () => control.getState());
+
+  // REST mirror: apply a single command, return the new state (FR-R2).
+  app.post('/api/v1/control/command', async (request, reply) => {
+    const parsed = validateCommand(request.body);
+    if (!parsed.ok) {
+      return reply.code(400).send({ status: 'invalid', errors: parsed.errors });
+    }
+    return { status: 'ok', state: control.dispatch(parsed.command) };
+  });
+
+  // WebSocket: bidirectional control channel (FR-R5). Registered inside an
+  // encapsulated plugin that awaits @fastify/websocket first, so the plugin's
+  // onRoute hook is installed before the `{ websocket: true }` route is added.
+  void app.register(async (instance) => {
+    await instance.register(fastifyWebsocket);
+    instance.get('/api/v1/control/ws', { websocket: true }, (socket) => {
+      const send = (event: EventMessage): void => socket.send(JSON.stringify(event));
+      // Send the current state on connect so the client starts authoritative.
+      send(makeStateEvent(control.getState()));
+      const unsubscribe = control.subscribe({ send });
+
+      socket.on('message', (data: Buffer) => {
+        let raw: unknown;
+        try {
+          raw = JSON.parse(data.toString());
+        } catch {
+          socket.send(JSON.stringify({ type: 'error', error: 'invalid JSON' }));
+          return;
+        }
+        const parsed = validateCommand(raw);
+        if (!parsed.ok) {
+          socket.send(
+            JSON.stringify({ type: 'error', error: 'invalid command', details: parsed.errors }),
+          );
+          return;
+        }
+        control.dispatch(parsed.command); // broadcast goes to all subscribers
+      });
+
+      socket.on('close', unsubscribe);
+    });
   });
 
   // --- Static SPA (optional; placeholder until the real bundle lands) -----
