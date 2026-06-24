@@ -4,6 +4,11 @@ coverage/
 pnpm-lock.yaml
 *.tsbuildinfo
 
+# Playwright E2E output
+test-results/
+playwright-report/
+blob-report/
+
 # Test fixtures are intentionally malformed/edge-case — don't reformat them.
 **/__fixtures__/**
 

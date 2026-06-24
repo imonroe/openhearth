@@ -34,6 +34,29 @@ export default tseslint.config(
       },
     },
   },
+  // Playwright E2E specs run in a browser context against the built app. They
+  // are not part of the TS project build (Playwright type-checks them itself),
+  // and use Playwright's fixture pattern `async ({}, use) => …`, whose empty
+  // destructuring pattern is idiomatic — exempt it from no-empty-pattern.
+  {
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'no-empty-pattern': 'off',
+    },
+  },
+  // Plain Node ESM helpers under e2e/ (the stub service) — give them Node
+  // globals so no-undef doesn't flag process/console/URL.
+  {
+    files: ['e2e/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        URL: 'readonly',
+        setTimeout: 'readonly',
+      },
+    },
+  },
   // Allow Vitest globals in test files.
   {
     files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
