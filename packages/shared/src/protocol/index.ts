@@ -140,7 +140,8 @@ const strParam = (command: CommandMessage, key: string): string | undefined => {
  * state. Isomorphic and side-effect-free so it can be unit-tested and (later)
  * mirrored on clients for optimistic updates. Navigation/focus actions
  * (`navigate`/`select`) don't change the server snapshot — focus is client-side
- * — but they are still valid commands that trigger a `state_changed` broadcast.
+ * — so they return the same reference; the ControlService treats that as a
+ * no-op and does not broadcast.
  */
 export function applyCommand(state: StateSnapshot, command: CommandMessage): StateSnapshot {
   switch (command.action) {
