@@ -145,4 +145,12 @@ describe('buildFfmpegArgs', () => {
       'h264_nvenc',
     );
   });
+  it('uses QSV and honors its render device', () => {
+    const args = buildFfmpegArgs('/m/x.mkv', {
+      transcode: { hwaccel: 'qsv', device: '/dev/dri/renderD129' },
+    });
+    expect(args).toContain('h264_qsv');
+    expect(args.indexOf('-qsv_device')).toBeLessThan(args.indexOf('-i')); // before input
+    expect(args[args.indexOf('-qsv_device') + 1]).toBe('/dev/dri/renderD129');
+  });
 });
