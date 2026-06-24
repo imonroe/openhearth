@@ -258,6 +258,14 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // --- API: liveness/readiness -------------------------------------------
   app.get('/api/v1/health', async () => {
     const valid = configService.errors.length === 0;
+    // Never let a cold/locked cache DB perturb the liveness probe — a failed
+    // count degrades to 0 rather than throwing out of health.
+    let items = 0;
+    try {
+      items = libraryService?.count() ?? 0;
+    } catch {
+      items = 0;
+    }
     return {
       status: 'ok',
       // Readiness: the server is up and serving from a loaded config (last-good
@@ -270,7 +278,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       config: { valid, errors: configService.errors.length },
       // Retained for backward compatibility with existing clients.
       config_valid: valid,
-      library: { enabled: Boolean(libraryService), items: libraryService?.count() ?? 0 },
+      library: { enabled: Boolean(libraryService), items },
       metadata: { provider: metadataService?.providerName ?? null },
     };
   });

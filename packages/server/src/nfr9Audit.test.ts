@@ -18,17 +18,31 @@ const ALLOWED = new Set([
   'core/ArtworkCache.ts', // poster download: only for a TMDB URL the user resolved
 ]);
 
-/** Outbound-network primitives we forbid outside the allowlist. */
+/**
+ * Outbound-network primitives we forbid outside the allowlist. Any real outbound
+ * call must enter the system through one of these tokens *somewhere* — even when
+ * the call is later made through an injected `fetch`, the real `globalThis.fetch`
+ * (or a node net module / HTTP lib) has to be referenced at its root, which is
+ * what these catch.
+ */
 const FORBIDDEN = [
   // `globalThis.fetch` as a value/call, but NOT `typeof globalThis.fetch` (a type
   // annotation — interfaces forwarding an injectable fetch don't call the network).
   /(?<!typeof )globalThis\.fetch/,
   /(?<![A-Za-z.])fetch\s*\(/, // a bare fetch( call (not this.fetchImpl/opts.fetch)
-  /\bhttps?\.request\b/,
+  /\bhttps?\.(?:get|request)\b/, // http(s).get / .request
   /\bnet\.(?:connect|createConnection)\b/,
-  /\bnew\s+WebSocket\b/,
+  /\b(?:tls|dgram)\.[a-z]/, // tls.connect, dgram sockets
   /\bdns\./,
+  /\bnew\s+WebSocket\b/,
+  // Static/dynamic import or require of a node networking module…
+  /['"]node:(?:http|https|net|dns|tls|dgram)['"]/,
+  // …or a third-party HTTP client (none are deps — flag if one sneaks in).
+  /['"](?:axios|got|node-fetch|undici|superagent|needle|phin)['"]/,
 ];
+
+/** A primitive every allowlisted module must still contain (so the guard stays real). */
+const ALLOWED_PRIMITIVE = /globalThis\.fetch/;
 
 /** Recursively list .ts source files (excluding tests). */
 function sourceFiles(dir: string): string[] {
@@ -60,9 +74,14 @@ describe('NFR-9: no phone-home', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the allowlisted modules still exist (guard stays meaningful)', () => {
+  it('the allowlisted modules still exist and contain a network primitive', () => {
+    // If a TmdbProvider/ArtworkCache refactor moves the call off globalThis.fetch
+    // (e.g. to http.request), this fails loudly — forcing the allowlist + patterns
+    // to be re-examined rather than silently trusting a stale guard.
     for (const rel of ALLOWED) {
-      expect(fs.existsSync(path.join(here, rel))).toBe(true);
+      const file = path.join(here, rel);
+      expect(fs.existsSync(file)).toBe(true);
+      expect(ALLOWED_PRIMITIVE.test(fs.readFileSync(file, 'utf8'))).toBe(true);
     }
   });
 });
