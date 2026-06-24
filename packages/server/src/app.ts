@@ -154,32 +154,29 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const { configService, libraryService, streamer, metadataService, artworkCache } = options;
 
   /**
-   * Overlay the cached poster URL onto a library item (#42). Cache-only — never
-   * blocks the response on a provider call — so a cold cache simply omits art.
-   * The URL points back at our own by-id artwork route (no client-supplied URL,
-   * so no SSRF surface).
+   * The by-id artwork route for an item when the metadata cache has a poster,
+   * else undefined (#42). Cache-only — never blocks on a provider call — and the
+   * URL points back at our own route (no client-supplied URL, so no SSRF). Single
+   * source of truth for both the library overlay and the search projection.
    */
-  const withArtwork = (item: LibraryItem): LibraryItem => {
-    if (!metadataService?.enabled) return item;
-    const media = metadataService.cachedMedia(metadataQueryForLibraryItem(item));
-    const poster = media?.artwork?.poster_url;
-    if (!poster) return item;
-    return { ...item, artwork_url: `/api/v1/library/${encodeURIComponent(item.id)}/artwork` };
+  const cachedPosterUrl = (item: LibraryItem): string | undefined => {
+    if (!metadataService?.enabled) return undefined;
+    const cached = metadataService.cachedMedia(metadataQueryForLibraryItem(item));
+    if (!cached?.artwork?.poster_url) return undefined;
+    return `/api/v1/library/${encodeURIComponent(item.id)}/artwork`;
   };
 
-  /**
-   * Project a library item into the normalized {@link MediaItem} for search (#43),
-   * overlaying the cached poster (served by-id) when one is available.
-   */
+  /** Overlay the cached poster URL onto a library item for browse (#42). */
+  const withArtwork = (item: LibraryItem): LibraryItem => {
+    const url = cachedPosterUrl(item);
+    return url ? { ...item, artwork_url: url } : item;
+  };
+
+  /** Project a library item into the normalized {@link MediaItem} for search (#43). */
   const searchMediaItem = (item: LibraryItem): MediaItem => {
     const media = mediaItemFromLibraryItem(item);
-    if (!metadataService?.enabled) return media;
-    const cached = metadataService.cachedMedia(metadataQueryForLibraryItem(item));
-    if (!cached?.artwork?.poster_url) return media;
-    return {
-      ...media,
-      artwork: { poster_url: `/api/v1/library/${encodeURIComponent(item.id)}/artwork` },
-    };
+    const url = cachedPosterUrl(item);
+    return url ? { ...media, artwork: { poster_url: url } } : media;
   };
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
@@ -343,6 +340,12 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // Search (#43, FR-B3). v1 returns local-library matches only, grouped into
   // `source`-keyed sections so cross-service results can slot in later without a
   // breaking change. No cross-service search ships in v1 (PRD §22/§23).
+  //
+  // Known stub limitation: matching is on `title` only, and an episode's title is
+  // its *show* title — so a multi-episode show returns one (episode-kind) result
+  // per episode rather than a single grouped series, and `episode_title` is not
+  // searchable. Series grouping / de-dupe is a v1.x follow-up when the search UI
+  // lands; the response shape already supports it (sections of MediaItem).
   app.get<{ Querystring: { q?: string | string[]; limit?: string | string[] } }>(
     '/api/v1/search',
     async (request) => {

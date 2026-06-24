@@ -111,6 +111,35 @@ describe('GET /api/v1/search', () => {
     expect(matrix.artwork.poster_url).toBe('/api/v1/library/a/artwork');
   });
 
+  it('returns one result per episode for a show (known stub limitation)', async () => {
+    // Episodes carry the show title, so a show match returns one episode-kind
+    // result per episode (no series grouping yet — a documented v1.x follow-up).
+    await makeApp();
+    store.upsertLibraryItems([
+      item({
+        id: 'e1',
+        source_id: 'tv',
+        kind: 'episode',
+        title: 'The Wire',
+        season: 1,
+        episode: 1,
+      }),
+      item({
+        id: 'e2',
+        source_id: 'tv',
+        kind: 'episode',
+        title: 'The Wire',
+        season: 1,
+        episode: 2,
+      }),
+    ]);
+    const body = (await app.inject({ url: '/api/v1/search?q=wire' })).json();
+    const items = body.sections[0].items;
+    expect(items).toHaveLength(2);
+    expect(items.every((m: { title: string; kind: string }) => m.title === 'The Wire')).toBe(true);
+    expect(items.map((m: { id: string }) => m.id).sort()).toEqual(['e1', 'e2']);
+  });
+
   it('returns no sections for an empty query', async () => {
     await makeApp();
     const body = (await app.inject({ url: '/api/v1/search?q=' })).json();
