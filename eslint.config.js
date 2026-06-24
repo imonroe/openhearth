@@ -1,6 +1,7 @@
 // @ts-check
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import prettier from 'eslint-config-prettier';
 
 /**
  * Flat ESLint config for the OpenHearth workspace.
@@ -14,10 +15,27 @@ import tseslint from 'typescript-eslint';
  */
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/*.config.js', '**/coverage/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // Allow Vitest globals in test files.
+  {
+    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+      },
+    },
+  },
   // Brain → must not import the Face.
   {
     files: ['packages/server/**/*.{ts,tsx}'],
@@ -68,4 +86,6 @@ export default tseslint.config(
       ],
     },
   },
+  // Must be last: turns off ESLint rules that conflict with Prettier formatting.
+  prettier,
 );
