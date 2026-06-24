@@ -1,16 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  initCursorVisibility,
-  type CursorVisibilityController,
-} from './cursorVisibility';
+import { initCursorVisibility, type CursorVisibilityController } from './cursorVisibility';
 
 describe('cursor visibility', () => {
   let controller: CursorVisibilityController;
 
   const move = (movementX = 5, movementY = 0): void => {
-    document.dispatchEvent(
-      new MouseEvent('mousemove', { movementX, movementY }),
-    );
+    document.dispatchEvent(new MouseEvent('mousemove', { movementX, movementY }));
   };
 
   beforeEach(() => {

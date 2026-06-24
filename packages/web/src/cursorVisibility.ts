@@ -27,9 +27,7 @@ export interface CursorVisibilityController {
  * Safe to call once at startup. Returns a controller so tests (and HMR) can
  * tear it down.
  */
-export function initCursorVisibility(
-  doc: Document = document,
-): CursorVisibilityController {
+export function initCursorVisibility(doc: Document = document): CursorVisibilityController {
   const body = doc.body;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
