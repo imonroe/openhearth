@@ -31,8 +31,10 @@ test.describe('player', () => {
       await expect(page.locator('.tile--library').first()).toBeVisible({ timeout: 2000 });
     }).toPass({ timeout: 30_000 });
 
-    await page.keyboard.press('ArrowDown'); // services row → library row
-    await expect(page.locator('.tile--library.is-focused')).toBeVisible();
+    await page.keyboard.press('ArrowDown'); // services row → library row (lands on "See all")
+    await expect(page.locator('.tile--see-all.is-focused')).toBeVisible();
+    await page.keyboard.press('ArrowRight'); // skip the leading "See all" tile (#124)
+    await expect(page.locator('.tile--library:not(.tile--see-all).is-focused')).toBeVisible();
     await page.keyboard.press('Enter'); // open detail
     await expect(page.getByText('Play')).toBeVisible();
     await page.keyboard.press('Enter'); // Play → player
