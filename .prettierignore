@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+pnpm-lock.yaml
+*.tsbuildinfo
+
+# Playwright E2E output
+test-results/
+playwright-report/
+blob-report/
+e2e/.cache/
+e2e/fixtures/media/
+
+# Test fixtures are intentionally malformed/edge-case — don't reformat them.
+**/__fixtures__/**
+
+# Long-form authored prose — formatting is intentional, not Prettier's job.
+CLAUDE.md
+docs/
+designs/

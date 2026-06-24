@@ -1,0 +1,62 @@
+# OpenHearth top-level configuration.
+#
+# Copy config.example/ to ./config to get a working setup, then edit to taste.
+# Every field is documented in docs/config-reference.md. All fields are optional:
+# an empty file is a valid config (OpenHearth is fully usable with nothing set).
+#
+# Secrets (API keys) come from the environment via ${VAR} interpolation — never
+# commit a key into this file.
+
+ui:
+  title: OpenHearth
+  theme: dark # dark | light
+  rows: # ordered layout of the home screen
+    # One services row per group used in the catalog (services.yaml +
+    # services.d/*). A tile only renders if its `group` has a row here.
+    - { type: services, group: Streaming }
+    - { type: services, group: Live TV }
+    - { type: services, group: Music }
+    - { type: library, source: movies }
+    - { type: library, source: tv }
+
+library:
+  sources:
+    - id: movies
+      label: Movies
+      path: /media/movies # host-mapped, read-only
+      kind: movies # movies | tv | music | mixed
+    - id: tv
+      label: TV
+      path: /media/tv
+      kind: tv
+  # Optional, read-only Jellyfin/Plex reads (Should, not Must). Plain folder
+  # scan is the guaranteed v1 path.
+  integrations: []
+
+metadata:
+  provider: tmdb
+  language: en-US
+  # Optional. Set TMDB_API_KEY in the environment and uncomment to enable
+  # metadata enrichment. Leaving it unset keeps OpenHearth fully usable.
+  # tmdbApiKey: ${TMDB_API_KEY}
+
+server:
+  port: 8080
+  logLevel: info # silent | error | warn | info | debug | trace
+
+# Local-media transcoding (Strategy C). Browser-playable files stream directly;
+# anything else is transcoded to H.264/AAC by ffmpeg. CPU is the default and
+# guaranteed path. GPU acceleration is opt-in and per-host (see #37 docs).
+transcode:
+  hwaccel: none # none | vaapi | nvenc | qsv
+  # device: /dev/dri/renderD128  # VAAPI/QSV render node (when hwaccel needs it)
+
+keybindings: # logical binding -> physical keys; `home` is reserved
+  up: [ArrowUp]
+  down: [ArrowDown]
+  left: [ArrowLeft]
+  right: [ArrowRight]
+  select: [Enter]
+  back: [Backspace, Escape]
+  home: [Home]
+  play_pause: [' ']

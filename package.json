@@ -1,0 +1,42 @@
+{
+  "name": "openhearth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Docker-native, self-hosted streaming hub with a TV-optimized 10-foot UI.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "tsc --build && pnpm --filter @openhearth/web build",
+    "clean": "tsc --build --clean",
+    "typecheck": "tsc --build && pnpm --filter @openhearth/web typecheck && tsc -p tsconfig.test.json && tsc -p tsconfig.test.web.json",
+    "test": "pnpm -r --if-present test",
+    "test:watch": "pnpm -r --if-present --parallel test:watch",
+    "coverage": "pnpm -r --if-present coverage",
+    "dev": "pnpm -r --if-present --parallel dev",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "e2e": "pnpm build && node e2e/generate-media-fixture.mjs && playwright test -c e2e/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@playwright/test": "1.56.0",
+    "@types/node": "^20.14.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.4",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}

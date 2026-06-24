@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Playwright E2E output
+test-results/
+playwright-report/
+blob-report/
+e2e/.cache/
+e2e/fixtures/media/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime data (host-mapped volumes)
+/cache/
+/config/
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Environment
+.env
+.env.local

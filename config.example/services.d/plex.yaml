@@ -1,0 +1,15 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: plex
+    name: Plex
+    icon: bundled:plex # shipped logo; override with a config/ file or http(s) URL
+    launch_url: https://app.plex.tv/desktop/
+    group: Streaming
+    order: 100
+    notes: >-
+      Launcher tile for the Plex web app (free ad-supported movies/TV and live
+      channels, plus any media servers signed into your account). This is the
+      Strategy A launcher path — it navigates the kiosk to Plex's own web
+      player. For native, ad-free playback of a Plex/Jellyfin library through
+      OpenHearth's own transcoder, use the Library (Strategy C) instead. The web
+      player navigates well with a D-pad; no UA override needed in testing.

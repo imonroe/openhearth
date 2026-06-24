@@ -1,0 +1,11 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: paramount-plus
+    name: Paramount+
+    icon: bundled:paramount-plus # shipped logo; override with a config/ file or http(s) URL
+    launch_url: https://www.paramountplus.com/
+    group: Streaming
+    order: 80
+    notes: >-
+      Widevine-protected; L3 may cap resolution. Availability and exact web URL
+      vary by region.

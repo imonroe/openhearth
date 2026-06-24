@@ -1,0 +1,95 @@
+import { describe, it, expect } from 'vitest';
+import { validateConfig, configJsonSchema, redactConfig, REDACTED, type Config } from './index';
+
+describe('config', () => {
+  it('accepts an empty config (app usable with nothing configured)', () => {
+    const result = validateConfig({});
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config).toEqual({});
+  });
+
+  it('accepts a populated config', () => {
+    const sample: Config = {
+      server: { port: 8080, logLevel: 'info' },
+      metadata: { tmdbApiKey: 'abc123' },
+    };
+    const result = validateConfig(sample);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.config).toEqual(sample);
+  });
+
+  it('rejects an out-of-range port with a path-scoped message', () => {
+    const result = validateConfig({ server: { port: 70000 } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.startsWith('server.port'))).toBe(true);
+    }
+  });
+
+  it('produces clear, path-scoped messages for multiple malformed fields', () => {
+    const result = validateConfig({
+      server: { port: 'nope' }, // wrong type
+      ui: { theme: 'neon' }, // invalid enum
+      unknownTop: 1, // unknown key (strict)
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // Each message is "<path>: <human-readable reason>".
+      expect(result.errors.every((e) => /^[\w.()]+: .+/.test(e))).toBe(true);
+      expect(result.errors.some((e) => e.startsWith('server.port'))).toBe(true);
+      expect(result.errors.some((e) => e.startsWith('ui.theme'))).toBe(true);
+    }
+  });
+
+  it('rejects unknown top-level keys (strict)', () => {
+    const result = validateConfig({ nope: true });
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts the full PRD-shaped config (ui/library/keybindings)', () => {
+    const result = validateConfig({
+      ui: { title: 'OpenHearth', theme: 'dark', rows: [{ type: 'services', group: 'Streaming' }] },
+      library: { sources: [{ id: 'movies', path: '/media/movies', kind: 'movies' }] },
+      metadata: { provider: 'tmdb', language: 'en-US' },
+      keybindings: { up: ['ArrowUp'], home: ['Home'] },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects an invalid ui row type', () => {
+    const result = validateConfig({ ui: { rows: [{ type: 'bogus' }] } });
+    expect(result.ok).toBe(false);
+  });
+
+  it('never throws on non-object input', () => {
+    expect(validateConfig(null).ok).toBe(false);
+    expect(validateConfig('not a config').ok).toBe(false);
+  });
+
+  it('emits a JSON Schema for docs/tooling', () => {
+    expect(configJsonSchema).toBeTypeOf('object');
+  });
+});
+
+describe('redactConfig', () => {
+  it('redacts a configured secret leaf', () => {
+    const redacted = redactConfig({ metadata: { tmdbApiKey: 'super-secret' } });
+    expect(redacted.metadata?.tmdbApiKey).toBe(REDACTED);
+  });
+
+  it('leaves unset secrets absent and does not mutate the source', () => {
+    const source: Config = { server: { port: 8080 } };
+    const redacted = redactConfig(source);
+    expect(redacted.metadata).toBeUndefined();
+    expect(source).toEqual({ server: { port: 8080 } });
+  });
+
+  it('preserves non-secret fields', () => {
+    const redacted = redactConfig({
+      server: { port: 8080, logLevel: 'info' },
+      metadata: { tmdbApiKey: 'k' },
+    });
+    expect(redacted.server).toEqual({ port: 8080, logLevel: 'info' });
+    expect(redacted.metadata?.tmdbApiKey).toBe(REDACTED);
+  });
+});

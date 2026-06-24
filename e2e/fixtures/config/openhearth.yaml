@@ -1,0 +1,33 @@
+# E2E fixture config. The server loads this via OPENHEARTH_CONFIG_DIR so the
+# Playwright suite runs against a deterministic catalog (not the user's, not the
+# shipped community seed). Service tiles point at the local stub service server
+# (see e2e/fixtures/stub-service.mjs) so launching touches no real network.
+ui:
+  title: OpenHearth
+  theme: dark
+  rows:
+    - { type: services, group: Streaming }
+    - { type: library, source: media }
+
+# A library source pointing at the generated player E2E media fixture. The path
+# is repo-relative (the server runs with cwd = repo root). When ffmpeg isn't
+# available the dir is empty and the library row just renders no tiles.
+library:
+  sources:
+    - id: media
+      label: Media
+      path: e2e/fixtures/media
+
+server:
+  port: 8080
+  logLevel: info
+
+keybindings:
+  up: [ArrowUp]
+  down: [ArrowDown]
+  left: [ArrowLeft]
+  right: [ArrowRight]
+  select: [Enter]
+  back: [Backspace, Escape]
+  home: [Home]
+  play_pause: [' ']

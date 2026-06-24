@@ -1,0 +1,12 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: hulu
+    name: Hulu
+    icon: bundled:hulu # shipped logo; override with a config/ file or http(s) URL
+    launch_url: https://www.hulu.com/
+    group: Streaming
+    order: 60
+    notes: >-
+      US-only service. Widevine-protected; L3 commonly caps resolution. Ad-tier
+      plans still play ads inside Hulu's own player — OpenHearth cannot strip
+      those (PRD §18).

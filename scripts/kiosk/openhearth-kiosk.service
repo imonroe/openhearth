@@ -1,0 +1,29 @@
+# OpenHearth kiosk — systemd *user* service (Linux).
+#
+# Install (as the kiosk user, on a host with a graphical session):
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/kiosk/openhearth-kiosk.service ~/.config/systemd/user/
+#   # edit ExecStart path below to point at this repo's checkout
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now openhearth-kiosk.service
+#   sudo loginctl enable-linger "$USER"   # so the user session starts at boot
+#
+# Pair with auto-login to the graphical session (see docs/deployment/linux-kiosk.md).
+[Unit]
+Description=OpenHearth kiosk (Chromium)
+# Wait for the graphical session to be ready.
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Point at the launcher in your checkout (absolute path required by systemd).
+ExecStart=%h/openhearth/scripts/kiosk/openhearth-kiosk.sh
+# Restart if Chromium is closed/crashes — a kiosk should always come back.
+Restart=always
+RestartSec=3
+# Make the session's display reachable from the user service.
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,28 @@
+# Never copy local dependency trees or build output into the build context.
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+
+# Git + CI
+.git
+.github
+.gitignore
+
+# Host-mapped runtime volumes (must not leak into the image)
+/cache
+/config
+
+# Editor / OS
+.idea
+.vscode
+*.swp
+.DS_Store
+
+# Docs & design sources are not needed at build time
+docs
+designs
+
+# Env / secrets
+.env
+.env.*

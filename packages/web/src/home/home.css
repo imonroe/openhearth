@@ -1,0 +1,420 @@
+/*
+ * Home-screen layout & tile components (design-system §11, §12.02).
+ * Sizes in rem (scale with viewport); borders/radii/shadow blur in px.
+ */
+
+.app-shell {
+  height: 100vh;
+  width: 100vw;
+  background: var(--color-bg-primary);
+  /* Warm ambient glow, top-right, very subtle (screen spec 02). */
+  background-image: radial-gradient(
+    60% 50% at 85% 0%,
+    var(--color-ambient-glow) 0%,
+    transparent 70%
+  );
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- Header (§12.02) --- */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--safe-v) var(--safe-h) 1.25rem var(--safe-h);
+}
+.header__logo {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.header__logo-mark {
+  width: 1.667rem;
+  height: 1.667rem;
+  border-radius: 8px;
+  background: var(--brand-gradient);
+}
+.header__wordmark {
+  font-size: 1.146rem; /* 22px */
+  font-weight: 300;
+  letter-spacing: 0.313rem; /* 6px */
+  color: var(--color-text-primary);
+}
+.header__actions {
+  display: flex;
+  align-items: center;
+  gap: 1.667rem;
+}
+.header__clock {
+  font-size: 0.938rem;
+  color: var(--color-text-secondary);
+}
+.header__action {
+  display: flex;
+  align-items: center;
+  gap: 0.521rem;
+  padding: 0.521rem 1.042rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-separator);
+  color: var(--color-text-secondary);
+  font-size: 0.781rem;
+}
+.header__action--icon {
+  padding: 0.521rem;
+}
+
+/* --- Content area --- */
+.home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2.083rem; /* 40px between rows */
+  padding: 0.625rem var(--safe-h) var(--safe-v) var(--safe-h);
+  overflow: hidden;
+}
+.home__empty {
+  margin: auto;
+  color: var(--color-text-muted);
+  font-size: 1.25rem;
+  letter-spacing: 0.104rem;
+}
+
+/* --- Content row (§11 Content Row) --- */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.833rem; /* 16px */
+}
+.row__header {
+  font-size: 0.729rem; /* 14px */
+  font-weight: 600;
+  letter-spacing: 0.156rem; /* 3px */
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.row__strip {
+  display: flex;
+  gap: 0.833rem; /* 16px */
+  /* Rows that overflow the viewport scroll horizontally; focus drives the
+     scroll position (see useScrollIntoViewOnFocus) — no native scrollbar
+     (issue #113). overflow-x:auto forces overflow-y to a non-visible value, so
+     reserve room for the focus-ring glow with padding on every side and cancel
+     it again with a matching negative margin, keeping the row's footprint and
+     alignment unchanged. The inline padding doubles as breathing room so the
+     first/last tile (and its glow) never sits flush against the screen edge. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1.5rem; /* glow + edge breathing room on all four sides */
+  margin: -1.5rem; /* neutralise the padding so layout is unchanged */
+  scroll-padding-inline: 1.5rem; /* keep the focused tile clear of the edges */
+  scroll-behavior: smooth;
+  /* Hide the scrollbar across engines — focus-driven, 10-foot UI. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+  /* Edge fade-hint that the strip continues off-screen. Each side fades only
+     when there is actually more to scroll that way (RowStrip sets the
+     data-overflow-* flags), so a focused tile resting at either end is never
+     dimmed. Width 0 (the default) collapses to no fade. */
+  --fade-start: 0px;
+  --fade-end: 0px;
+  -webkit-mask: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-start),
+    black calc(100% - var(--fade-end)),
+    transparent 100%
+  );
+  mask: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-start),
+    black calc(100% - var(--fade-end)),
+    transparent 100%
+  );
+}
+.row__strip[data-overflow-start='true'] {
+  --fade-start: 2.5rem;
+}
+.row__strip[data-overflow-end='true'] {
+  --fade-end: 2.5rem;
+}
+.row__strip::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none; /* Chromium / WebKit */
+}
+@media (prefers-reduced-motion: reduce) {
+  .row__strip {
+    scroll-behavior: auto;
+  }
+}
+
+/* --- Tiles --- */
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.tile__frame {
+  background: var(--color-tile-bg);
+  border: var(--focus-ring-width) solid transparent; /* reserve space so focus doesn't shift layout */
+  overflow: hidden;
+  transition:
+    width 150ms ease,
+    box-shadow 150ms ease;
+}
+.tile--service {
+  width: 8.854rem; /* 170px */
+  gap: 0.521rem;
+}
+.tile--service .tile__frame {
+  width: 8.854rem;
+  height: 5rem; /* 96px */
+  border-radius: 10px;
+  /* Lighter than the default tile-bg so dark logos read (issue #110). */
+  background: var(--color-service-tile-bg);
+}
+/* Service tiles do not scale on focus (per §11) — only the ring changes. */
+.tile--library {
+  /* Reserve the focused (148px) footprint so neighbours don't reflow when the
+     poster scales up (§9.4). */
+  width: 7.708rem; /* 148px */
+  gap: 0.417rem;
+  align-items: center;
+}
+.tile--library .tile__frame {
+  width: 7.292rem; /* 140px default */
+  aspect-ratio: 140 / 210; /* height derives, per §2 poster guidance */
+  border-radius: 8px;
+}
+/* §9 rule 4: focused library poster scales up 140 -> 148px. */
+.tile--library.is-focused .tile__frame {
+  width: 7.708rem; /* 148px */
+}
+/* Artwork fills the frame; preserve aspect via cover. */
+.tile__art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Service logos (the bundled icon set + most remote service icons) have varied
+   aspect ratios and transparent backgrounds, so contain them with padding rather
+   than cropping — the tile-bg shows through as a clean letterbox. Library posters
+   keep `cover`. */
+.tile--service .tile__art {
+  object-fit: contain;
+  padding: 0.625rem 1.25rem;
+}
+/* Placeholder when artwork is missing/failed (FR-A6): the service initial. */
+.tile__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 2.083rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+.tile__label {
+  font-size: 0.677rem; /* 13px */
+  color: var(--color-text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row__empty {
+  color: var(--color-text-muted);
+  font-size: 0.833rem;
+  align-self: center;
+}
+.tile--library .tile__label {
+  font-size: 0.625rem; /* 12px */
+  color: var(--color-text-primary);
+}
+
+/* --- Focus state (§9) --- */
+.is-focused .tile__frame,
+.header__action.is-focused {
+  border: var(--focus-ring-width) solid var(--color-focus-ring);
+  box-shadow: var(--focus-ring-glow);
+}
+.is-focused .tile__label {
+  color: var(--color-text-accent);
+  font-weight: 700;
+}
+.header__action.is-focused {
+  color: var(--color-text-accent);
+}
+
+/* Library tile info block (title + year/seasons sub-line, §11). */
+.tile__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.104rem; /* 2px */
+  width: 7.708rem; /* match the focused footprint */
+  align-items: center;
+  text-align: center;
+}
+.tile__sub {
+  font-size: 0.573rem; /* 11px */
+  color: var(--color-text-muted);
+}
+.is-focused .tile__sub {
+  color: var(--color-text-secondary);
+}
+
+/* --- Library detail screen (§13 Movie / TV Show Detail) --- */
+.detail {
+  min-height: 100vh;
+  padding: 6.25rem var(--safe-x, 4.167rem) var(--safe-y, 3.333rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.667rem;
+  background: var(--color-bg, #08080e);
+}
+.detail__back {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.833rem;
+  cursor: pointer;
+  padding: 0;
+}
+.detail__body,
+.detail__show-head {
+  display: flex;
+  gap: 2.083rem;
+  align-items: flex-start;
+}
+.detail__poster {
+  flex: 0 0 auto;
+  width: 14.583rem; /* 280px */
+  aspect-ratio: 280 / 420;
+  border-radius: 12px;
+  background: var(--color-tile-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.detail__poster--show {
+  width: 13.542rem; /* 260px */
+  aspect-ratio: 260 / 390;
+}
+.detail__poster-initial {
+  font-size: 4.167rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.detail__poster-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.detail__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.detail__title {
+  font-size: 2.917rem; /* ~56px */
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.detail__submeta {
+  font-size: 0.885rem;
+  color: var(--color-text-secondary);
+}
+.detail__cta-row {
+  display: flex;
+  gap: 1.042rem;
+}
+.detail__play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 1.042rem 2.5rem;
+  border-radius: 10px;
+  background: var(--color-text-accent);
+  color: #08080e;
+  font-weight: 700;
+  font-size: 1.042rem;
+  border: var(--focus-ring-width) solid transparent;
+}
+.detail__play.is-focused {
+  border-color: var(--color-text-accent);
+  box-shadow: var(--focus-ring-glow);
+}
+.detail__seasons {
+  display: flex;
+  gap: 0.208rem;
+  flex-wrap: wrap;
+}
+.detail__season-tab {
+  padding: 0.625rem 1.458rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: var(--focus-ring-width) solid transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.833rem;
+}
+.detail__season-tab.is-focused {
+  background: var(--color-text-accent);
+  color: #08080e;
+  font-weight: 700;
+  border-color: var(--color-text-accent);
+  box-shadow: var(--focus-ring-glow);
+}
+.detail__episodes {
+  display: flex;
+  gap: 0.833rem;
+  flex-wrap: wrap;
+}
+.detail__episode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.521rem;
+  width: 12.5rem; /* 240px */
+}
+.detail__episode-thumb {
+  width: 12.5rem;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: var(--color-tile-bg);
+  border: var(--focus-ring-width) solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.detail__episode.is-focused .detail__episode-thumb {
+  border-color: var(--color-text-accent);
+  box-shadow: var(--focus-ring-glow);
+}
+.detail__episode-num {
+  font-size: 1.667rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.detail__episode-title {
+  font-size: 0.729rem;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail__episode.is-focused .detail__episode-title {
+  color: var(--color-text-accent);
+  font-weight: 700;
+}

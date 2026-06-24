@@ -1,0 +1,106 @@
+/* Native player (design-system §12). Full-bleed video with a 10-foot OSD. */
+.player {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.player__video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.player--loading {
+  color: var(--color-text-muted);
+  font-size: 1.25rem;
+}
+
+/* Resume prompt overlay. */
+.player--prompt {
+  flex-direction: column;
+  gap: 2.083rem;
+  background: var(--color-bg, #08080e);
+}
+.player__title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.player__resume-row {
+  display: flex;
+  gap: 1.25rem;
+}
+.player__resume-btn {
+  padding: 1.042rem 2.5rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+  font-size: 1.042rem;
+  font-weight: 600;
+  border: var(--focus-ring-width) solid transparent;
+}
+.player__resume-btn.is-focused {
+  background: var(--color-text-accent);
+  color: #08080e;
+  font-weight: 700;
+  border-color: var(--color-text-accent);
+  box-shadow: var(--focus-ring-glow);
+}
+
+/* On-screen display: title, progress, time + state. */
+.player__osd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2.083rem var(--safe-x, 4.167rem) 2.083rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.833rem;
+  transition: opacity 300ms ease;
+}
+/* Faded out after a period of inactivity during playback (revealed on input). */
+.player__osd--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.player__osd-title {
+  font-size: 1.458rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.player__progress {
+  position: relative;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+.player__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--color-text-accent);
+}
+.player__osd-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.833rem;
+  color: var(--color-text-secondary);
+  font-size: 0.833rem;
+}
+.player__osd-state {
+  font-size: 1.042rem;
+  color: var(--color-text-primary);
+}
+.player__osd-subs {
+  margin-left: auto;
+  padding: 0.208rem 0.625rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 0.729rem;
+}

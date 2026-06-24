@@ -1,0 +1,11 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: peacock
+    name: Peacock
+    icon: bundled:peacock # shipped logo; override with a config/ file or http(s) URL
+    launch_url: https://www.peacocktv.com/
+    group: Streaming
+    order: 70
+    notes: >-
+      US-only service. Widevine-protected; L3 may cap resolution. Free and
+      ad-tier plans show ads inside Peacock's player (PRD §18).

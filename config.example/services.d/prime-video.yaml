@@ -1,0 +1,12 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: prime-video
+    name: Prime Video
+    icon: bundled:prime-video # shipped logo; override with a config/ file or http(s) URL
+    launch_url: https://www.primevideo.com/
+    group: Streaming
+    order: 50
+    notes: >-
+      Widevine-protected. Some regions redirect to amazon.com storefront URLs;
+      if primevideo.com bounces, use your regional Prime Video web URL. L3 may
+      cap resolution. Sign-in flow can require a one-time desktop-class UA.

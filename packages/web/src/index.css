@@ -1,0 +1,117 @@
+/*
+ * OpenHearth global theme — implements designs/design-system.md §2 (responsive
+ * scaling), §3 (safe area), §4 (color), §5 (typography), §9 (focus).
+ *
+ * Responsive scaling rule: root font-size is 1vw, so 1rem = 1% of viewport
+ * width. Everything sizing-related is in rem and scales 720p→4K with no media
+ * queries. Border widths, radii, and shadow blur stay in px.
+ */
+:root {
+  font-size: 1vw; /* 1rem = 1% of viewport width */
+
+  /* Backgrounds */
+  --color-bg-primary: #08080e;
+  --color-bg-surface: #0f0f1a;
+  --color-bg-elevated: #181826;
+  --color-bg-overlay: rgba(0, 0, 0, 0.8);
+  --color-tile-bg: #1c1c28;
+  /* Service tiles use a slightly lighter card so dark service logos (e.g. Apple
+     TV) read better than on the near-black tile-bg (issue #110). Library
+     placeholder tiles keep --color-tile-bg. */
+  --color-service-tile-bg: #2e2e3c;
+
+  /* Accents */
+  --color-accent-amber: #f5a623;
+  --color-accent-ember: #d4622c;
+  --color-accent-amber-dim: rgba(245, 166, 35, 0.267);
+  /* Brand gradient (logo mark, primary buttons, progress fills) — §4. */
+  --brand-gradient: linear-gradient(180deg, #f5a623 0%, #d4622c 100%);
+  /* Subtle warm ambient glow behind the home screen. */
+  --color-ambient-glow: rgba(245, 166, 35, 0.08);
+
+  /* Text */
+  --color-text-primary: #f0eee8;
+  --color-text-secondary: #9896a0;
+  --color-text-muted: #5a5864;
+  --color-text-accent: #f5a623;
+
+  /* Semantic */
+  --color-focus-ring: #f5a623;
+  --color-separator: rgba(255, 255, 255, 0.094);
+  --color-error: #e04c2a;
+  --color-warning: #f5a623;
+  --color-success: #4caf7a;
+
+  /* Safe area — derived from 80px / 54px at the 1080p baseline */
+  --safe-h: 4.167rem;
+  --safe-v: 2.813rem;
+
+  /* Border radius — kept in px */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* Typography */
+  --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Focus ring — kept in px */
+  --focus-ring-width: 3px;
+  --focus-ring-color: #f5a623;
+  --focus-ring-glow: 0 0 0 8px rgba(245, 166, 35, 0.4), 0 0 20px rgba(245, 166, 35, 0.4);
+}
+
+/* Light theme override hook (configurable via ui.theme). Dark is the default. */
+:root[data-theme='light'] {
+  --color-bg-primary: #f4f2ec;
+  --color-bg-surface: #eceae2;
+  --color-bg-elevated: #ffffff;
+  --color-tile-bg: #e2dfd5;
+  --color-service-tile-bg: #ecebe4;
+  --color-text-primary: #1a1820;
+  --color-text-secondary: #4a4852;
+  --color-text-muted: #7a7884;
+  --color-separator: rgba(0, 0, 0, 0.094);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  /*
+   * Hide the OS cursor by default: this is a 10-foot, keyboard/remote-driven UI.
+   * When the user moves a mouse (e.g. testing on a desktop), `cursorVisibility.ts`
+   * adds `.cursor-visible` to the body so the cursor reappears and elements can be
+   * clicked. Keyboard input hides it again.
+   */
+  cursor: none;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+body.cursor-visible,
+body.cursor-visible * {
+  cursor: auto;
+}
+
+body.cursor-visible .tile,
+body.cursor-visible button,
+body.cursor-visible a,
+body.cursor-visible [role='button'],
+body.cursor-visible [role='gridcell'],
+body.cursor-visible [role='tab'],
+body.cursor-visible [role='listitem'],
+body.cursor-visible .player__progress {
+  cursor: pointer;
+}

@@ -1,0 +1,12 @@
+# Drop-in service definition (community catalog). Files in services.d/ are
+# merged on top of services.yaml — one or more services per file.
+services:
+  - id: disney-plus
+    name: Disney+
+    icon: bundled:disney-plus # shipped logo; override with a config/ file or http(s) URL
+    launch_url: https://www.disneyplus.com/
+    group: Streaming
+    order: 30
+    notes: >-
+      Widevine-protected. L3 in a generic Chromium is commonly capped at 720p.
+      The web player navigates well with D-pad; no UA override needed in testing.
