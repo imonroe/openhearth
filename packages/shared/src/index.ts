@@ -9,3 +9,6 @@
 
 /** Marketing/display name of the project. */
 export const PROJECT_NAME = 'OpenHearth';
+
+export * from './protocol/index.js';
+export * from './config/index.js';
