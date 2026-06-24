@@ -101,20 +101,45 @@
   /* Rows that overflow the viewport scroll horizontally; focus drives the
      scroll position (see useScrollIntoViewOnFocus) — no native scrollbar
      (issue #113). overflow-x:auto forces overflow-y to a non-visible value, so
-     reserve vertical room for the focus-ring glow with padding and cancel it
-     again with a negative margin, keeping row spacing unchanged. */
+     reserve room for the focus-ring glow with padding on every side and cancel
+     it again with a matching negative margin, keeping the row's footprint and
+     alignment unchanged. The inline padding doubles as breathing room so the
+     first/last tile (and its glow) never sits flush against the screen edge. */
   overflow-x: auto;
   overflow-y: hidden;
-  padding-block: 1.5rem; /* room for the ~28px focus glow above/below a tile */
-  margin-block: -1.5rem; /* neutralise the padding so layout is unchanged */
-  scroll-padding-inline: 1.667rem; /* keep the focused tile clear of the edges */
+  padding: 1.5rem; /* glow + edge breathing room on all four sides */
+  margin: -1.5rem; /* neutralise the padding so layout is unchanged */
+  scroll-padding-inline: 1.5rem; /* keep the focused tile clear of the edges */
   scroll-behavior: smooth;
   /* Hide the scrollbar across engines — focus-driven, 10-foot UI. */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* legacy Edge */
-  /* Fade-hint that the strip continues off the right edge. */
-  -webkit-mask: linear-gradient(to right, black 88%, transparent 100%);
-  mask: linear-gradient(to right, black 88%, transparent 100%);
+  /* Edge fade-hint that the strip continues off-screen. Each side fades only
+     when there is actually more to scroll that way (RowStrip sets the
+     data-overflow-* flags), so a focused tile resting at either end is never
+     dimmed. Width 0 (the default) collapses to no fade. */
+  --fade-start: 0px;
+  --fade-end: 0px;
+  -webkit-mask: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-start),
+    black calc(100% - var(--fade-end)),
+    transparent 100%
+  );
+  mask: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-start),
+    black calc(100% - var(--fade-end)),
+    transparent 100%
+  );
+}
+.row__strip[data-overflow-start='true'] {
+  --fade-start: 2.5rem;
+}
+.row__strip[data-overflow-end='true'] {
+  --fade-end: 2.5rem;
 }
 .row__strip::-webkit-scrollbar {
   width: 0;

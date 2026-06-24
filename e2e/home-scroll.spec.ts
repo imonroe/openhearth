@@ -29,6 +29,11 @@ test.describe('horizontal row scrolling', () => {
     await expect(page.locator('.tile.tile--service').first()).toHaveClass(/is-focused/);
     expect(await strip.evaluate((el) => el.scrollLeft)).toBe(0);
 
+    // At the start there's nothing off the left edge (no left fade) but there is
+    // off the right — the edge-fade only marks a side that can actually scroll.
+    await expect(strip).toHaveAttribute('data-overflow-start', 'false');
+    await expect(strip).toHaveAttribute('data-overflow-end', 'true');
+
     // Walk focus to the last tile; the strip must end up scrolled right.
     const tiles = page.locator('.tile.tile--service');
     const count = await tiles.count();
@@ -56,6 +61,11 @@ test.describe('horizontal row scrolling', () => {
         { timeout: 5_000 },
       )
       .toBe(true);
+
+    // At the end the right fade is gone (nothing more to scroll to), so a
+    // focused last tile is never dimmed; the left side now fades instead.
+    await expect(strip).toHaveAttribute('data-overflow-end', 'false');
+    await expect(strip).toHaveAttribute('data-overflow-start', 'true');
 
     // Invariant: still exactly one focused element (design-system §9 rule 1).
     await expect(page.locator('.is-focused')).toHaveCount(1);
