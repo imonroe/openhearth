@@ -1,8 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ConfigResponse } from './api';
-import type { ServiceCatalog } from '@openhearth/shared';
+import type { LibraryItem, LibraryListResponse, ServiceCatalog } from '@openhearth/shared';
 import { App } from './App';
+
+function libItem(over: Partial<LibraryItem>): LibraryItem {
+  return {
+    id: over.id ?? 'i',
+    source_id: 'movies',
+    kind: 'movie',
+    path: '/media/movies/x.mkv',
+    title: 'X',
+    mtime: 1,
+    indexed_at: 1,
+    ...over,
+  };
+}
+
+function mockLibrary(): LibraryListResponse {
+  const items = [
+    libItem({ id: 'm1', title: 'Arrival', year: 2016 }),
+    libItem({ id: 'm2', title: 'Dune', year: 2021 }),
+    libItem({ id: 'e1', kind: 'episode', title: 'The Wire', season: 1, episode: 1 }),
+    libItem({ id: 'e2', kind: 'episode', title: 'The Wire', season: 1, episode: 2 }),
+    libItem({ id: 'e3', kind: 'episode', title: 'The Wire', season: 2, episode: 1 }),
+  ];
+  return { items, total: items.length, limit: 500, offset: 0 };
+}
 
 function mockConfig(): ConfigResponse {
   return {
@@ -52,7 +76,11 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
-      const body = url.includes('/api/v1/services') ? mockCatalog() : mockConfig();
+      const body = url.includes('/api/v1/services')
+        ? mockCatalog()
+        : url.includes('/api/v1/library')
+          ? mockLibrary()
+          : mockConfig();
       return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
     }),
   );
@@ -167,6 +195,60 @@ describe('App shell', () => {
     await screen.findByText('Netflix');
     fireEvent.keyDown(window, { key: ' ' }); // default play_pause binding
     expect(dispatch).toHaveBeenCalledWith('play_pause', undefined);
+  });
+
+  it('browses the library row with real tiles (movies + aggregated show)', async () => {
+    render(<App />);
+    await screen.findByText('Netflix');
+    // Movies and the aggregated show render as library tiles (FR-C2).
+    expect(await screen.findByText('Arrival')).toBeTruthy();
+    expect(screen.getByText('Dune')).toBeTruthy();
+    expect(screen.getByText('The Wire')).toBeTruthy(); // episodes grouped into one show
+  });
+
+  it('opens a movie detail and starts playback via play_item (FR-C5 entry)', async () => {
+    const dispatch = vi.fn();
+    render(<App dispatch={dispatch} />);
+    await screen.findByText('Netflix');
+
+    // Down into the library row (col 0 = "Arrival"), then select to open detail.
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await screen.findByText('Play');
+
+    // Play is focused on entry; selecting it dispatches play_item for the movie.
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(dispatch).toHaveBeenCalledWith('play_item', { id: 'm1' });
+  });
+
+  it('navigates a TV show detail by season and plays an episode', async () => {
+    const dispatch = vi.fn();
+    render(<App dispatch={dispatch} />);
+    await screen.findByText('Netflix');
+
+    // Down to library, right to the "The Wire" show tile (Arrival, Dune, Wire).
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await screen.findByText('Season 1');
+    expect(screen.getByText('Season 2')).toBeTruthy();
+
+    // Move to Season 2 (live), drop into its episode list, and play it.
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // focus Season 2 tab
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // into episodes of season 2
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(dispatch).toHaveBeenCalledWith('play_item', { id: 'e3' });
+  });
+
+  it('returns to home from a detail screen on Back', async () => {
+    render(<App />);
+    await screen.findByText('Netflix');
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await screen.findByText('Play'); // movie detail
+    fireEvent.keyDown(window, { key: 'Escape' }); // reserved back
+    await screen.findByText('Netflix'); // home again
   });
 
   it('honors a remapped navigation key from config (FR-R4)', async () => {

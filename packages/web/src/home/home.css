@@ -195,3 +195,162 @@
 .header__action.is-focused {
   color: var(--color-text-accent);
 }
+
+/* Library tile info block (title + year/seasons sub-line, §11). */
+.tile__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.104rem; /* 2px */
+  width: 7.708rem; /* match the focused footprint */
+  align-items: center;
+  text-align: center;
+}
+.tile__sub {
+  font-size: 0.573rem; /* 11px */
+  color: var(--color-text-muted);
+}
+.is-focused .tile__sub {
+  color: var(--color-text-secondary);
+}
+
+/* --- Library detail screen (§13 Movie / TV Show Detail) --- */
+.detail {
+  min-height: 100vh;
+  padding: 6.25rem var(--safe-x, 4.167rem) var(--safe-y, 3.333rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.667rem;
+  background: var(--color-bg, #08080e);
+}
+.detail__back {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.833rem;
+  cursor: pointer;
+  padding: 0;
+}
+.detail__body,
+.detail__show-head {
+  display: flex;
+  gap: 2.083rem;
+  align-items: flex-start;
+}
+.detail__poster {
+  flex: 0 0 auto;
+  width: 14.583rem; /* 280px */
+  aspect-ratio: 280 / 420;
+  border-radius: 12px;
+  background: var(--color-tile-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.detail__poster--show {
+  width: 13.542rem; /* 260px */
+  aspect-ratio: 260 / 390;
+}
+.detail__poster-initial {
+  font-size: 4.167rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.detail__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.detail__title {
+  font-size: 2.917rem; /* ~56px */
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.detail__submeta {
+  font-size: 0.885rem;
+  color: var(--color-text-secondary);
+}
+.detail__cta-row {
+  display: flex;
+  gap: 1.042rem;
+}
+.detail__play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 1.042rem 2.5rem;
+  border-radius: 10px;
+  background: var(--color-text-accent);
+  color: #08080e;
+  font-weight: 700;
+  font-size: 1.042rem;
+  border: var(--focus-ring-width) solid transparent;
+}
+.detail__play.is-focused {
+  border-color: var(--color-text-accent);
+  box-shadow: var(--focus-ring-glow);
+}
+.detail__seasons {
+  display: flex;
+  gap: 0.208rem;
+  flex-wrap: wrap;
+}
+.detail__season-tab {
+  padding: 0.625rem 1.458rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: var(--focus-ring-width) solid transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.833rem;
+}
+.detail__season-tab.is-focused {
+  background: var(--color-text-accent);
+  color: #08080e;
+  font-weight: 700;
+  border-color: var(--color-text-accent);
+  box-shadow: var(--focus-ring-glow);
+}
+.detail__episodes {
+  display: flex;
+  gap: 0.833rem;
+  flex-wrap: wrap;
+}
+.detail__episode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.521rem;
+  width: 12.5rem; /* 240px */
+}
+.detail__episode-thumb {
+  width: 12.5rem;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: var(--color-tile-bg);
+  border: var(--focus-ring-width) solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.detail__episode.is-focused .detail__episode-thumb {
+  border-color: var(--color-text-accent);
+  box-shadow: var(--focus-ring-glow);
+}
+.detail__episode-num {
+  font-size: 1.667rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.detail__episode-title {
+  font-size: 0.729rem;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail__episode.is-focused .detail__episode-title {
+  color: var(--color-text-accent);
+  font-weight: 700;
+}

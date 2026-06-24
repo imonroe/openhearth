@@ -47,6 +47,9 @@ export interface FocusProviderProps {
   /** Invoked for any non-focus action (play_pause, stop, …) — routed to the
    *  control path, exactly like a phone remote would. */
   onAction?: (action: ActionName, params?: Record<string, unknown>) => void;
+  /** Invoked whenever the focused position changes (e.g. to derive live state
+   *  like the active TV season from a focused tab). */
+  onFocusChange?: (position: FocusPosition) => void;
   children: ReactNode;
 }
 
@@ -60,6 +63,7 @@ export function FocusProvider({
   onHome,
   onBack,
   onAction,
+  onFocusChange,
   children,
 }: FocusProviderProps): ReactNode {
   // The `{ 0, 0 }` last-resort fallback is only reached if the grid has no
@@ -144,6 +148,14 @@ export function FocusProvider({
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
+
+  // Notify listeners when focus moves (e.g. to derive the active TV season from
+  // the focused season tab). Kept in a ref so we don't re-bind on every change.
+  const onFocusChangeRef = useRef(onFocusChange);
+  onFocusChangeRef.current = onFocusChange;
+  useEffect(() => {
+    onFocusChangeRef.current?.(focused);
+  }, [focused]);
 
   const isFocused = useCallback(
     (row: number, col: number): boolean => focused.row === row && focused.col === col,
