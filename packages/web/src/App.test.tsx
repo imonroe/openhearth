@@ -208,9 +208,12 @@ describe('App shell', () => {
 
   // Wait until focus has actually landed on a library tile (optionally one whose
   // label matches), so we don't press Enter before the focus move has applied.
+  // The ArrowDown is issued inside the retry loop: if the first press lands before
+  // the focus engine's keydown listener has attached it's a no-op, and pressing
+  // again is harmless (ArrowDown clamps on the last row, preserving the column).
   const focusLibraryTile = async (container: HTMLElement, label?: string): Promise<void> => {
-    fireEvent.keyDown(window, { key: 'ArrowDown' }); // services row -> library row
     await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'ArrowDown' }); // services row -> library row
       const focused = container.querySelector('.tile--library.is-focused');
       expect(focused).toBeTruthy();
       if (label) expect(focused!.textContent).toContain(label);
