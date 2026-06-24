@@ -15,6 +15,11 @@ set -euo pipefail
 # here — but note the bundled UI doesn't yet thread the token through media
 # requests, so for a single-box kiosk prefer binding the server to 127.0.0.1
 # instead (see docs/config-reference.md § Security).
+#
+# IMPORTANT: if you change this away from http://localhost:8080, you MUST also set
+# HOME_URL in home-guard/content.js to the same origin — otherwise the Home/Back
+# guarantee breaks (the guard would treat the OpenHearth page itself as a service
+# and try to "return" to the wrong origin). See home-guard/README.md step 1.
 OPENHEARTH_URL="${OPENHEARTH_URL:-http://localhost:8080}"
 
 # A dedicated profile keeps the kiosk's extension + settings isolated and
@@ -42,8 +47,10 @@ fi
 
 mkdir -p "$PROFILE_DIR"
 
-# Hide the mouse pointer when idle, if `unclutter` is installed (optional).
+# Hide the mouse pointer when idle, if `unclutter` is installed (optional). Kill a
+# previous instance first so a restart (systemd Restart=always) doesn't pile them up.
 if command -v unclutter >/dev/null 2>&1; then
+  pkill -x unclutter >/dev/null 2>&1 || true
   unclutter -idle 0.5 -root &
 fi
 

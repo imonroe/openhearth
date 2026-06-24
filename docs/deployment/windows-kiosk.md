@@ -26,6 +26,12 @@ persistent profile. Edit the paths at the top of the file:
 - `BROWSER` — path to `chrome.exe` (or `msedge.exe`).
 - `HOME_GUARD_DIR` — defaults to the `home-guard` folder next to the script.
 
+> **If you change `OPENHEARTH_URL`** away from `http://localhost:8080`, you must
+> also set `HOME_URL` in [`home-guard\content.js`](../../scripts/kiosk/home-guard/content.js)
+> to the same origin, or the Home/Back guarantee breaks (the extension is
+> hardcoded to the home origin). See the
+> [home-guard README](../../scripts/kiosk/home-guard/README.md) step 1.
+
 Double-click the `.bat` to test: the browser should fill the screen with the
 OpenHearth home and no address bar.
 
@@ -74,7 +80,10 @@ key returns to OpenHearth — that proves the Home-guard extension loaded.
 - **A console window flashes:** set the Startup shortcut to *Run: Minimized*
   (Option A), or run via Task Scheduler (Option B).
 - **Home doesn't return from a service:** the extension didn't load — verify
-  `HOME_GUARD_DIR` resolves to `scripts\kiosk\home-guard`. See the
+  `HOME_GUARD_DIR` resolves to `scripts\kiosk\home-guard`, and that `HOME_URL` in
+  `content.js` matches your `OPENHEARTH_URL`. On a managed/enterprise machine,
+  check that extension-install policy isn't blocking the unpacked load (you may
+  need to pair with `--disable-extensions-except=<home-guard dir>`). See the
   [home-guard README](../../scripts/kiosk/home-guard/README.md).
 - **Can't reach the server:** confirm Docker Desktop is running and the port is
   published; `http://localhost:8080/api/v1/health` should return JSON.

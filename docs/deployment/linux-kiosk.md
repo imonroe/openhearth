@@ -36,6 +36,13 @@ OPENHEARTH_URL=http://localhost:8080 scripts/kiosk/openhearth-kiosk.sh
 Environment overrides: `OPENHEARTH_URL`, `CHROMIUM_BIN`, `OPENHEARTH_PROFILE_DIR`,
 `OPENHEARTH_HOME_GUARD_DIR`.
 
+> **If you change `OPENHEARTH_URL`** away from `http://localhost:8080`, you must
+> also set `HOME_URL` in [`home-guard/content.js`](../../scripts/kiosk/home-guard/content.js)
+> to the same origin. The extension is hardcoded to the home origin; if it
+> doesn't match, the Home/Back guarantee breaks (Home wouldn't return, and the
+> guard would treat the OpenHearth page itself as a service). See the
+> [home-guard README](../../scripts/kiosk/home-guard/README.md) step 1.
+
 **Cursor hiding.** Chromium's kiosk mode removes all browser chrome but does not
 hide the mouse pointer. The launch script starts `unclutter -idle 0.5` when it's
 installed, which hides the pointer after half a second of inactivity. (With a
@@ -99,8 +106,11 @@ proves the Home-guard extension loaded.
 - **Blank/again-and-again restart:** check `journalctl --user -u openhearth-kiosk`
   (Option A) — usually a wrong `ExecStart` path or `DISPLAY` not `:0`.
 - **Home doesn't return from a service:** the extension didn't load — verify the
-  `--load-extension` path resolves to `scripts/kiosk/home-guard`. See the
-  [home-guard README](../../scripts/kiosk/home-guard/README.md).
+  `--load-extension` path resolves to `scripts/kiosk/home-guard`, and that
+  `HOME_URL` in `content.js` matches your `OPENHEARTH_URL`. On a managed/enterprise
+  machine, check that extension-install policy isn't blocking the unpacked load
+  (you may need to pair with `--disable-extensions-except=<home-guard dir>`). See
+  the [home-guard README](../../scripts/kiosk/home-guard/README.md).
 - **GPU/transcoding:** see [gpu-transcoding.md](gpu-transcoding.md) for VAAPI/QSV.
 - **Auth enabled?** If you set `server.auth.token`, the bundled UI doesn't yet
   attach it to its own requests; bind the server to `127.0.0.1` for a single-box

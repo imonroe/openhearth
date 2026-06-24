@@ -16,6 +16,10 @@ REM Server URL. If you enabled server.auth.token, append ?token=YOURTOKEN — bu
 REM the bundled UI doesn't yet thread the token through media requests, so for a
 REM single-box kiosk prefer binding the server to 127.0.0.1 (see
 REM docs\config-reference.md, Security section).
+REM
+REM IMPORTANT: if you change this away from http://localhost:8080, you MUST also
+REM set HOME_URL in home-guard\content.js to the same origin, or the Home/Back
+REM guarantee breaks. See home-guard\README.md step 1.
 set "OPENHEARTH_URL=http://localhost:8080"
 
 REM Path to Chrome (adjust if installed elsewhere, or point at msedge.exe).
