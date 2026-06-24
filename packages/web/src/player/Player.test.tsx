@@ -48,7 +48,10 @@ beforeEach(() => {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(subsValue) });
       }
       if (url.includes('/playback')) {
-        return Promise.resolve({ ok: playbackValue !== null, json: () => Promise.resolve(playbackValue) });
+        return Promise.resolve({
+          ok: playbackValue !== null,
+          json: () => Promise.resolve(playbackValue),
+        });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     }),
