@@ -14,7 +14,7 @@
 // focus is inside a service's iframe still returns the whole kiosk to OpenHearth.
 //
 // Edit HOME_URL below if your kiosk serves OpenHearth somewhere other than
-// http://localhost:8080. HOME_KEYS mirrors packages/web/src/reserved.ts.
+// http://localhost:8080. RETURN_KEYS mirrors packages/web/src/reserved.ts.
 (() => {
   const HOME_URL = 'http://localhost:8080/';
   // `home` always returns to OpenHearth. `BrowserBack` is the cross-service back

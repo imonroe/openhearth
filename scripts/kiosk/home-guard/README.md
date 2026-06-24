@@ -65,6 +65,6 @@ here so it can feed back into the catalog (`notes:` field) and these docs:
 
 ## Reserved keys
 
-`HOME_KEYS` / `BACK_KEYS` in `content.js` mirror the canonical list in
+`RETURN_KEYS` in `content.js` mirrors the canonical list in
 `packages/web/src/reserved.ts`. Keep them in sync. The physical "Home" button on
 a typical remote/keyboard emits `Home`; some emit `BrowserHome`/`BrowserBack`.
