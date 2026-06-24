@@ -8,6 +8,7 @@ import { useState, type ReactNode } from 'react';
 import type { ServiceTile } from '@openhearth/shared';
 import { serviceIconUrl } from '../api';
 import { useFocus } from '../focus/FocusProvider';
+import { useScrollIntoViewOnFocus } from './useScrollIntoViewOnFocus';
 
 export function ServiceTileView({
   tile,
@@ -20,6 +21,7 @@ export function ServiceTileView({
 }): ReactNode {
   const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(row, col);
+  const ref = useScrollIntoViewOnFocus<HTMLDivElement>(focused);
   const [failed, setFailed] = useState(false);
 
   const src = failed ? null : serviceIconUrl(tile.id, tile.icon);
@@ -29,6 +31,7 @@ export function ServiceTileView({
 
   return (
     <div
+      ref={ref}
       className={className}
       role="gridcell"
       aria-selected={focused}

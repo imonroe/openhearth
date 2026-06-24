@@ -13,3 +13,105 @@ services:
     launch_url: http://localhost:8090/?service=stubtube
     group: Streaming
     order: 20
+
+  # Extra tiles so the Streaming row overflows the viewport — exercises the
+  # horizontal row scrolling (issue #113, home-scroll.spec.ts). They all point
+  # at the same stub service; only their count and identity matter here.
+  - {
+      id: tile03,
+      name: Tile03,
+      launch_url: 'http://localhost:8090/?s=3',
+      group: Streaming,
+      order: 30,
+    }
+  - {
+      id: tile04,
+      name: Tile04,
+      launch_url: 'http://localhost:8090/?s=4',
+      group: Streaming,
+      order: 40,
+    }
+  - {
+      id: tile05,
+      name: Tile05,
+      launch_url: 'http://localhost:8090/?s=5',
+      group: Streaming,
+      order: 50,
+    }
+  - {
+      id: tile06,
+      name: Tile06,
+      launch_url: 'http://localhost:8090/?s=6',
+      group: Streaming,
+      order: 60,
+    }
+  - {
+      id: tile07,
+      name: Tile07,
+      launch_url: 'http://localhost:8090/?s=7',
+      group: Streaming,
+      order: 70,
+    }
+  - {
+      id: tile08,
+      name: Tile08,
+      launch_url: 'http://localhost:8090/?s=8',
+      group: Streaming,
+      order: 80,
+    }
+  - {
+      id: tile09,
+      name: Tile09,
+      launch_url: 'http://localhost:8090/?s=9',
+      group: Streaming,
+      order: 90,
+    }
+  - {
+      id: tile10,
+      name: Tile10,
+      launch_url: 'http://localhost:8090/?s=10',
+      group: Streaming,
+      order: 100,
+    }
+  - {
+      id: tile11,
+      name: Tile11,
+      launch_url: 'http://localhost:8090/?s=11',
+      group: Streaming,
+      order: 110,
+    }
+  - {
+      id: tile12,
+      name: Tile12,
+      launch_url: 'http://localhost:8090/?s=12',
+      group: Streaming,
+      order: 120,
+    }
+  - {
+      id: tile13,
+      name: Tile13,
+      launch_url: 'http://localhost:8090/?s=13',
+      group: Streaming,
+      order: 130,
+    }
+  - {
+      id: tile14,
+      name: Tile14,
+      launch_url: 'http://localhost:8090/?s=14',
+      group: Streaming,
+      order: 140,
+    }
+  - {
+      id: tile15,
+      name: Tile15,
+      launch_url: 'http://localhost:8090/?s=15',
+      group: Streaming,
+      order: 150,
+    }
+  - {
+      id: tile16,
+      name: Tile16,
+      launch_url: 'http://localhost:8090/?s=16',
+      group: Streaming,
+      order: 160,
+    }
