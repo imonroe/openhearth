@@ -1,0 +1,13 @@
+{
+  "name": "@openhearth/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsc --build --watch"
+  },
+  "dependencies": {
+    "@openhearth/shared": "workspace:*"
+  }
+}
