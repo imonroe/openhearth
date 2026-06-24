@@ -30,6 +30,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export function generateMediaFixture() {
   const mediaDir = path.join(here, 'fixtures/media');
   const out = path.join(mediaDir, 'sample.webm');
+  // Remove a legacy sample.mp4 left by the previous (H.264) generator: this dir
+  // is gitignored and not wiped between runs, and the indexer would otherwise
+  // serve the undecodable MP4 to the spec (it sorts alongside the WebM under the
+  // same "sample" title). CI is a clean checkout, so this only matters locally.
+  const legacy = path.join(mediaDir, 'sample.mp4');
+  if (fs.existsSync(legacy)) fs.rmSync(legacy);
   if (fs.existsSync(out)) return;
   if (spawnSync('ffmpeg', ['-version']).status !== 0) {
     console.warn('e2e: ffmpeg not found — player media fixture skipped (player spec will skip)');
