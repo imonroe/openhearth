@@ -1,0 +1,11 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: max
+    name: HBO Max
+    launch_url: https://play.max.com/
+    group: Streaming
+    order: 40
+    notes: >-
+      Branded "Max" (2023) then HBO Max again (2025); the web player still lives
+      at play.max.com. Widevine-protected; L3 in a generic Chromium is commonly
+      capped at 720p. Rename the tile to whatever your region shows.

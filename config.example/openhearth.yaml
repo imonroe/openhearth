@@ -11,7 +11,11 @@ ui:
   title: OpenHearth
   theme: dark # dark | light
   rows: # ordered layout of the home screen
+    # One services row per group used in the catalog (services.yaml +
+    # services.d/*). A tile only renders if its `group` has a row here.
     - { type: services, group: Streaming }
+    - { type: services, group: Live TV }
+    - { type: services, group: Music }
     - { type: library, source: movies }
     - { type: library, source: tv }
 

@@ -1,0 +1,13 @@
+# Drop-in service definition (community catalog).
+# A separate "Live TV" tile (the YouTube TV live-television service), distinct
+# from the youtube /tv leanback video tile in services.yaml.
+services:
+  - id: youtube-tv
+    name: YouTube TV
+    launch_url: https://tv.youtube.com/
+    group: Live TV
+    order: 10
+    notes: >-
+      US-only live-TV subscription (not the same as the free YouTube /tv tile).
+      Widevine-protected live streams; L3 may cap resolution. The web UI is
+      mouse-oriented — D-pad focus works but is less polished than leanback.

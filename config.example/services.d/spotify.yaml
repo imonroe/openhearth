@@ -5,3 +5,7 @@ services:
     launch_url: https://open.spotify.com/
     group: Music
     order: 10
+    notes: >-
+      Audio (Music) tile. The web player is mouse/keyboard oriented rather than
+      D-pad-first; tab/arrow focus works but is less TV-friendly than the video
+      services. No Widevine video-resolution caveats apply.
