@@ -36,6 +36,15 @@ describe('ControlService', () => {
     });
   });
 
+  it('does not broadcast a no-op command (unchanged state)', () => {
+    const svc = new ControlService();
+    const sub = { send: vi.fn() };
+    svc.subscribe(sub);
+    svc.dispatch(cmd('navigate', { direction: 'down' })); // focus is client-side -> no-op
+    svc.dispatch(cmd('select'));
+    expect(sub.send).not.toHaveBeenCalled();
+  });
+
   it('stops sending to a subscriber after it unsubscribes', () => {
     const svc = new ControlService();
     const sub = { send: vi.fn() };

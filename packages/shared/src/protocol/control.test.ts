@@ -52,6 +52,20 @@ describe('applyCommand', () => {
     expect(applyCommand(playing, cmd('seek', {})).playback.position_s).toBe(0);
   });
 
+  it('rejects non-finite numeric params so the snapshot stays schema-valid', () => {
+    const playing = applyCommand(INITIAL_STATE, cmd('play_item', { item_id: 'x' }));
+    // Infinity / NaN must not land in the snapshot.
+    expect(applyCommand(playing, cmd('seek', { position_s: Infinity })).playback.position_s).toBe(
+      0,
+    );
+    expect(applyCommand(playing, cmd('seek', { position_s: NaN })).playback.position_s).toBe(0);
+    expect(
+      Number.isFinite(applyCommand(INITIAL_STATE, cmd('set_volume', { level: Infinity })).volume),
+    ).toBe(true);
+    // These are no-ops, so they return the same reference.
+    expect(applyCommand(playing, cmd('seek', { position_s: Infinity }))).toBe(playing);
+  });
+
   it('stop clears playback', () => {
     const playing = applyCommand(INITIAL_STATE, cmd('play_item', { item_id: 'x' }));
     expect(applyCommand(playing, cmd('stop')).playback).toEqual({

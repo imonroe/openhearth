@@ -126,7 +126,9 @@ export const INITIAL_STATE: StateSnapshot = {
 
 const numParam = (command: CommandMessage, key: string): number | undefined => {
   const value = command.params?.[key];
-  return typeof value === 'number' ? value : undefined;
+  // Reject non-finite (Infinity/NaN) so the reducer can never park the snapshot
+  // in a shape that violates its own schema (z.number().int()).
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 };
 const strParam = (command: CommandMessage, key: string): string | undefined => {
   const value = command.params?.[key];

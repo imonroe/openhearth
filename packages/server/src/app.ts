@@ -160,7 +160,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // encapsulated plugin that awaits @fastify/websocket first, so the plugin's
   // onRoute hook is installed before the `{ websocket: true }` route is added.
   void app.register(async (instance) => {
-    await instance.register(fastifyWebsocket);
+    // Cap the frame size explicitly — control messages are tiny.
+    await instance.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
     instance.get('/api/v1/control/ws', { websocket: true }, (socket) => {
       const send = (event: EventMessage): void => socket.send(JSON.stringify(event));
       // Send the current state on connect so the client starts authoritative.

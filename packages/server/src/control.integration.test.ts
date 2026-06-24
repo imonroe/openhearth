@@ -183,6 +183,28 @@ describe('WebSocket control channel (FR-R5)', () => {
     b.close();
   });
 
+  it('propagates a REST command to connected WS subscribers (FR-R2/R5 parity)', async () => {
+    const c = new Client(wsUrl);
+    await c.open();
+    await c.waitFor((m) => m.event === 'state_changed'); // initial
+
+    // Fire the command over REST; the WS client must receive the broadcast.
+    const broadcast = c.waitFor((m) => m.state?.volume === 77);
+    const res = await fetch(`${baseUrl}/api/v1/control/command`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'command',
+        protocol_version: PROTOCOL_VERSION,
+        action: 'set_volume',
+        params: { level: 77 },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await broadcast).toMatchObject({ event: 'state_changed', state: { volume: 77 } });
+    c.close();
+  });
+
   it('replies with an error for a malformed command, without dropping the connection', async () => {
     const c = new Client(wsUrl);
     await c.open();

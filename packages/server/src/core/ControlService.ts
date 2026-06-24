@@ -31,12 +31,19 @@ export class ControlService {
   }
 
   /**
-   * Apply a validated command and broadcast the resulting state to all
-   * subscribers. Returns the new state. The command is assumed already schema-
-   * validated by the caller (route layer).
+   * Apply a validated command and, if the state actually changed, broadcast the
+   * new snapshot to all subscribers. Returns the (possibly unchanged) state. The
+   * command is assumed already schema-validated by the caller (route layer).
+   *
+   * `state_changed` is a full-snapshot replace (no delta). No-op commands
+   * (`navigate`/`select`, a rejected `seek`, `play_pause` while stopped) return
+   * the same reference from the reducer and are NOT broadcast — keeping the
+   * fan-out to genuine state changes.
    */
   dispatch(command: CommandMessage): StateSnapshot {
-    this.state = applyCommand(this.state, command);
+    const next = applyCommand(this.state, command);
+    if (next === this.state) return this.state; // no-op: nothing to broadcast
+    this.state = next;
     const event = makeStateEvent(this.state);
     for (const subscriber of this.subscribers) {
       try {
