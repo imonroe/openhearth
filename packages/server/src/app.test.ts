@@ -112,6 +112,50 @@ describe('GET /api/v1/services', () => {
   });
 });
 
+describe('GET /api/v1/services/:id/icon', () => {
+  it('serves a local icon file from config/', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: netflix, name: Netflix, launch_url: "https://www.netflix.com/", icon: netflix.png }\n',
+      'netflix.png': 'PNGDATA',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/netflix/icon' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('image/png');
+    expect(res.body).toBe('PNGDATA');
+  });
+
+  it('404s when the service has a remote (http) icon', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: yt, name: YT, launch_url: "https://www.youtube.com/", icon: "https://cdn/yt.png" }\n',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/yt/icon' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('404s for an unknown service or missing icon', async () => {
+    await makeApp('{}', {
+      'services.yaml': 'services:\n  - { id: noicon, name: NoIcon, launch_url: "https://x/" }\n',
+    });
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/services/noicon/icon' })).statusCode,
+    ).toBe(404);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/services/ghost/icon' })).statusCode,
+    ).toBe(404);
+  });
+
+  it('rejects path traversal in the icon filename', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: eviltile, name: Evil, launch_url: "https://x/", icon: "../../../../etc/passwd" }\n',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/eviltile/icon' });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('unknown routes', () => {
   beforeEach(() => makeApp('{}'));
 

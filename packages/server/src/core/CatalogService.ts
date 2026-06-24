@@ -28,6 +28,15 @@ export class CatalogService {
   getCatalog(): ServiceCatalog {
     return buildCatalog(this.config.services);
   }
+
+  /** Find a single tile by id in the current catalog, or undefined. */
+  findService(id: string): ServiceTile | undefined {
+    for (const group of this.getCatalog().groups) {
+      const tile = group.services.find((s) => s.id === id);
+      if (tile) return tile;
+    }
+    return undefined;
+  }
 }
 
 /** Parse + merge + order + group raw services data into a catalog. */

@@ -8,13 +8,22 @@
  * Logging is structured JSON to stdout via Fastify's built-in pino, at a
  * configurable level. There is no telemetry and no outbound calls (NFR-9).
  */
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, createReadStream } from 'node:fs';
+import { join, resolve, sep, extname } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { PROTOCOL_VERSION, redactConfig } from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
+
+const ICON_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
 
 export interface BuildAppOptions {
   /** Source of the effective config + validation errors. */
@@ -60,6 +69,28 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // --- API: service tile catalog (ordered + grouped) ---------------------
   app.get('/api/v1/services', async () => {
     return catalog.getCatalog();
+  });
+
+  // --- API: a service's local icon file (from config/) -------------------
+  // Remote (http/https) icons are loaded directly by the client; this only
+  // serves bare-filename icons that live alongside the YAML in config/.
+  app.get<{ Params: { id: string } }>('/api/v1/services/:id/icon', async (request, reply) => {
+    const tile = catalog.findService(request.params.id);
+    if (!tile?.icon || /^https?:\/\//i.test(tile.icon)) {
+      return reply.code(404).send({ status: 'not_found' });
+    }
+    const configDir = resolve(configService.configDir);
+    const target = resolve(configDir, tile.icon);
+    // Guard against path traversal out of config/.
+    if (target !== configDir && !target.startsWith(configDir + sep)) {
+      return reply.code(400).send({ status: 'bad_request' });
+    }
+    if (!existsSync(target)) {
+      return reply.code(404).send({ status: 'not_found' });
+    }
+    return reply
+      .type(ICON_TYPES[extname(target).toLowerCase()] ?? 'application/octet-stream')
+      .send(createReadStream(target));
   });
 
   // --- Static SPA (optional; placeholder until the real bundle lands) -----

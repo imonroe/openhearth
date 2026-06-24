@@ -1,25 +1,21 @@
 /**
- * Derive the home-screen layout from the validated config.
+ * Derive the home-screen layout from the validated config and the service
+ * catalog.
  *
- * Phase 1 renders the configured rows with placeholder (empty) tiles — the real
- * catalog and library content arrive with CatalogService (#23) and
- * LibraryService (#31). Row 0 is always the header (Search + Settings) so
- * Up from the top content row reaches it (design-system §9 navigation logic).
+ * Services rows are filled with real tiles from the catalog (grouped by
+ * `ui.rows[].group`); library rows remain placeholders until LibraryService
+ * lands (#31). Row 0 is always the header (Search + Settings) so Up from the top
+ * content row reaches it (design-system §9).
  */
-import type { Config } from '@openhearth/shared';
+import type { Config, ServiceCatalog, ServiceTile } from '@openhearth/shared';
 
-/** Placeholder tiles per content row until real content lands. */
+/** Placeholder tiles per library row until real content lands. */
 export const PLACEHOLDER_TILE_COUNT = 6;
 
-export type HomeRowKind = 'header' | 'services' | 'library';
-
-export interface HomeRow {
-  kind: HomeRowKind;
-  /** Row header label (uppercased by the view). Absent for the header row. */
-  label?: string;
-  /** Number of focusable items in the row. */
-  itemCount: number;
-}
+export type HomeRow =
+  | { kind: 'header'; itemCount: number }
+  | { kind: 'services'; label: string; tiles: ServiceTile[]; itemCount: number }
+  | { kind: 'library'; label: string; itemCount: number };
 
 export interface HomeModel {
   rows: HomeRow[];
@@ -27,16 +23,15 @@ export interface HomeModel {
 
 const HEADER_ROW: HomeRow = { kind: 'header', itemCount: 2 }; // Search, Settings
 
-export function buildHomeModel(config: Config): HomeModel {
+export function buildHomeModel(config: Config, catalog?: ServiceCatalog): HomeModel {
   const sourceLabels = new Map((config.library?.sources ?? []).map((s) => [s.id, s.label ?? s.id]));
+  const tilesByGroup = new Map((catalog?.groups ?? []).map((g) => [g.group, g.services]));
 
-  const contentRows: HomeRow[] = (config.ui?.rows ?? []).map((row) => {
+  const contentRows: HomeRow[] = (config.ui?.rows ?? []).map((row): HomeRow => {
     if (row.type === 'services') {
-      return {
-        kind: 'services',
-        label: row.group ?? 'Services',
-        itemCount: PLACEHOLDER_TILE_COUNT,
-      };
+      const label = row.group ?? 'Services';
+      const tiles = (row.group ? tilesByGroup.get(row.group) : undefined) ?? [];
+      return { kind: 'services', label, tiles, itemCount: tiles.length };
     }
     const label = row.source ? (sourceLabels.get(row.source) ?? row.source) : 'Library';
     return { kind: 'library', label, itemCount: PLACEHOLDER_TILE_COUNT };
@@ -48,4 +43,12 @@ export function buildHomeModel(config: Config): HomeModel {
 /** Focusable-item counts per row, for the focus engine. */
 export function rowLengths(model: HomeModel): number[] {
   return model.rows.map((r) => r.itemCount);
+}
+
+/** Index of the first content row (row >= 1) that has focusable items, or null. */
+export function firstContentRow(model: HomeModel): number | null {
+  for (let i = 1; i < model.rows.length; i++) {
+    if (model.rows[i]!.itemCount > 0) return i;
+  }
+  return null;
 }

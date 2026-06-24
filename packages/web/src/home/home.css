@@ -145,6 +145,25 @@
 .tile--library.is-focused .tile__frame {
   width: 7.708rem; /* 148px */
 }
+/* Artwork fills the frame; preserve aspect via cover. */
+.tile__art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Placeholder when artwork is missing/failed (FR-A6): the service initial. */
+.tile__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 2.083rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  user-select: none;
+}
 .tile__label {
   font-size: 0.677rem; /* 13px */
   color: var(--color-text-secondary);
@@ -152,6 +171,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.row__empty {
+  color: var(--color-text-muted);
+  font-size: 0.833rem;
+  align-self: center;
 }
 .tile--library .tile__label {
   font-size: 0.625rem; /* 12px */
