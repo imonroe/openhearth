@@ -49,10 +49,29 @@ describe('config.example contract', () => {
     const ids = tiles.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
 
-    // Most entries carry a compatibility `notes` field flagging kiosk/DRM
-    // caveats (PRD §18) — at least the streaming video tiles do.
+    // Every entry carries a compatibility `notes` field flagging kiosk/DRM
+    // caveats (PRD §18).
     const withNotes = tiles.filter((t) => typeof t.notes === 'string' && t.notes.length > 0);
-    expect(withNotes.length).toBeGreaterThanOrEqual(6);
+    expect(withNotes.length).toBe(tiles.length);
+  });
+
+  it('surfaces every seeded service group via a ui.rows services row (#29)', async () => {
+    // A tile only renders if its `group` has a matching services row; otherwise
+    // it builds into the catalog but is invisible on the home screen. The seed
+    // must expose all the groups it ships tiles for.
+    const svc = new ConfigService({ configDir: exampleDir });
+    const snap = await svc.load();
+    const catalog = buildCatalog(snap.services);
+
+    const rowGroups = new Set(
+      (snap.config.ui?.rows ?? [])
+        .filter((r) => r.type === 'services')
+        .map((r) => r.group)
+        .filter((g): g is string => typeof g === 'string'),
+    );
+    for (const group of catalog.groups) {
+      expect(rowGroups.has(group.group), `no ui.rows row for group "${group.group}"`).toBe(true);
+    }
   });
 
   it('is internally coherent: every ui library row references a defined source', async () => {
