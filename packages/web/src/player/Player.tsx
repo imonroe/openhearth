@@ -137,8 +137,12 @@ export function Player({
           exit();
           return;
         case 'select':
-          if (phase === 'prompt') startRef.current(promptIdx === 0 ? resumeSec : 0);
-          else togglePlay();
+          if (phase === 'prompt') {
+            // "Start over" (idx 1) forgets the saved position so a quick exit
+            // doesn't leave the stale resume row behind.
+            if (promptIdx === 1) clearResume(item.id);
+            startRef.current(promptIdx === 0 ? resumeSec : 0);
+          } else togglePlay();
           return;
         case 'play_pause':
           dispatch('play_pause');
@@ -167,7 +171,7 @@ export function Player({
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [keyMap, phase, promptIdx, resumeSec, goHome, exit, togglePlay, seekBy, dispatch]);
+  }, [keyMap, phase, promptIdx, resumeSec, item.id, goHome, exit, togglePlay, seekBy, dispatch]);
 
   const start = useCallback((from: number) => {
     startSecRef.current = from;

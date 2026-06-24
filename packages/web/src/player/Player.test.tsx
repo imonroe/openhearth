@@ -18,6 +18,7 @@ const item: LibraryItem = {
 
 let resumeValue: { position_sec: number; updated_at: number } | null;
 let putBodies: string[];
+let deleteCount: number;
 
 function videoEl(container: HTMLElement): HTMLVideoElement | null {
   return container.querySelector('video');
@@ -26,6 +27,7 @@ function videoEl(container: HTMLElement): HTMLVideoElement | null {
 beforeEach(() => {
   resumeValue = null;
   putBodies = [];
+  deleteCount = 0;
   // jsdom doesn't implement media playback — stub the methods we call.
   HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
   HTMLMediaElement.prototype.pause = vi.fn();
@@ -34,6 +36,7 @@ beforeEach(() => {
     vi.fn((url: string, opts?: { method?: string; body?: string }) => {
       if (url.includes('/resume')) {
         if (opts?.method === 'PUT' && opts.body) putBodies.push(opts.body);
+        if (opts?.method === 'DELETE') deleteCount += 1;
         const body = opts?.method ? { status: 'ok' } : resumeValue;
         return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
       }
@@ -70,7 +73,7 @@ describe('Player', () => {
     );
   });
 
-  it('"Start over" begins from the top despite a saved position', async () => {
+  it('"Start over" begins from the top and forgets the saved position', async () => {
     resumeValue = { position_sec: 125, updated_at: 1 };
     const { container } = render(
       <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
@@ -81,6 +84,19 @@ describe('Player', () => {
     await waitFor(() =>
       expect(videoEl(container)!.getAttribute('src')).toBe('/api/v1/library/m1/stream'),
     );
+    // Choosing "Start over" clears the stale resume row.
+    expect(deleteCount).toBe(1);
+  });
+
+  it('clears the resume position when playback finishes (ended)', async () => {
+    const onExit = vi.fn();
+    const { container } = render(
+      <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={onExit} onHome={vi.fn()} />,
+    );
+    await waitFor(() => expect(videoEl(container)).toBeTruthy());
+    fireEvent.ended(videoEl(container)!);
+    expect(deleteCount).toBe(1); // resume cleared on finish
+    expect(onExit).toHaveBeenCalled();
   });
 
   it('toggles play/pause via the play_pause action and mirrors it to control', async () => {
