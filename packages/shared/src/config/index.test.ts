@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateConfig, configJsonSchema, type Config } from './index';
+import { validateConfig, configJsonSchema, redactConfig, REDACTED, type Config } from './index';
 
 describe('config', () => {
   it('accepts an empty config (app usable with nothing configured)', () => {
@@ -38,5 +38,28 @@ describe('config', () => {
 
   it('emits a JSON Schema for docs/tooling', () => {
     expect(configJsonSchema).toBeTypeOf('object');
+  });
+});
+
+describe('redactConfig', () => {
+  it('redacts a configured secret leaf', () => {
+    const redacted = redactConfig({ metadata: { tmdbApiKey: 'super-secret' } });
+    expect(redacted.metadata?.tmdbApiKey).toBe(REDACTED);
+  });
+
+  it('leaves unset secrets absent and does not mutate the source', () => {
+    const source: Config = { server: { port: 8080 } };
+    const redacted = redactConfig(source);
+    expect(redacted.metadata).toBeUndefined();
+    expect(source).toEqual({ server: { port: 8080 } });
+  });
+
+  it('preserves non-secret fields', () => {
+    const redacted = redactConfig({
+      server: { port: 8080, logLevel: 'info' },
+      metadata: { tmdbApiKey: 'k' },
+    });
+    expect(redacted.server).toEqual({ port: 8080, logLevel: 'info' });
+    expect(redacted.metadata?.tmdbApiKey).toBe(REDACTED);
   });
 });

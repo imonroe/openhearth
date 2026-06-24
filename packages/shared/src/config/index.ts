@@ -80,3 +80,37 @@ export function validateConfig(input: unknown): ValidationResult {
 
 /** Runtime JSON Schema for the config (for docs / external tooling). */
 export const configJsonSchema = z.toJSONSchema(configSchema);
+
+/**
+ * Dot-paths of secret leaves that must never be returned over the API or
+ * written to logs. Keep this in lockstep with the schema as secret fields are
+ * added — it is the single registry of "what counts as a secret."
+ */
+export const SECRET_CONFIG_PATHS = ['metadata.tmdbApiKey'] as const;
+
+/** Sentinel substituted for a redacted secret value. */
+export const REDACTED = '***';
+
+/**
+ * Return a deep copy of `config` with every configured secret leaf replaced by
+ * {@link REDACTED}. Unset secrets are left absent (not added). Use this for any
+ * config snapshot that crosses the API boundary so secrets like the TMDB key
+ * are never exposed (CLAUDE.md: secrets never leave the host).
+ */
+export function redactConfig(config: Config): Config {
+  // structuredClone keeps this isomorphic and avoids mutating the source.
+  const copy = structuredClone(config) as Record<string, unknown>;
+  for (const path of SECRET_CONFIG_PATHS) {
+    const segments = path.split('.');
+    let node: Record<string, unknown> | undefined = copy;
+    for (let i = 0; i < segments.length - 1 && node; i++) {
+      const child: unknown = node[segments[i] as string];
+      node = child && typeof child === 'object' ? (child as Record<string, unknown>) : undefined;
+    }
+    const leaf = segments[segments.length - 1] as string;
+    if (node && leaf in node && node[leaf] !== undefined) {
+      node[leaf] = REDACTED;
+    }
+  }
+  return copy as Config;
+}
