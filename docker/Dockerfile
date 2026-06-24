@@ -75,6 +75,8 @@ COPY --from=builder /deploy ./
 COPY --from=builder /repo/packages/web/dist ./public
 # Default config shipped for first-run seeding into the /config volume.
 COPY --from=builder /repo/config.example ./config.example
+# Bundled service-icon set, served for `icon: bundled:<slug>` (OPENHEARTH_ICONS_DIR).
+COPY --from=builder /repo/assets/service-icons ./service-icons
 
 # Run as the unprivileged user that the node image ships with.
 USER node

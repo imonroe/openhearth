@@ -3,6 +3,7 @@
 services:
   - id: disney-plus
     name: Disney+
+    icon: bundled:disney-plus # shipped logo; override with a config/ file or http(s) URL
     launch_url: https://www.disneyplus.com/
     group: Streaming
     order: 30

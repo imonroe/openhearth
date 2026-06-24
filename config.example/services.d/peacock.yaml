@@ -2,6 +2,7 @@
 services:
   - id: peacock
     name: Peacock
+    icon: bundled:peacock # shipped logo; override with a config/ file or http(s) URL
     launch_url: https://www.peacocktv.com/
     group: Streaming
     order: 70

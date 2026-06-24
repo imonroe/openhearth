@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { serviceSchema, serviceJsonSchema } from './index';
+import { serviceSchema, serviceJsonSchema, isBundledIcon, bundledIconName } from './index';
 
 describe('serviceSchema', () => {
   it('accepts a minimal valid service', () => {
@@ -59,16 +59,31 @@ describe('serviceSchema', () => {
   it('accepts safe icons and rejects dangerous ones', () => {
     const ok = (icon: string): boolean =>
       serviceSchema.safeParse({ id: 'a', name: 'A', launch_url: 'https://a/', icon }).success;
-    // Allowed: http(s) URLs and safe relative filenames.
+    // Allowed: http(s) URLs, bundled refs, and safe relative filenames.
     expect(ok('https://cdn/x.png')).toBe(true);
     expect(ok('netflix.png')).toBe(true);
     expect(ok('icons/netflix.png')).toBe(true);
+    expect(ok('bundled:netflix')).toBe(true);
+    expect(ok('bundled:apple-tv')).toBe(true);
     // Rejected: other schemes, absolute paths, traversal.
     expect(ok('javascript:alert(1)')).toBe(false);
     expect(ok('data:image/svg+xml,<svg/>')).toBe(false);
     expect(ok('file:///etc/passwd')).toBe(false);
     expect(ok('/etc/passwd')).toBe(false);
     expect(ok('../../secret.yaml')).toBe(false);
+    // A malformed bundled ref must not slip through as a generic filename.
+    expect(ok('bundled:../escape')).toBe(false);
+    expect(ok('bundled:Netflix')).toBe(false); // uppercase not in the slug grammar
+    expect(ok('bundled:')).toBe(false);
+  });
+
+  it('parses bundled:<slug> references', () => {
+    expect(isBundledIcon('bundled:netflix')).toBe(true);
+    expect(isBundledIcon('bundled:apple-tv')).toBe(true);
+    expect(isBundledIcon('netflix.png')).toBe(false);
+    expect(isBundledIcon('bundled:../x')).toBe(false);
+    expect(bundledIconName('bundled:disney-plus')).toBe('disney-plus');
+    expect(bundledIconName('https://cdn/x.png')).toBe(null);
   });
 
   it('emits a JSON Schema', () => {

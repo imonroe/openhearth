@@ -2,6 +2,7 @@
 services:
   - id: apple-tv
     name: Apple TV
+    icon: bundled:apple-tv # shipped logo; override with a config/ file or http(s) URL
     launch_url: https://tv.apple.com/
     group: Streaming
     order: 90

@@ -275,15 +275,15 @@ definitions merged on top of `services.yaml` (the shareable community catalog).
 > **Per-entry validation.** Each tile is validated by the `CatalogService`
 > against the schema below. A malformed tile is reported as a non-fatal error and
 > skipped — the rest of the catalog still renders. `launch_url` must be an
-> `http(s)` URL and `icon` must be an `http(s)` URL or a safe relative filename
-> (no scheme, not absolute, no `..`).
+> `http(s)` URL and `icon` must be a `bundled:<slug>` reference, an `http(s)` URL,
+> or a safe relative filename (no scheme, not absolute, no `..`).
 
 | Field | Required | Type | Notes |
 |---|---|---|---|
 | `id` | yes | string | Unique, stable identifier. |
 | `name` | yes | string | Display label on the tile. |
 | `launch_url` | yes | URL | Where the kiosk navigates on select. |
-| `icon` | no | path/URL | Local file in `config/`, a remote URL, or omitted (metadata fallback). |
+| `icon` | no | ref/path/URL | `bundled:<slug>`, a local file in `config/`, a remote URL, or omitted (metadata fallback). See [Service icons](#service-icons). |
 | `group` | no | string | Row/section grouping (matched by `ui.rows[].group`). |
 | `order` | no | integer | Sort hint within a group. |
 | `user_agent` | no | string | Optional UA override for kiosk compatibility. |
@@ -294,12 +294,50 @@ services:
   - id: netflix
     name: Netflix
     launch_url: https://www.netflix.com/
-    icon: netflix.png
+    icon: bundled:netflix
     group: Streaming
     order: 10
 ```
 
 > The field reference above mirrors PRD §10.3.
+
+### Service icons
+
+The `icon` field resolves in one of four ways. The default catalog uses
+`bundled:*`, so tiles have real logos out of the box; you override per tile.
+
+| `icon` value | Resolves to | Notes |
+|---|---|---|
+| `bundled:<slug>` | A logo from the **shipped icon set** (`assets/service-icons/<slug>.svg`). | The default for every seeded service. `<slug>` is `[a-z0-9-]`. |
+| `https://…` / `http://…` | A remote image, loaded directly by the kiosk. | No proxying; the kiosk fetches it. |
+| `name.png` (bare/relative) | A file you place in `config/` (next to the YAML). | **Raster only** — `png`, `jpg`/`jpeg`, `webp`, `gif`. `svg` is rejected (a user SVG could carry inline `<script>` → stored XSS). |
+| omitted | No icon; the tile shows a placeholder (the service initial), or metadata artwork where available. | |
+
+**Bundled set.** The shipped logos come from
+[homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons)
+(Apache-2.0); see [`assets/service-icons/README.md`](../assets/service-icons/README.md)
+for the full list, provenance, and how to add more. Available slugs match the
+seeded service ids: `netflix`, `youtube`, `youtube-tv`, `disney-plus`, `hulu`,
+`max`, `prime-video`, `apple-tv`, `peacock`, `paramount-plus`, `spotify`.
+
+**Overriding a bundled icon.** A user-supplied `icon` always wins. To replace
+Netflix's logo with your own, drop the file in `config/` and point `icon` at it:
+
+```yaml
+services:
+  - id: netflix
+    name: Netflix
+    launch_url: https://www.netflix.com/
+    icon: my-netflix.png # ./config/my-netflix.png — overrides bundled:netflix
+```
+
+**Pointing a custom service at a bundled logo.** Any service may reuse a bundled
+slug, e.g. a self-hosted Jellyfin tile could use `icon: bundled:max` — though
+normally you'd ship your own image.
+
+The bundled directory is configurable via the `OPENHEARTH_ICONS_DIR` environment
+variable (default `/app/service-icons` in the image); `bundled:` icons simply
+fall back to the placeholder if the directory is absent.
 
 ### The community catalog (`services.d/`)
 
