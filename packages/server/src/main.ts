@@ -24,12 +24,16 @@ const WEB_ROOT = process.env.WEB_ROOT ?? '/app/public';
 // Bundled service-icon set (referenced by `icon: bundled:<slug>`). Shipped into
 // the image at /app/service-icons; override the path for a source checkout.
 const ICONS_DIR = process.env.OPENHEARTH_ICONS_DIR ?? '/app/service-icons';
+// Hot-reload `/config` by polling (default on): native fs events don't cross
+// Docker bind mounts when the host edits the file. Set OPENHEARTH_CONFIG_POLL=0
+// (or `false`) on a host where native events work to avoid the polling cost.
+const CONFIG_POLL = !/^(0|false|no)$/i.test(process.env.OPENHEARTH_CONFIG_POLL ?? '');
 
 async function main(): Promise<void> {
   // First run: seed an empty/missing /config from the bundled defaults.
   const seed = seedConfigDir(CONFIG_DIR, SEED_DIR);
 
-  const configService = new ConfigService({ configDir: CONFIG_DIR });
+  const configService = new ConfigService({ configDir: CONFIG_DIR, usePolling: CONFIG_POLL });
   await configService.start();
 
   const port = configService.config.server?.port ?? Number(process.env.PORT ?? 8080);
@@ -167,6 +171,7 @@ async function main(): Promise<void> {
       host: HOST,
       configDir: CONFIG_DIR,
       watching: CONFIG_DIR,
+      configPolling: CONFIG_POLL,
       cacheDir: CACHE_DIR,
       seededConfig: seed.seeded,
       webRoot: WEB_ROOT,

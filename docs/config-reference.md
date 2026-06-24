@@ -394,3 +394,16 @@ you. The recurring ones:
   `server.port` is the exception and logs a warning prompting a restart).
 - On an invalid edit, the server keeps serving the **last-good** config and
   reports the error — the UI never crashes (NFR-4).
+
+### Watching across a Docker bind mount
+
+`config/` is a **bind mount** (`./config:/config`), not copied into the image —
+so a host edit is visible inside the container immediately. But native
+filesystem events (`inotify`) do **not** propagate across a bind mount when the
+file is edited on the host, so the watcher polls by default. This is why a host
+edit applies live rather than only after a container restart/rebuild.
+
+Polling is controlled by `OPENHEARTH_CONFIG_POLL` (default on). On a host where
+native events reliably reach the container you can set
+`OPENHEARTH_CONFIG_POLL=0` to disable polling and avoid its small CPU cost; the
+watcher then relies on native events.

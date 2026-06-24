@@ -30,6 +30,16 @@ export interface ConfigServiceOptions {
   env?: NodeJS.ProcessEnv;
   /** Debounce window (ms) for coalescing rapid file events. */
   debounceMs?: number;
+  /**
+   * Watch by polling instead of native fs events. Native `inotify` events do
+   * not propagate across Docker bind mounts when files are edited on the host,
+   * so polling is the only reliable way to hot-reload `/config` in a container.
+   * Defaults to `true`; set `false` on a host where native events work to avoid
+   * the (small) polling cost.
+   */
+  usePolling?: boolean;
+  /** Poll interval (ms) when `usePolling` is set. */
+  pollInterval?: number;
 }
 
 /** Raw, not-yet-schema'd service catalog data (CatalogService owns parsing). */
@@ -91,6 +101,8 @@ export class ConfigService extends EventEmitter {
   readonly configDir: string;
   private readonly env: NodeJS.ProcessEnv;
   private readonly debounceMs: number;
+  private readonly usePolling: boolean;
+  private readonly pollInterval: number;
 
   private current: ConfigSnapshot = {
     config: {},
@@ -106,6 +118,8 @@ export class ConfigService extends EventEmitter {
     this.configDir = options.configDir;
     this.env = options.env ?? process.env;
     this.debounceMs = options.debounceMs ?? 150;
+    this.usePolling = options.usePolling ?? true;
+    this.pollInterval = options.pollInterval ?? 300;
   }
 
   /** The effective, validated config. Always present (empty config is valid). */
@@ -155,6 +169,10 @@ export class ConfigService extends EventEmitter {
     const snapshot = await this.load();
     const watcher = chokidar.watch(this.configDir, {
       ignoreInitial: true,
+      // Poll by default: native fs events don't cross Docker bind mounts when
+      // the host edits the file (see ConfigServiceOptions.usePolling).
+      usePolling: this.usePolling,
+      interval: this.pollInterval,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
     });
     this.watcher = watcher;
