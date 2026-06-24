@@ -165,6 +165,8 @@ export function Player({
           exit();
           return;
         case 'stop':
+          // `stop` is not reserved (unlike home/back), so it only preventDefaults
+          // — no stopImmediatePropagation; exit() tears the player down anyway.
           dispatch('stop');
           exit();
           return;

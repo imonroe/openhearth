@@ -167,22 +167,47 @@ transcode:
 
 A map of logical binding name → list of physical key names
 ([`KeyboardEvent.key`](https://developer.mozilla.org/docs/Web/API/KeyboardEvent/key/Key_Values)
-values). `home` is **reserved** and always returns to the OpenHearth home screen.
+values). Every binding you set **replaces** that binding's default keys; bindings
+you omit keep their defaults. Multiple keys may map to one binding, and each
+binding maps to exactly one action in the [protocol](protocol.md) vocabulary.
+Changes take effect after the config hot-reloads — no restart (FR-R4).
 
 | Type | Default | Notes |
 |---|---|---|
-| map of string → string[] | _(none)_ | Multiple keys may map to one binding. |
+| map of string → string[] | the table below | Set only the bindings you want to change. |
+
+**Default bindings:**
+
+| Binding | Action | Default keys |
+|---|---|---|
+| `up` / `down` / `left` / `right` | `navigate` | `ArrowUp` / `ArrowDown` / `ArrowLeft` / `ArrowRight` |
+| `select` | `select` | `Enter` |
+| `play_pause` | `play_pause` | `Space` (`" "`) |
+| `stop` | `stop` | _(none — bind your own)_ |
+| `home` | `home` | `Home`, `BrowserHome` — **reserved** |
+| `back` | `back` | `Backspace`, `Escape`, `BrowserBack` — **reserved** |
+
+**Reserved bindings.** `home` and `back` are reserved (FR-A3 / NFR-5): `home`
+always returns to the OpenHearth home screen and the kiosk intercepts the Home/Back
+keys before any launched service can see them. You may **add** keys to a reserved
+binding, but its default keys are always kept and cannot be reassigned to another
+action — so Home/Back can never be configured into uselessness. Configuring an
+unknown binding name, or two bindings that claim the same key, is non-fatal: the
+UI keeps working and logs a warning (the first binding to claim a key keeps it).
+
+In the player, `left` / `right` seek ±10s and `up` cycles subtitle tracks; on the
+home/detail grids the same keys move focus — the binding is the same, the effect
+is contextual.
 
 ```yaml
 keybindings:
-  up: [ArrowUp]
-  down: [ArrowDown]
-  left: [ArrowLeft]
-  right: [ArrowRight]
+  # Override only what you want; everything else keeps its default.
+  up: [ArrowUp, w]
+  down: [ArrowDown, s]
   select: [Enter]
-  back: [Backspace, Escape]
-  home: [Home]
-  play_pause: [' ']
+  play_pause: [' ', p]
+  stop: [x]
+  home: [Home, h] # adds `h`; Home/BrowserHome are always kept
 ```
 
 ---
