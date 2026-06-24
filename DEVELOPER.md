@@ -28,11 +28,11 @@ HTTP + WebSocket API (the "seam"):
 
 ### The three content strategies
 
-| Strategy | Content | What OpenHearth does |
-| --- | --- | --- |
-| A — Launcher | Commercial services | Renders tiles; navigates the kiosk to the service's web player on select; never touches the stream. |
-| B — Aggregator | Cross-service discovery | Foundation only in v1 (normalized metadata model, stub search). Full unified search is v1.x. |
-| C — Player | Local/self-hosted media | Native ad-free playback with ffmpeg transcoding fallback. |
+| Strategy       | Content                 | What OpenHearth does                                                                                |
+| -------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
+| A — Launcher   | Commercial services     | Renders tiles; navigates the kiosk to the service's web player on select; never touches the stream. |
+| B — Aggregator | Cross-service discovery | Foundation only in v1 (normalized metadata model, stub search). Full unified search is v1.x.        |
+| C — Player     | Local/self-hosted media | Native ad-free playback with ffmpeg transcoding fallback.                                           |
 
 ### Non-negotiable constraints
 

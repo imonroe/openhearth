@@ -50,9 +50,9 @@ Edit the `volumes:` section so the `/media` mount points at your library folder:
 
 ```yaml
 volumes:
-  - ./config:/config              # your settings (created on first run; source of truth)
+  - ./config:/config # your settings (created on first run; source of truth)
   - /path/to/your/media:/media:ro # your library, mounted read-only
-  - ./cache:/cache                # derived index/artwork/transcode cache (disposable)
+  - ./cache:/cache # derived index/artwork/transcode cache (disposable)
 ```
 
 If you have no local media yet, you can leave the `/media` line as-is — the
@@ -110,9 +110,9 @@ services:
   - id: my-service
     name: My Service
     launch_url: https://example.com/tv
-    icon: bundled:netflix      # a shipped logo, a config/ file, or an http(s) URL
-    group: Streaming           # must match a row in openhearth.yaml -> ui.rows
-    order: 40                  # tiles sort by this within a group
+    icon: bundled:netflix # a shipped logo, a config/ file, or an http(s) URL
+    group: Streaming # must match a row in openhearth.yaml -> ui.rows
+    order: 40 # tiles sort by this within a group
 ```
 
 Delete a tile you don't want by removing (or not seeding) its file. See
@@ -127,12 +127,12 @@ shows a media source:
 
 ```yaml
 ui:
-  theme: dark            # dark | light
+  theme: dark # dark | light
   rows:
     - { type: services, group: Streaming }
     - { type: services, group: Live TV }
-    - { type: library,  source: movies }
-    - { type: library,  source: tv }
+    - { type: library, source: movies }
+    - { type: library, source: tv }
 ```
 
 A service tile only renders if its `group` has a row here — that's how you hide a
@@ -147,8 +147,8 @@ library:
   sources:
     - id: movies
       label: Movies
-      path: /media/movies   # a path inside the read-only /media mount
-      kind: movies          # movies | tv | music | mixed
+      path: /media/movies # a path inside the read-only /media mount
+      kind: movies # movies | tv | music | mixed
     - id: tv
       label: TV
       path: /media/tv
@@ -175,7 +175,7 @@ the compose file and `.env`), then enable it in `openhearth.yaml`:
 metadata:
   provider: tmdb
   language: en-US
-  tmdbApiKey: ${TMDB_API_KEY}   # reads the env var; never hard-code a key here
+  tmdbApiKey: ${TMDB_API_KEY} # reads the env var; never hard-code a key here
 ```
 
 Without a key, OpenHearth derives titles from filenames and makes **no outbound
@@ -223,11 +223,11 @@ and the Home-guard setup live in the per-host guides:
 
 A few things that trip people up — worth reading before you file a bug:
 
-- **DRM-protected services stay DRM-protected.** OpenHearth *launches* Netflix,
+- **DRM-protected services stay DRM-protected.** OpenHearth _launches_ Netflix,
   Disney+, etc. in their own web players — it never touches or decrypts their
   streams. That means ad-tier ads inside those services still appear, and the
   service's own login/DRM rules apply. The "ad-free" promise is about OpenHearth
-  itself and your *local* media, not commercial catalogs.
+  itself and your _local_ media, not commercial catalogs.
 - **Streaming resolution depends on your browser's Widevine level.** A generic
   Chromium often only has Widevine L3, which several services cap at 480p/720p.
   Getting 1080p+ from those services needs a host/browser with a Widevine L1 path
@@ -250,16 +250,16 @@ A few things that trip people up — worth reading before you file a bug:
 
 ## Documentation
 
-| Doc | What's in it |
-| --- | --- |
-| [Configuration reference](docs/config-reference.md) | Every `openhearth.yaml` / `services.yaml` option; first-run seeding; the community service catalog and how to extend it; security (bind address + optional shared-token auth). |
-| [Linux kiosk](docs/deployment/linux-kiosk.md) · [Windows kiosk](docs/deployment/windows-kiosk.md) | Auto-launch-on-boot setup and example scripts. |
-| [GPU transcoding](docs/deployment/gpu-transcoding.md) | Opt-in VAAPI / NVENC / QSV acceleration (CPU is the default). |
-| [Host parity](docs/deployment/host-parity.md) | Windows vs. Linux Docker differences and a verification matrix. |
-| [Upgrading & images](docs/deployment/upgrading.md) | Published image tags, pinning, and the upgrade path. |
-| [Home/Back guarantee](docs/home-back.md) | How the reserved Home/Back interception works. |
-| [Remote-control protocol](docs/protocol.md) | The HTTP + WebSocket control contract a third-party client (e.g. a phone remote) implements against. |
-| [DEVELOPER.md](DEVELOPER.md) | Building from source, the monorepo architecture, and contributing. |
+| Doc                                                                                               | What's in it                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Configuration reference](docs/config-reference.md)                                               | Every `openhearth.yaml` / `services.yaml` option; first-run seeding; the community service catalog and how to extend it; security (bind address + optional shared-token auth). |
+| [Linux kiosk](docs/deployment/linux-kiosk.md) · [Windows kiosk](docs/deployment/windows-kiosk.md) | Auto-launch-on-boot setup and example scripts.                                                                                                                                 |
+| [GPU transcoding](docs/deployment/gpu-transcoding.md)                                             | Opt-in VAAPI / NVENC / QSV acceleration (CPU is the default).                                                                                                                  |
+| [Host parity](docs/deployment/host-parity.md)                                                     | Windows vs. Linux Docker differences and a verification matrix.                                                                                                                |
+| [Upgrading & images](docs/deployment/upgrading.md)                                                | Published image tags, pinning, and the upgrade path.                                                                                                                           |
+| [Home/Back guarantee](docs/home-back.md)                                                          | How the reserved Home/Back interception works.                                                                                                                                 |
+| [Remote-control protocol](docs/protocol.md)                                                       | The HTTP + WebSocket control contract a third-party client (e.g. a phone remote) implements against.                                                                           |
+| [DEVELOPER.md](DEVELOPER.md)                                                                      | Building from source, the monorepo architecture, and contributing.                                                                                                             |
 
 ### Advanced topics
 
