@@ -68,6 +68,15 @@ describe('resolveKeyBindings — reserved protection (#46, FR-A3)', () => {
     expect(keyMap.get('Home')).toMatchObject({ action: 'home' }); // reserved wins
     expect(warnings.some((w) => w.includes('Home') && w.includes('home'))).toBe(true);
   });
+
+  it("a reserved binding's added key cannot capture another reserved binding's default", () => {
+    // Escape is one of `back`'s default keys; adding it to `home` must not steal it.
+    const { keyMap, warnings } = resolveKeyBindings({ home: ['Escape'] });
+    expect(keyMap.get('Escape')).toMatchObject({ action: 'back' }); // back keeps Escape
+    expect(keyMap.get('Backspace')).toMatchObject({ action: 'back' }); // and its other defaults
+    expect(keyMap.get('Home')).toMatchObject({ action: 'home' }); // home keeps its own
+    expect(warnings.some((w) => w.includes('Escape'))).toBe(true);
+  });
 });
 
 describe('resolveKeyBindings — validation warnings (#46)', () => {

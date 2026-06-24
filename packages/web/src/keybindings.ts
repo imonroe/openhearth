@@ -95,7 +95,22 @@ export function resolveKeyBindings(
     }
   }
 
-  // Reserved first, then the rest — both in BINDINGS declaration order.
+  // Phase 0: claim every reserved binding's DEFAULT keys up front, so no key —
+  // not even another reserved binding's *added* key — can ever reassign a
+  // reserved default. This is the Home/Back guarantee in code (FR-A3/NFR-5).
+  for (const binding of BINDINGS) {
+    if (!binding.reserved) continue;
+    for (const key of binding.defaultKeys) {
+      if (!owner.has(key)) {
+        owner.set(key, binding.name);
+        map.set(key, { action: binding.action, params: binding.params });
+      }
+    }
+  }
+
+  // Phase 1: assign remaining keys — reserved first (so their added keys beat
+  // non-reserved), then the rest in BINDINGS declaration order. First claimant of
+  // a still-free key keeps it; collisions are reported.
   const ordered = [...BINDINGS].sort((a, b) => Number(!!b.reserved) - Number(!!a.reserved));
   for (const binding of ordered) {
     const configured = keybindings?.[binding.name];
