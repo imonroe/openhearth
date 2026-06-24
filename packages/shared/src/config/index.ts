@@ -28,13 +28,66 @@ export const serverConfigSchema = z
   })
   .strict();
 
+/** A single home-screen row (PRD §10.2). Tightened as the UI lands (#21/#23). */
+export const uiRowSchema = z
+  .object({
+    /** What the row renders. */
+    type: z.enum(['services', 'library']),
+    /** Service grouping to show (for `type: services`). */
+    group: z.string().optional(),
+    /** Library source id to show (for `type: library`). */
+    source: z.string().optional(),
+  })
+  .strict();
+
+/** UI / home-screen options. */
+export const uiConfigSchema = z
+  .object({
+    title: z.string().optional(),
+    theme: z.enum(['dark', 'light']).optional(),
+    /** Ordered layout of the home screen. */
+    rows: z.array(uiRowSchema).optional(),
+  })
+  .strict();
+
+/** A local-media library source (plain folder scan is the v1 default). */
+export const librarySourceSchema = z
+  .object({
+    /** Stable id referenced by `ui.rows[].source`. */
+    id: z.string(),
+    label: z.string().optional(),
+    /** Host-mapped path inside the container (e.g. `/media/movies`). */
+    path: z.string(),
+    kind: z.enum(['movies', 'tv', 'music', 'mixed']).optional(),
+  })
+  .strict();
+
+/** Local-media library options. */
+export const libraryConfigSchema = z
+  .object({
+    sources: z.array(librarySourceSchema).optional(),
+    /** Optional, read-only Jellyfin/Plex reads (a Should, not a Must). Loose for now. */
+    integrations: z.array(z.record(z.string(), z.unknown())).optional(),
+  })
+  .strict();
+
 /** Metadata provider (TMDB) options. The key is interpolated from env in YAML. */
 export const metadataConfigSchema = z
   .object({
+    provider: z.enum(['tmdb']).optional(),
     /** TMDB API key (or `${TMDB_API_KEY}` interpolation). Optional by design. */
     tmdbApiKey: z.string().optional(),
+    /** Preferred metadata language (BCP-47), e.g. `en-US`. */
+    language: z.string().optional(),
   })
   .strict();
+
+/**
+ * Keybindings: logical binding name → list of physical key names. Permissive for
+ * now (a record of string arrays); #46 wires this end-to-end and may tighten the
+ * binding-name set. `home` is reserved and always returns to the home screen.
+ */
+export const keybindingsSchema = z.record(z.string(), z.array(z.string()));
 
 /**
  * Top-level config. Strict so unknown keys surface as validation errors rather
@@ -43,7 +96,10 @@ export const metadataConfigSchema = z
 export const configSchema = z
   .object({
     server: serverConfigSchema.optional(),
+    ui: uiConfigSchema.optional(),
+    library: libraryConfigSchema.optional(),
     metadata: metadataConfigSchema.optional(),
+    keybindings: keybindingsSchema.optional(),
   })
   .strict();
 

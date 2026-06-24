@@ -1,0 +1,7 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: spotify
+    name: Spotify
+    launch_url: https://open.spotify.com/
+    group: Music
+    order: 10
