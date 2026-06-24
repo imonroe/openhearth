@@ -48,9 +48,9 @@ identification on the launcher only; the names/logos remain trademarks of
 their respective owners. CC0 / public-domain as far as OpenHearth is concerned —
 replace any of them with your own `icon:` override at any time.
 
-| File (`id`)     | Notes                                            |
-| --------------- | ------------------------------------------------ |
-| `sling-tv.svg`  | Original Sling TV mark (no dashboard-icons entry) |
+| File (`id`)    | Notes                                             |
+| -------------- | ------------------------------------------------- |
+| `sling-tv.svg` | Original Sling TV mark (no dashboard-icons entry) |
 
 ## Customizing
 
