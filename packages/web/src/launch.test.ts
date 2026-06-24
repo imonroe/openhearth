@@ -25,6 +25,16 @@ describe('launchService', () => {
     expect(navigate).toHaveBeenCalledWith('https://www.youtube.com/tv');
   });
 
+  it('refuses to navigate to a non-http(s) launch_url (defense-in-depth)', () => {
+    const navigate = vi.fn();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Bypass the schema (which would normally reject this) to prove the runtime guard.
+    launchService({ id: 'x', name: 'X', launch_url: 'javascript:alert(1)' } as never, navigate);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
+  });
+
   it('logs the user_agent hint when present (applied by the kiosk launcher)', () => {
     const navigate = vi.fn();
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
