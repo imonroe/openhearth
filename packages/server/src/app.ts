@@ -12,7 +12,12 @@ import { existsSync, createReadStream, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep, extname } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+  type FastifyServerOptions,
+} from 'fastify';
 import {
   PROTOCOL_VERSION,
   redactConfig,
@@ -38,6 +43,7 @@ import { SubtitleService } from './core/SubtitleService.js';
 import { decidePlayback, parseRange, containerMime } from './core/transcodeDecision.js';
 import { type MetadataService, metadataQueryForLibraryItem } from './core/MetadataService.js';
 import type { ArtworkCache } from './core/ArtworkCache.js';
+import { AuthGuard, tokenFromRequest, redactTokenInUrl } from './core/auth.js';
 
 // Raster image types only. SVG is deliberately excluded: it can carry inline
 // <script>, and a malicious community services.d/* icon served from this origin
@@ -148,6 +154,8 @@ export interface BuildAppOptions {
   metadataService?: MetadataService;
   /** Caches resolved artwork on disk and serves it (#42). */
   artworkCache?: ArtworkCache;
+  /** Pino destination stream — used by tests to capture log output. */
+  logDestination?: NodeJS.WritableStream;
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
@@ -183,11 +191,35 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const control = options.controlService ?? new ControlService();
   const subtitles = streamer ? new SubtitleService(streamer) : null;
 
-  const app = Fastify({
-    logger: { level },
+  // Typed separately so the custom serializer doesn't skew Fastify's server-type
+  // inference. Redact a `?token=` value from the logged request URL so the
+  // shared-token (#47) never leaks into logs (clients that can't set headers pass
+  // it as a query param); other req fields mirror Fastify's defaults.
+  const fastifyOptions: FastifyServerOptions = {
+    logger: {
+      level,
+      ...(options.logDestination ? { stream: options.logDestination } : {}),
+      serializers: {
+        req(request: {
+          method: string;
+          url: string;
+          headers: Record<string, string | string[] | undefined>;
+          ip: string;
+        }) {
+          const host = request.headers['host'];
+          return {
+            method: request.method,
+            url: redactTokenInUrl(request.url),
+            host: typeof host === 'string' ? host : undefined,
+            remoteAddress: request.ip,
+          };
+        },
+      },
+    },
     // Trust no proxy by default; the kiosk talks to the server directly.
     disableRequestLogging: false,
-  });
+  };
+  const app = Fastify(fastifyOptions);
 
   // API responses are dynamic (config hot-reloads, the library index changes as
   // it scans) — never let the browser serve a stale cached copy. Without this a
@@ -197,6 +229,29 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.addHook('onSend', async (request, reply) => {
     if (request.url.startsWith('/api/') && !reply.hasHeader('Cache-Control')) {
       reply.header('Cache-Control', 'no-store');
+    }
+  });
+
+  // Optional shared-token auth (#47; PRD §17). Off unless `server.auth.token` is
+  // set — then every /api/ request needs the token (Authorization: Bearer or
+  // ?token=), so this gate also covers the WS upgrade (browsers pass ?token=).
+  // Exemptions: `/health` (liveness must stay reachable) and `/control/command`,
+  // which self-enforces so it can also accept the reserved `auth` envelope field.
+  // The static SPA is not gated — HTML/JS aren't secrets. Read from current
+  // config each request so a hot-reloaded token takes effect without a restart.
+  const authGuard = (): AuthGuard => new AuthGuard(configService.config.server?.auth?.token);
+  // Exact paths (not prefixes) so a future sibling route can't inherit an
+  // exemption silently. `/control/command` self-enforces (it also takes the
+  // reserved `auth` field); `/health` stays open for liveness probes.
+  const AUTH_EXEMPT_PATHS = new Set(['/api/v1/health', '/api/v1/control/command']);
+  app.addHook('onRequest', async (request, reply) => {
+    const guard = authGuard();
+    if (!guard.enabled) return;
+    const path = request.url.split('?', 1)[0] ?? '';
+    if (!path.startsWith('/api/')) return;
+    if (AUTH_EXEMPT_PATHS.has(path)) return;
+    if (!guard.accepts(tokenFromRequest(request))) {
+      return reply.code(401).send({ status: 'unauthorized' });
     }
   });
 
@@ -493,11 +548,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // GET current authoritative state snapshot.
   app.get('/api/v1/state', async () => control.getState());
 
-  // REST mirror: apply a single command, return the new state (FR-R2).
+  // REST mirror: apply a single command, return the new state (FR-R2). Auth is
+  // enforced here (not the onRequest gate) so the token can also arrive in the
+  // reserved `auth` envelope field — not just a header/query (#47).
   app.post('/api/v1/control/command', async (request, reply) => {
     const parsed = validateCommand(request.body);
     if (!parsed.ok) {
       return reply.code(400).send({ status: 'invalid', errors: parsed.errors });
+    }
+    const guard = authGuard();
+    if (guard.enabled && !guard.accepts(tokenFromRequest(request) ?? parsed.command.auth)) {
+      return reply.code(401).send({ status: 'unauthorized' });
     }
     return { status: 'ok', state: control.dispatch(parsed.command) };
   });
@@ -508,7 +569,15 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   void app.register(async (instance) => {
     // Cap the frame size explicitly — control messages are tiny.
     await instance.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
-    instance.get('/api/v1/control/ws', { websocket: true }, (socket) => {
+    instance.get('/api/v1/control/ws', { websocket: true }, (socket, request) => {
+      // Defense-in-depth: the onRequest gate already rejects an unauthenticated
+      // upgrade (browsers pass ?token=), but re-check here so the channel can
+      // never open without the token even if the gate is bypassed.
+      const guard = authGuard();
+      if (guard.enabled && !guard.accepts(tokenFromRequest(request))) {
+        socket.close(1008, 'unauthorized');
+        return;
+      }
       const send = (event: EventMessage): void => socket.send(JSON.stringify(event));
       // Send the current state on connect so the client starts authoritative.
       send(makeStateEvent(control.getState()));

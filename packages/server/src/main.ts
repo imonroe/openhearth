@@ -20,7 +20,6 @@ import { primeLibraryMetadata } from './core/enrichLibrary.js';
 const CONFIG_DIR = process.env.OPENHEARTH_CONFIG_DIR ?? '/config';
 const SEED_DIR = process.env.OPENHEARTH_SEED_DIR ?? '/app/config.example';
 const CACHE_DIR = process.env.OPENHEARTH_CACHE_DIR ?? '/cache';
-const HOST = process.env.HOST ?? '0.0.0.0';
 const WEB_ROOT = process.env.WEB_ROOT ?? '/app/public';
 
 async function main(): Promise<void> {
@@ -31,6 +30,10 @@ async function main(): Promise<void> {
   await configService.start();
 
   const port = configService.config.server?.port ?? Number(process.env.PORT ?? 8080);
+  // Bind address (#47): env HOST wins, then config `server.host`, then all
+  // interfaces. Restrict to `127.0.0.1` (config or env) to keep the server off
+  // the LAN; pair LAN exposure with `server.auth.token`.
+  const HOST = process.env.HOST ?? configService.config.server?.host ?? '0.0.0.0';
 
   // Open the disposable library/cache DB before building the app so the library
   // routes can serve it. A failure here (e.g. an unwritable /cache mount) must
@@ -165,6 +168,8 @@ async function main(): Promise<void> {
       webRoot: WEB_ROOT,
       configValid: configService.errors.length === 0,
       configErrors: configService.errors,
+      // Whether shared-token auth is on (never the token itself).
+      authEnabled: Boolean(configService.config.server?.auth?.token),
     },
     'OpenHearth server ready',
   );
