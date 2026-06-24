@@ -1,10 +1,12 @@
 /**
- * shared/protocol — the seed of the remote-control protocol (the "seam").
+ * shared/protocol — the remote-control protocol (the "seam").
  *
- * This is intentionally a Phase-0 stub: it pins `PROTOCOL_VERSION`, declares the
- * action vocabulary, and defines the command/event message envelopes so later
- * phases extend this contract rather than reinvent it. Schemas are the single
- * source of truth — TypeScript types are inferred from them (see ../README.md).
+ * Pins `PROTOCOL_VERSION`, declares the action vocabulary, and defines the
+ * command/event envelopes + authoritative state. As of #45 the v1 surface is
+ * **frozen** and fully specified in `docs/protocol.md`; this module is its single
+ * source of truth (TypeScript types and JSON Schemas derive from these Zod
+ * schemas — see ../README.md). A breaking change bumps `PROTOCOL_VERSION`;
+ * additive changes (new optional fields, actions, event types) do not.
  *
  * Isomorphic: depends only on `zod`, never on Node- or browser-only APIs.
  */
