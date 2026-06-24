@@ -30,12 +30,15 @@ export interface FocusProviderProps {
   rowLengths: number[];
   /** Where focus enters (design-system §9). Defaults to the first focusable. */
   initialPosition?: FocusPosition;
+  /** Invoked when `select` (Enter) is pressed, with the focused position. */
+  onSelect?: (position: FocusPosition) => void;
   children: ReactNode;
 }
 
 export function FocusProvider({
   rowLengths,
   initialPosition,
+  onSelect,
   children,
 }: FocusProviderProps): ReactNode {
   // The `{ 0, 0 }` last-resort fallback is only reached if the grid has no
@@ -51,6 +54,13 @@ export function FocusProvider({
   const rowLengthsRef = useRef(rowLengths);
   rowLengthsRef.current = rowLengths;
 
+  // Refs so the once-installed keydown handler always reads the latest focus
+  // position and onSelect callback without re-binding.
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+
   // When the grid shape changes (config loaded), re-seat focus if it now points
   // at an empty/out-of-range cell.
   useEffect(() => {
@@ -63,6 +73,11 @@ export function FocusProvider({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        onSelectRef.current?.(focusedRef.current);
+        return;
+      }
       const dir = keyToDirection(event.key);
       if (!dir) return;
       event.preventDefault();

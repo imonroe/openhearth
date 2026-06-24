@@ -133,4 +133,31 @@ describe('App shell', () => {
     await screen.findByText('Netflix');
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
+
+  it('launches the focused service on Enter (FR-A2)', async () => {
+    const navigate = vi.fn();
+    render(<App navigate={navigate} />);
+    await screen.findByText('Netflix');
+
+    // Initial focus is the first service tile (Netflix).
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('https://www.netflix.com/'));
+
+    // Move to YouTube and launch it.
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('https://www.youtube.com/tv'));
+  });
+
+  it('does not launch when a non-service row is focused', async () => {
+    const navigate = vi.fn();
+    render(<App navigate={navigate} />);
+    await screen.findByText('Netflix');
+    // Move down to the library (placeholder) row, then Enter.
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    // Give any handler a tick.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(navigate).not.toHaveBeenCalled();
+  });
 });

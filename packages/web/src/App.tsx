@@ -2,12 +2,14 @@
  * App root: fetch the effective config, apply the theme, and render the home
  * shell under the focus engine.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Config, ServiceCatalog } from '@openhearth/shared';
 import { fetchConfig, fetchServices } from './api';
 import { FocusProvider } from './focus/FocusProvider';
-import { buildHomeModel, rowLengths, firstContentRow } from './home/homeModel';
+import type { FocusPosition } from './focus/focusEngine';
+import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
 import { Home } from './home/Home';
+import { launchService, defaultNavigate, type Navigate } from './launch';
 
 type State =
   | { status: 'loading' }
@@ -16,7 +18,8 @@ type State =
 
 const EMPTY_CATALOG: ServiceCatalog = { groups: [], errors: [] };
 
-export function App(): ReactNode {
+/** Navigation is injectable so tests can assert the launch target. */
+export function App({ navigate = defaultNavigate }: { navigate?: Navigate } = {}): ReactNode {
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
@@ -54,7 +57,6 @@ export function App(): ReactNode {
     () => (config ? buildHomeModel(config, catalog ?? undefined) : null),
     [config, catalog],
   );
-  const lengths = useMemo(() => (model ? rowLengths(model) : []), [model]);
   // Focus enters on the first tile of the first non-empty content row (the
   // header is row 0), matching the Home screen focus-entry spec.
   const initialPosition = useMemo(() => {
@@ -82,7 +84,39 @@ export function App(): ReactNode {
   const title = config.ui?.title ?? 'OpenHearth';
 
   return (
-    <FocusProvider rowLengths={lengths} initialPosition={initialPosition}>
+    <ReadyApp title={title} model={model} initialPosition={initialPosition} navigate={navigate} />
+  );
+}
+
+/** The ready home, split out so `onSelect` can close over a stable `model`. */
+function ReadyApp({
+  title,
+  model,
+  initialPosition,
+  navigate,
+}: {
+  title: string;
+  model: HomeModel;
+  initialPosition: FocusPosition | undefined;
+  navigate: Navigate;
+}): ReactNode {
+  const lengths = useMemo(() => rowLengths(model), [model]);
+
+  // select (Enter) on a focused service tile launches that service (FR-A2).
+  const onSelect = useCallback(
+    (pos: FocusPosition) => {
+      const row = model.rows[pos.row];
+      if (row?.kind === 'services') {
+        const tile = row.tiles[pos.col];
+        if (tile) launchService(tile, navigate);
+      }
+      // Header / library selections are wired in later phases.
+    },
+    [model, navigate],
+  );
+
+  return (
+    <FocusProvider rowLengths={lengths} initialPosition={initialPosition} onSelect={onSelect}>
       <Home title={title} model={model} />
     </FocusProvider>
   );
