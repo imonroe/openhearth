@@ -526,6 +526,34 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     },
   );
 
+  // Authoritative playback info (#122). A transcode streams fragmented MP4 with
+  // `empty_moov`, so the browser's `<video>.duration` is unreliable — it reports
+  // the buffered fragment length, not the whole film, which made the OSD show a
+  // movie as "0:03" and percent-complete blow past 100%. ffprobe knows the real
+  // duration; surface it (plus the mode) so the player can compute correct
+  // elapsed/total. Same containment guards as /stream.
+  app.get<{ Params: { id: string } }>('/api/v1/library/:id/playback', async (request, reply) => {
+    const item = libraryService?.get(request.params.id);
+    if (!item) return reply.code(404).send({ status: 'not_found' });
+    if (!streamer) return reply.code(503).send({ status: 'unavailable' });
+    if (!existsSync(item.path)) return reply.code(404).send({ status: 'not_found' });
+    if (!isWithinLibraryRoots(item.path, configService.config.library?.sources ?? [])) {
+      request.log.warn({ path: item.path }, 'playback blocked: outside library roots');
+      return reply.code(403).send({ status: 'forbidden' });
+    }
+    let probe;
+    try {
+      probe = await streamer.probe(item.path);
+    } catch (err) {
+      request.log.warn({ err, path: item.path }, 'ffprobe failed');
+      return reply.code(502).send({ status: 'probe_failed' });
+    }
+    return {
+      mode: decidePlayback(probe),
+      duration_sec: probe.durationSec ?? null,
+    };
+  });
+
   // Resume position for an item (FR-C5). GET returns the saved position (or
   // null), PUT saves it, DELETE forgets it. Keyed by item id in the cache.
   app.get<{ Params: { id: string } }>('/api/v1/library/:id/resume', async (request) => {

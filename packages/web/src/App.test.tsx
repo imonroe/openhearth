@@ -142,8 +142,12 @@ describe('App shell', () => {
     const services = tilesIn(0); // first content row = Streaming services
     expect(isFocused(services[0]!)).toBe(true); // Netflix focused
 
-    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    // First key of the test: issue it inside the retry so a press that lands
+    // before FocusProvider's (passive-effect) keydown listener has attached is
+    // retried rather than lost. ArrowRight clamps on the last column, so
+    // re-firing is idempotent.
     await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
       expect(isFocused(services[1]!)).toBe(true); // YouTube
       expect(isFocused(services[0]!)).toBe(false);
     });
@@ -167,9 +171,13 @@ describe('App shell', () => {
     render(<App navigate={navigate} />);
     await screen.findByText('Netflix');
 
-    // Initial focus is the first service tile (Netflix).
-    fireEvent.keyDown(window, { key: 'Enter' });
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('https://www.netflix.com/'));
+    // Initial focus is the first service tile (Netflix). Issue Enter inside the
+    // retry so a press that lands before FocusProvider's keydown listener has
+    // attached is retried rather than lost (selecting Netflix again is idempotent).
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+      expect(navigate).toHaveBeenCalledWith('https://www.netflix.com/');
+    });
 
     // Move to YouTube and launch it.
     fireEvent.keyDown(window, { key: 'ArrowRight' });
@@ -179,10 +187,11 @@ describe('App shell', () => {
 
   it('does not launch when a non-service row is focused', async () => {
     const navigate = vi.fn();
-    render(<App navigate={navigate} />);
+    const { container } = render(<App navigate={navigate} />);
     await screen.findByText('Netflix');
-    // Move down to the library (placeholder) row, then Enter.
-    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    // Move focus to the library row (waits for the move to actually land), then
+    // Enter — selecting a non-service tile must not launch anything.
+    await focusLibraryTile(container);
     fireEvent.keyDown(window, { key: 'Enter' });
     // Give any handler a tick.
     await new Promise((r) => setTimeout(r, 0));
@@ -208,9 +217,12 @@ describe('App shell', () => {
 
   // Wait until focus has actually landed on a library tile (optionally one whose
   // label matches), so we don't press Enter before the focus move has applied.
+  // The ArrowDown is issued inside the retry loop: if the first press lands before
+  // the focus engine's keydown listener has attached it's a no-op, and pressing
+  // again is harmless (ArrowDown clamps on the last row, preserving the column).
   const focusLibraryTile = async (container: HTMLElement, label?: string): Promise<void> => {
-    fireEvent.keyDown(window, { key: 'ArrowDown' }); // services row -> library row
     await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'ArrowDown' }); // services row -> library row
       const focused = container.querySelector('.tile--library.is-focused');
       expect(focused).toBeTruthy();
       if (label) expect(focused!.textContent).toContain(label);
@@ -284,11 +296,16 @@ describe('App shell', () => {
 
     const services = Array.from(container.querySelectorAll('.row')[0]!.querySelectorAll('.tile'));
     expect(services[0]!.classList.contains('is-focused')).toBe(true);
-    // ArrowRight no longer moves (remapped away); "d" does.
+    // ArrowRight no longer moves (remapped away) — a no-op from col 0.
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(services[0]!.classList.contains('is-focused')).toBe(true);
-    fireEvent.keyDown(window, { key: 'd' });
-    await waitFor(() => expect(services[1]!.classList.contains('is-focused')).toBe(true));
+    // "d" does drive navigation to the second tile. Issue it inside the retry so a
+    // press before the keydown listener attaches is retried, not lost ("d"/right
+    // clamps on the last column, so re-firing is idempotent).
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'd' });
+      expect(services[1]!.classList.contains('is-focused')).toBe(true);
+    });
   });
 
   it('applies a binding remapped in-place after a config re-fetch (FR-R4 hot-reload)', async () => {

@@ -169,7 +169,10 @@ describe('ConfigService hot-reload (NFR-4)', () => {
     write('openhearth.yaml', 'server:\n  port: 9090\n');
     await changed;
     expect(svc.config.server?.port).toBe(9090);
-  });
+    // Vitest's default 5s test timeout is shorter than this test's own 8s
+    // waitForChange budget, so a slow poll under CI load tripped Vitest first.
+    // Give the test as long as its internal wait actually allows.
+  }, 10000);
 
   it('retains last-good config on an invalid edit and reports the error', async () => {
     write('openhearth.yaml', 'server:\n  port: 8080\n');

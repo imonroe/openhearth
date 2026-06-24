@@ -20,6 +20,7 @@ let resumeValue: { position_sec: number; updated_at: number } | null;
 let putBodies: string[];
 let deleteCount: number;
 let subsValue: Array<{ id: string; label: string; lang?: string | null; source: string }>;
+let playbackValue: { mode: 'direct' | 'transcode'; duration_sec: number | null } | null;
 
 function videoEl(container: HTMLElement): HTMLVideoElement | null {
   return container.querySelector('video');
@@ -30,6 +31,7 @@ beforeEach(() => {
   putBodies = [];
   deleteCount = 0;
   subsValue = [];
+  playbackValue = null;
   // jsdom doesn't implement media playback — stub the methods we call.
   HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
   HTMLMediaElement.prototype.pause = vi.fn();
@@ -44,6 +46,12 @@ beforeEach(() => {
       }
       if (url.includes('/subtitles')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(subsValue) });
+      }
+      if (url.includes('/playback')) {
+        return Promise.resolve({
+          ok: playbackValue !== null,
+          json: () => Promise.resolve(playbackValue),
+        });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     }),
@@ -146,6 +154,48 @@ describe('Player', () => {
     expect(await screen.findByText('CC: English')).toBeTruthy();
     fireEvent.keyDown(window, { key: 'ArrowUp' });
     expect(await screen.findByText('CC: Off')).toBeTruthy();
+  });
+
+  it('uses the server-probed duration for the OSD, not a transcode’s bogus <video>.duration (#122)', async () => {
+    // A transcode reports a tiny `<video>.duration` (the buffered fragment), so
+    // the OSD must divide elapsed by the real ffprobe duration instead.
+    playbackValue = { mode: 'transcode', duration_sec: 3600 };
+    const { container } = render(
+      <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
+    );
+    await waitFor(() => expect(videoEl(container)).toBeTruthy());
+    const video = videoEl(container)!;
+    // Simulate the wrong media-element duration and a position past it.
+    Object.defineProperty(video, 'duration', { value: 3, configurable: true });
+    Object.defineProperty(video, 'currentTime', { value: 26, configurable: true });
+    fireEvent.timeUpdate(video);
+
+    // Total comes from the server (1:00:00), not the 0:03 the element reports.
+    await screen.findByText('0:26 / 1:00:00');
+    // Progress fill stays sane (26/3600 ≈ 0.7%), never overshooting 100%.
+    const fill = container.querySelector('.player__progress-fill') as HTMLElement;
+    const pct = parseFloat(fill.style.width);
+    expect(pct).toBeGreaterThan(0);
+    expect(pct).toBeLessThan(1);
+  });
+
+  it('clamps the OSD when elapsed overshoots a bogus duration (no >100% bar)', async () => {
+    // No server duration available → fall back to the element, but never overshoot.
+    playbackValue = { mode: 'transcode', duration_sec: null };
+    const { container } = render(
+      <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
+    );
+    await waitFor(() => expect(videoEl(container)).toBeTruthy());
+    const video = videoEl(container)!;
+    Object.defineProperty(video, 'duration', { value: 3, configurable: true });
+    Object.defineProperty(video, 'currentTime', { value: 26, configurable: true });
+    fireEvent.loadedMetadata(video);
+    fireEvent.timeUpdate(video);
+
+    // Elapsed is clamped to the (bogus) total so the bar caps at 100%.
+    const fill = container.querySelector('.player__progress-fill') as HTMLElement;
+    expect(parseFloat(fill.style.width)).toBe(100);
+    await screen.findByText('0:03 / 0:03');
   });
 
   it('toggles play/pause when the video is clicked (mouse)', async () => {
