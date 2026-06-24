@@ -31,6 +31,21 @@ describe('config', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('accepts the full PRD-shaped config (ui/library/keybindings)', () => {
+    const result = validateConfig({
+      ui: { title: 'OpenHearth', theme: 'dark', rows: [{ type: 'services', group: 'Streaming' }] },
+      library: { sources: [{ id: 'movies', path: '/media/movies', kind: 'movies' }] },
+      metadata: { provider: 'tmdb', language: 'en-US' },
+      keybindings: { up: ['ArrowUp'], home: ['Home'] },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects an invalid ui row type', () => {
+    const result = validateConfig({ ui: { rows: [{ type: 'bogus' }] } });
+    expect(result.ok).toBe(false);
+  });
+
   it('never throws on non-object input', () => {
     expect(validateConfig(null).ok).toBe(false);
     expect(validateConfig('not a config').ok).toBe(false);

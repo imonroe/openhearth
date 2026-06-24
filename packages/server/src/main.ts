@@ -7,12 +7,17 @@
  */
 import { buildApp } from './app.js';
 import { ConfigService } from './core/ConfigService.js';
+import { seedConfigDir } from './core/seedConfig.js';
 
 const CONFIG_DIR = process.env.OPENHEARTH_CONFIG_DIR ?? '/config';
+const SEED_DIR = process.env.OPENHEARTH_SEED_DIR ?? '/app/config.example';
 const HOST = process.env.HOST ?? '0.0.0.0';
 const WEB_ROOT = process.env.WEB_ROOT ?? '/app/public';
 
 async function main(): Promise<void> {
+  // First run: seed an empty/missing /config from the bundled defaults.
+  const seed = seedConfigDir(CONFIG_DIR, SEED_DIR);
+
   const configService = new ConfigService({ configDir: CONFIG_DIR });
   await configService.start();
 
@@ -61,6 +66,7 @@ async function main(): Promise<void> {
       host: HOST,
       configDir: CONFIG_DIR,
       watching: CONFIG_DIR,
+      seededConfig: seed.seeded,
       webRoot: WEB_ROOT,
       configValid: configService.errors.length === 0,
       configErrors: configService.errors,

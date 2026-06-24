@@ -1,0 +1,20 @@
+# Service tile catalog (Strategy A — the launcher).
+#
+# Each entry renders a tile; selecting it navigates the kiosk to `launch_url`.
+# Adding a service is declarative — see docs/config-reference.md § Services.
+# Additional tiles can be dropped into services.d/*.yaml (community catalog).
+
+services:
+  - id: netflix
+    name: Netflix
+    launch_url: https://www.netflix.com/
+    icon: netflix.png # file in config/, a URL, or omit for metadata fallback
+    group: Streaming
+    order: 10
+
+  - id: youtube
+    name: YouTube
+    launch_url: https://www.youtube.com/tv # TV-optimized endpoint where one exists
+    icon: youtube.png
+    group: Streaming
+    order: 20

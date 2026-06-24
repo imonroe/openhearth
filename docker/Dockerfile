@@ -49,6 +49,8 @@ FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV WEB_ROOT=/app/public
+# Bundled defaults used to seed an empty /config on first run (issue #20).
+ENV OPENHEARTH_SEED_DIR=/app/config.example
 
 # ffmpeg is required for local-media transcoding (Strategy C). Install it and
 # clean apt lists in the same layer to keep the image slim.
@@ -62,6 +64,8 @@ WORKDIR /app
 COPY --from=builder /deploy ./
 # Built web bundle, served as static files by the server.
 COPY --from=builder /repo/packages/web/dist ./public
+# Default config shipped for first-run seeding into the /config volume.
+COPY --from=builder /repo/config.example ./config.example
 
 # Run as the unprivileged user that the node image ships with.
 USER node
