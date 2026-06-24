@@ -3,13 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc --build",
     "dev": "tsc --build --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "@openhearth/shared": "workspace:*"
