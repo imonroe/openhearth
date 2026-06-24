@@ -159,18 +159,47 @@ export class LibraryService {
   /** Recursively collect media files under `root` (absolute paths). */
   private walk(root: string): Array<{ abs: string; rel: string; mtime: number }> {
     const out: Array<{ abs: string; rel: string; mtime: number }> = [];
-    const stack: string[] = [root];
     const rootResolved = path.resolve(root);
+    // A missing/inaccessible *root* is a real per-source error (surfaced by the
+    // caller); only deeper dangling symlinks are tolerated below. Probe it up
+    // front so the loop's per-dir catch can't swallow it.
+    fs.accessSync(rootResolved);
+    const stack: string[] = [rootResolved];
+    // Track resolved real paths so a symlink cycle (or a dir reachable two ways)
+    // is visited at most once — guards against infinite recursion.
+    const visited = new Set<string>();
 
     while (stack.length) {
       const dir = stack.pop()!;
+      let real: string;
+      try {
+        real = fs.realpathSync(dir);
+      } catch {
+        continue; // dangling/inaccessible
+      }
+      if (visited.has(real)) continue;
+      visited.add(real);
+
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.name.startsWith('.')) continue; // skip hidden / sidecar dotfiles
         const abs = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
+        // Symlinks report neither isDirectory nor isFile — resolve the target so
+        // symlinked media trees (common in NAS / *arr setups) are indexed.
+        let isDir = entry.isDirectory();
+        let isFile = entry.isFile();
+        if (entry.isSymbolicLink()) {
+          try {
+            const st = fs.statSync(abs);
+            isDir = st.isDirectory();
+            isFile = st.isFile();
+          } catch {
+            continue; // dangling symlink
+          }
+        }
+        if (isDir) {
           stack.push(abs);
-        } else if (entry.isFile()) {
+        } else if (isFile) {
           const ext = path.extname(entry.name).slice(1).toLowerCase();
           if (!MEDIA_EXTENSIONS.has(ext)) continue;
           const stat = fs.statSync(abs);

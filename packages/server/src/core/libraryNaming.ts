@@ -12,6 +12,12 @@
  *
  * The source's declared `kind` only breaks ties for files with no decisive
  * markers — detection from the name always wins when present.
+ *
+ * Known limitations (acceptable for v1; richer parsing can land later):
+ *   - Multi-episode files (`S01E01E02`) record only the first episode number.
+ *   - Anime/absolute-numbering (`Show - 137.mkv`) is not recognized as an
+ *     episode and falls through to `other`.
+ *   - The `NxNN` convention is greedy: `Show 19x10.mkv` reads as S19E10.
  */
 import type { LibraryItemKind } from '@openhearth/shared';
 
@@ -31,6 +37,7 @@ const TAG_RE =
   /\b(?:480p|576p|720p|1080p|2160p|4k|uhd|hdr|hevc|x264|x265|h264|h265|av1|aac|ac3|dts|ddp?5\.1|bluray|blu-ray|brrip|bdrip|webrip|web-dl|webdl|hdtv|dvdrip|remux|proper|repack|extended|unrated|directors?\.?cut|imax)\b.*$/i;
 
 const YEAR_RE = /\b(19\d{2}|20\d{2})\b/;
+const PAREN_YEAR_RE = /\((19\d{2}|20\d{2})\)/;
 
 // Episode markers, most-specific first. Each captures season + episode.
 const SXXEYY_RE = /\bs(\d{1,2})[. _-]?e(\d{1,3})\b/i;
@@ -72,9 +79,21 @@ function ancestors(path: string): string[] {
   return parts.slice(0, -1).reverse();
 }
 
-function parseYear(text: string): number | undefined {
-  const m = YEAR_RE.exec(text);
-  return m ? Number(m[1]) : undefined;
+/**
+ * Find the release year and where the title ends. A parenthesized `(YYYY)` is
+ * the strongest signal and wins outright (so `Blade Runner 2049 (2017)` →
+ * 2017, not 2049). Otherwise the LAST bare year token wins, since a leading
+ * number is usually part of the title (`2001 A Space Odyssey`). `index` is where
+ * the title text ends (the `(` for a parenthesized year, else the year start).
+ */
+function findYear(text: string): { year: number; index: number } | undefined {
+  const paren = PAREN_YEAR_RE.exec(text);
+  if (paren) return { year: Number(paren[1]), index: paren.index };
+  const re = new RegExp(YEAR_RE.source, 'g');
+  let last: { year: number; index: number } | undefined;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) last = { year: Number(m[1]), index: m.index };
+  return last;
 }
 
 /** Title for an episode: text before the marker, else a non-"Season" ancestor. */
@@ -139,26 +158,24 @@ export function parseMediaPath(relPath: string, sourceKind?: SourceKind): Parsed
   }
 
   // --- Movie: a year in the name or a parent folder (or a movies-kind source) --
-  let year = parseYear(file);
   // Title is parsed from whichever string carries the year (`Movie (Year)/file`
   // layouts put the year on the folder, not the file).
+  let found = sourceKind !== 'music' ? findYear(file) : undefined;
   let titleSource = file;
-  if (year === undefined && sourceKind !== 'music') {
+  if (!found && sourceKind !== 'music') {
     for (const seg of ancestors(relPath)) {
-      const y = parseYear(seg);
-      if (y !== undefined) {
-        year = y;
+      const y = findYear(seg);
+      if (y) {
+        found = y;
         titleSource = seg;
         break;
       }
     }
   }
+  const year = found?.year;
   const looksLikeMovie = year !== undefined || sourceKind === 'movies';
   if (looksLikeMovie && sourceKind !== 'music') {
-    const beforeYear =
-      year !== undefined && YEAR_RE.test(titleSource)
-        ? titleSource.slice(0, YEAR_RE.exec(titleSource)!.index)
-        : titleSource;
+    const beforeYear = found ? titleSource.slice(0, found.index) : titleSource;
     const title = stripTags(beforeYear) || stripTags(file) || 'Unknown';
     return { kind: 'movie', title, ...(year !== undefined ? { year } : {}) };
   }

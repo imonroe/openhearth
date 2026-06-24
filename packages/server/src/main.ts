@@ -49,6 +49,7 @@ async function main(): Promise<void> {
 
   // Keep the active log level in sync with hot-reloaded config, and surface
   // changes the running process can't apply live.
+  let lastSources = JSON.stringify(configService.config.library?.sources ?? []);
   configService.on('change', () => {
     const next = configService.config.server?.logLevel;
     if (next && app.log.level !== next) {
@@ -64,6 +65,24 @@ async function main(): Promise<void> {
     }
     if (configService.errors.length) {
       app.log.warn({ errors: configService.errors }, 'config reloaded with validation errors');
+    }
+    // Re-index when the library sources change (added/removed/repointed), so a
+    // hot-edited path takes effect without a restart. Skipped when sources are
+    // unchanged to avoid a needless walk on unrelated config edits.
+    const sources = JSON.stringify(configService.config.library?.sources ?? []);
+    if (libraryService && sources !== lastSources) {
+      lastSources = sources;
+      setImmediate(() => {
+        try {
+          const summary = libraryService.scan();
+          app.log.info(
+            { totalIndexed: summary.totalIndexed },
+            'library re-indexed after config change',
+          );
+        } catch (err) {
+          app.log.warn({ err }, 'library re-scan failed');
+        }
+      });
     }
   });
 

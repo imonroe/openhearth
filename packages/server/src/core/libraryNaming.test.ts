@@ -32,6 +32,25 @@ describe('parseMediaPath — movies', () => {
       year: 2010,
     });
   });
+
+  it('prefers the parenthesized release year over a number in the title', () => {
+    // Regression: a number before the parenthesized year must not win.
+    expect(parseMediaPath('Blade Runner 2049 (2017).mkv')).toEqual({
+      kind: 'movie',
+      title: 'Blade Runner 2049',
+      year: 2017,
+    });
+    expect(parseMediaPath('2001 A Space Odyssey (1968).mkv')).toEqual({
+      kind: 'movie',
+      title: '2001 A Space Odyssey',
+      year: 1968,
+    });
+    expect(parseMediaPath('1917 (2019).mkv')).toEqual({
+      kind: 'movie',
+      title: '1917',
+      year: 2019,
+    });
+  });
 });
 
 describe('parseMediaPath — TV episodes', () => {

@@ -90,6 +90,24 @@ describe('LibraryService.scan', () => {
     expect(store.listLibraryItems()[0]!.title).toBe('Heat');
   });
 
+  it('follows a symlinked subdirectory (NAS / *arr layouts) without looping', () => {
+    write('movies/real/Heat (1995).mkv');
+    // A symlink pointing at a sibling real directory, plus a self-referential
+    // loop that must not hang the scan.
+    fs.symlinkSync(path.join(root, 'movies/real'), path.join(root, 'movies/linked'), 'dir');
+    fs.symlinkSync(path.join(root, 'movies'), path.join(root, 'movies/loop'), 'dir');
+
+    const summary = service([
+      { id: 'movies', path: path.join(root, 'movies'), kind: 'movies' },
+    ]).scan();
+
+    // Heat is found via both real/ and linked/ (distinct relative paths -> two
+    // items), and the loop symlink is visited once and does not hang.
+    expect(summary.sources[0]!.errors).toEqual([]);
+    expect(store.countLibraryItems()).toBeGreaterThanOrEqual(1);
+    expect(store.listLibraryItems().some((i) => i.title === 'Heat')).toBe(true);
+  });
+
   it('records a non-fatal error for a missing source path and keeps going', () => {
     write('movies/Heat (1995).mkv');
     const summary = service([
