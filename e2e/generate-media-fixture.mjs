@@ -1,8 +1,14 @@
 /**
  * Generate the player E2E media fixture (#38).
  *
- * Creates a short, browser-direct-playable H.264/AAC MP4 under fixtures/media/
+ * Creates a short, browser-direct-playable VP9/Opus WebM under fixtures/media/
  * so the real server can index it and the player spec can stream + play it.
+ *
+ * WebM (VP9/Opus) — not MP4 (H.264/AAC) — because Playwright's bundled Chromium
+ * ships *without* proprietary codecs: an H.264 <video> loads but never decodes, so
+ * playback would never advance. VP9/Opus are royalty-free and decode in that
+ * Chromium, and the server direct-plays the WebM (served as video/webm with range
+ * support) rather than transcoding it — so the spec exercises a real stream.
  *
  * This MUST run before Playwright starts the OpenHearth `webServer`: Playwright
  * launches webServers *before* globalSetup, so if the fixture were generated only
@@ -23,7 +29,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export function generateMediaFixture() {
   const mediaDir = path.join(here, 'fixtures/media');
-  const out = path.join(mediaDir, 'sample.mp4');
+  const out = path.join(mediaDir, 'sample.webm');
   if (fs.existsSync(out)) return;
   if (spawnSync('ffmpeg', ['-version']).status !== 0) {
     console.warn('e2e: ffmpeg not found — player media fixture skipped (player spec will skip)');
@@ -43,21 +49,28 @@ export function generateMediaFixture() {
     'lavfi',
     '-i',
     'sine=frequency=440:duration=30',
+    // VP9 + Opus, fast realtime encode (libvpx-vp9 is otherwise slow in CI).
     '-c:v',
-    'libx264',
+    'libvpx-vp9',
     '-pix_fmt',
     'yuv420p',
+    '-deadline',
+    'realtime',
+    '-cpu-used',
+    '8',
+    '-row-mt',
+    '1',
+    '-b:v',
+    '500k',
     '-c:a',
-    'aac',
+    'libopus',
     '-shortest',
-    '-movflags',
-    '+faststart',
     out,
   ]);
   if (r.status !== 0) {
     console.warn('e2e: ffmpeg fixture generation failed:', r.stderr?.toString());
   } else {
-    console.log(`e2e: generated player media fixture at ${out}`);
+    console.log(`e2e: generated player media fixture (VP9/Opus WebM) at ${out}`);
   }
 }
 

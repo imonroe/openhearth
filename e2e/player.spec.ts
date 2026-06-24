@@ -1,7 +1,8 @@
 /**
  * Player E2E (#38, FR-C5): start playback of a real local file, pause/seek,
- * exit, and resume. Runs against the built server with a generated H.264/AAC
- * fixture (global-setup). Skips when the fixture is absent (no ffmpeg locally);
+ * exit, and resume. Runs against the built server with a generated VP9/Opus WebM
+ * fixture (Playwright's Chromium has no H.264 — see generate-media-fixture.mjs).
+ * Skips when the fixture is absent (no ffmpeg locally);
  * CI installs ffmpeg so it runs there. No extension needed → default context.
  */
 import { test, expect, type Page } from '@playwright/test';
@@ -10,7 +11,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const fixture = path.join(here, 'fixtures/media/sample.mp4');
+const fixture = path.join(here, 'fixtures/media/sample.webm');
 
 test.describe('player', () => {
   test.skip(!fs.existsSync(fixture), 'media fixture not generated (ffmpeg unavailable)');
