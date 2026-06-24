@@ -14,7 +14,7 @@
  * model in `shared/models` and the cache layer land in #40/#41; this issue is
  * the provider seam and the TMDB client (#39).
  */
-import type { MetadataConfig } from '@openhearth/shared';
+import type { MetadataConfig, MediaItem, MediaKind } from '@openhearth/shared';
 import { TmdbProvider } from './TmdbProvider.js';
 
 /** What kind of title a result describes. */
@@ -57,6 +57,31 @@ export interface MetadataProvider {
   search(query: MetadataQuery): Promise<MetadataResult[]>;
   /** Fetch full details for a `ref` returned by {@link search}; null if unknown. */
   details(ref: string): Promise<MetadataResult | null>;
+}
+
+/**
+ * Project a provider {@link MetadataResult} into the shared normalized
+ * {@link MediaItem} (#40). The opaque `ref` (`<provider>:<kind>:<id>`) becomes
+ * both the item id and a `{ [provider]: id }` external-id entry, so a second
+ * provider contributes ids without any model change. `tv` maps to the
+ * provider-agnostic `series` kind.
+ */
+export function mediaItemFromMetadata(result: MetadataResult): MediaItem {
+  const [provider, , externalId] = result.ref.split(':');
+  const kind: MediaKind = result.kind === 'tv' ? 'series' : 'movie';
+  const artwork: MediaItem['artwork'] = {
+    ...(result.artwork.poster_url ? { poster_url: result.artwork.poster_url } : {}),
+    ...(result.artwork.backdrop_url ? { backdrop_url: result.artwork.backdrop_url } : {}),
+  };
+  return {
+    id: result.ref,
+    title: result.title,
+    kind,
+    ...(result.year != null ? { year: result.year } : {}),
+    ...(result.overview ? { overview: result.overview } : {}),
+    ...(Object.keys(artwork).length > 0 ? { artwork } : {}),
+    ...(provider && externalId ? { ids: { [provider]: externalId } } : {}),
+  };
 }
 
 /** Pick the best match for a query from a provider's (already ranked) results. */

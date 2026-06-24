@@ -8,9 +8,11 @@ import {
   MetadataService,
   pickBestMatch,
   createMetadataProvider,
+  mediaItemFromMetadata,
   type MetadataProvider,
   type MetadataResult,
 } from './MetadataService.js';
+import { mediaItemSchema } from '@openhearth/shared';
 import { TmdbProvider } from './TmdbProvider.js';
 
 function result(over: Partial<MetadataResult>): MetadataResult {
@@ -88,6 +90,41 @@ describe('pickBestMatch', () => {
     expect(pickBestMatch(list, { title: 'the thing' })?.ref).toBe('a'); // exact title, first
     expect(pickBestMatch(list, { title: 'nope' })?.ref).toBe('a'); // fallback: first
     expect(pickBestMatch([], { title: 'x' })).toBeNull();
+  });
+});
+
+describe('mediaItemFromMetadata (#40 normalized model)', () => {
+  it('maps a movie result, deriving ids from the ref and schema-valid output', () => {
+    const item = mediaItemFromMetadata(
+      result({
+        ref: 'tmdb:movie:603',
+        kind: 'movie',
+        title: 'The Matrix',
+        year: 1999,
+        overview: 'A hacker learns the truth.',
+        artwork: { poster_url: 'https://img/p.jpg', backdrop_url: 'https://img/b.jpg' },
+      }),
+    );
+    expect(item).toEqual({
+      id: 'tmdb:movie:603',
+      title: 'The Matrix',
+      kind: 'movie',
+      year: 1999,
+      overview: 'A hacker learns the truth.',
+      artwork: { poster_url: 'https://img/p.jpg', backdrop_url: 'https://img/b.jpg' },
+      ids: { tmdb: '603' },
+    });
+    expect(mediaItemSchema.safeParse(item).success).toBe(true);
+  });
+
+  it('maps tv → the provider-agnostic series kind and omits absent fields', () => {
+    const item = mediaItemFromMetadata(
+      result({ ref: 'tmdb:tv:1396', kind: 'tv', title: 'Breaking Bad', artwork: {} }),
+    );
+    expect(item.kind).toBe('series');
+    expect(item.year).toBeUndefined();
+    expect(item.artwork).toBeUndefined();
+    expect(item.ids).toEqual({ tmdb: '1396' });
   });
 });
 
