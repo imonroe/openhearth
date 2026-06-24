@@ -21,6 +21,9 @@ const CONFIG_DIR = process.env.OPENHEARTH_CONFIG_DIR ?? '/config';
 const SEED_DIR = process.env.OPENHEARTH_SEED_DIR ?? '/app/config.example';
 const CACHE_DIR = process.env.OPENHEARTH_CACHE_DIR ?? '/cache';
 const WEB_ROOT = process.env.WEB_ROOT ?? '/app/public';
+// Bundled service-icon set (referenced by `icon: bundled:<slug>`). Shipped into
+// the image at /app/service-icons; override the path for a source checkout.
+const ICONS_DIR = process.env.OPENHEARTH_ICONS_DIR ?? '/app/service-icons';
 
 async function main(): Promise<void> {
   // First run: seed an empty/missing /config from the bundled defaults.
@@ -71,6 +74,7 @@ async function main(): Promise<void> {
   const app = buildApp({
     configService,
     webRoot: WEB_ROOT,
+    iconsDir: ICONS_DIR,
     streamer,
     ...(libraryService ? { libraryService } : {}),
     ...(metadataService ? { metadataService } : {}),

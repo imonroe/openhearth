@@ -11,10 +11,27 @@
  */
 import { z } from 'zod';
 
-/** True for an http(s) URL or a safe relative filename (no scheme/abs/`..`). */
+/**
+ * True for a reference to a bundled icon shipped with OpenHearth, of the form
+ * `bundled:<slug>` (e.g. `bundled:netflix`). The slug is constrained to a strict
+ * lowercase token (no path separators, no `..`, no scheme nesting) so it can be
+ * safely resolved against the read-only bundled-icons directory on the server.
+ */
+const BUNDLED_ICON_RE = /^bundled:[a-z0-9][a-z0-9-]*$/;
+export function isBundledIcon(value: string): boolean {
+  return BUNDLED_ICON_RE.test(value);
+}
+
+/** The slug part of a `bundled:<slug>` icon reference, or null if not one. */
+export function bundledIconName(value: string): string | null {
+  return isBundledIcon(value) ? value.slice('bundled:'.length) : null;
+}
+
+/** True for an http(s) URL, a `bundled:<slug>` reference, or a safe relative filename. */
 export function isSafeIcon(value: string): boolean {
   if (value.length === 0 || value.includes('\0')) return false;
   if (/^https?:\/\//i.test(value)) return true;
+  if (isBundledIcon(value)) return true; // bundled:<slug> — shipped icon set
   if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false; // any other scheme (javascript:, data:, file:…)
   if (value.startsWith('/') || value.startsWith('\\')) return false; // absolute
   if (value.split(/[\\/]/).includes('..')) return false; // traversal
@@ -46,9 +63,13 @@ export const serviceSchema = z
       { message: 'launch_url must be an http(s) URL' },
     ),
     /**
-     * Local file in config/, a remote http(s) URL, or omitted (metadata
-     * fallback). Constrained to an http(s) URL or a *safe relative filename* (no
-     * scheme, not absolute, no `..` traversal) — `icon` is rendered as an
+     * One of: a `bundled:<slug>` reference to a shipped icon (e.g.
+     * `bundled:netflix`), a local file in config/, a remote http(s) URL, or
+     * omitted (metadata fallback). The default catalog uses `bundled:*`; users
+     * override by pointing `icon` at their own config/ file or a URL.
+     *
+     * Constrained to those forms (a *safe relative filename* has no scheme, is
+     * not absolute, and has no `..` traversal) — `icon` is rendered as an
      * `<img src>` and resolved against config/, so an arbitrary scheme or path
      * would be an SSRF / file-disclosure vector.
      */

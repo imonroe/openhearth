@@ -16,7 +16,9 @@ services:
   - id: netflix
     name: Netflix
     launch_url: https://www.netflix.com/
-    icon: netflix.png # file in config/, a URL, or omit for metadata fallback
+    # `bundled:<slug>` uses a logo from the shipped icon set (docs/config-reference
+    # § Service icons). Override with your own: a config/ file or an http(s) URL.
+    icon: bundled:netflix
     group: Streaming
     order: 10
     notes: >-
@@ -26,7 +28,7 @@ services:
   - id: youtube
     name: YouTube
     launch_url: https://www.youtube.com/tv # TV-optimized "leanback" endpoint
-    icon: youtube.png
+    icon: bundled:youtube
     group: Streaming
     order: 20
     notes: >-

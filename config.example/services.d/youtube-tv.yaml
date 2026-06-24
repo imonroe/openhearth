@@ -4,6 +4,7 @@
 services:
   - id: youtube-tv
     name: YouTube TV
+    icon: bundled:youtube-tv # shipped logo; override with a config/ file or http(s) URL
     launch_url: https://tv.youtube.com/
     group: Live TV
     order: 10

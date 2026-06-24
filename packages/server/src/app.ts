@@ -20,6 +20,7 @@ import Fastify, {
 } from 'fastify';
 import {
   PROTOCOL_VERSION,
+  bundledIconName,
   redactConfig,
   commandMessageSchema,
   makeStateEvent,
@@ -55,6 +56,58 @@ const ICON_TYPES: Record<string, string> = {
   '.webp': 'image/webp',
   '.gif': 'image/gif',
 };
+
+// Bundled icons (the shipped service-icon set) may additionally be SVG. This is
+// safe where user-supplied SVG is not: bundled files are vendored and reviewed
+// in-repo (not attacker-controlled), they are served from a read-only directory
+// outside config/, and they render via `<img src>` (which never executes SVG
+// script) under a restrictive CSP + nosniff. User config/ icons stay raster-only.
+const BUNDLED_ICON_TYPES: Record<string, string> = {
+  ...ICON_TYPES,
+  '.svg': 'image/svg+xml',
+};
+
+/**
+ * Stream an image file from a trusted base directory as an icon, with the same
+ * defense-in-depth used for config/ icons: an extension allowlist (so non-image
+ * files can't be exfiltrated through the image route) and a two-stage path
+ * containment check (lexical, then symlink-resolved) so the resolved file can
+ * never escape `baseDir`. Returns the reply (404/400 on any failure).
+ */
+function sendIconFile(
+  reply: FastifyReply,
+  baseDir: string,
+  relPath: string,
+  typeMap: Record<string, string>,
+): FastifyReply {
+  const type = typeMap[extname(relPath).toLowerCase()];
+  if (!type) return reply.code(404).send({ status: 'not_found' });
+
+  let baseReal: string;
+  try {
+    baseReal = realpathSync(resolve(baseDir));
+  } catch {
+    return reply.code(404).send({ status: 'not_found' });
+  }
+  const target = resolve(baseReal, relPath);
+  // Lexical guard (fast reject) ...
+  if (target !== baseReal && !target.startsWith(baseReal + sep)) {
+    return reply.code(400).send({ status: 'bad_request' });
+  }
+  if (!existsSync(target)) return reply.code(404).send({ status: 'not_found' });
+  // ... then a filesystem-aware guard: resolve symlinks and re-check containment,
+  // so a symlink inside baseDir can't point outside it.
+  const real = realpathSync(target);
+  if (real !== baseReal && !real.startsWith(baseReal + sep)) {
+    return reply.code(400).send({ status: 'bad_request' });
+  }
+
+  return reply
+    .header('X-Content-Type-Options', 'nosniff')
+    .header('Content-Security-Policy', "default-src 'none'")
+    .type(type)
+    .send(createReadStream(real));
+}
 
 function isLibraryKind(value: string): value is LibraryItemKind {
   return (LIBRARY_ITEM_KINDS as readonly string[]).includes(value);
@@ -133,6 +186,12 @@ export interface BuildAppOptions {
   logLevel?: string;
   /** Directory of the built web bundle to serve as static files, if present. */
   webRoot?: string;
+  /**
+   * Directory holding the bundled service-icon set (`<slug>.svg`), referenced by
+   * `icon: bundled:<slug>`. Read-only and shipped with the app. When absent,
+   * `bundled:` icons 404 (tiles fall back to the placeholder) rather than error.
+   */
+  iconsDir?: string;
   /** Optional shared ControlService (defaults to a fresh one). */
   controlService?: ControlService;
   /**
@@ -159,7 +218,8 @@ export interface BuildAppOptions {
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
-  const { configService, libraryService, streamer, metadataService, artworkCache } = options;
+  const { configService, libraryService, streamer, metadataService, artworkCache, iconsDir } =
+    options;
 
   /**
    * The by-id artwork route for an item when the metadata cache has a poster,
@@ -299,49 +359,28 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     return catalog.getCatalog();
   });
 
-  // --- API: a service's local icon file (from config/) -------------------
-  // Remote (http/https) icons are loaded directly by the client; this only
-  // serves bare-filename icons that live alongside the YAML in config/.
+  // --- API: a service's icon (bundled set or a local config/ file) -------
+  // Remote (http/https) icons are loaded directly by the client. This serves
+  // two local sources: the shipped `bundled:<slug>` set, and bare-filename icons
+  // that live alongside the YAML in config/ (a user override).
   app.get<{ Params: { id: string } }>('/api/v1/services/:id/icon', async (request, reply) => {
     const tile = catalog.findService(request.params.id);
     if (!tile?.icon || /^https?:\/\//i.test(tile.icon)) {
       return reply.code(404).send({ status: 'not_found' });
     }
 
-    // Type allowlist: only ever serve known image extensions. This stops the
-    // route from streaming arbitrary config files (e.g. icon: "openhearth.yaml",
-    // which holds secrets) through the image endpoint.
-    const type = ICON_TYPES[extname(tile.icon).toLowerCase()];
-    if (!type) {
-      return reply.code(404).send({ status: 'not_found' });
+    // Bundled icon (the shipped set): `icon: bundled:<slug>`. The slug is a strict
+    // token (validated by the schema), so `<slug>.svg` can't traverse out of the
+    // read-only icons dir. SVG is allowed here (trusted, reviewed assets).
+    const bundled = bundledIconName(tile.icon);
+    if (bundled !== null) {
+      if (!iconsDir) return reply.code(404).send({ status: 'not_found' });
+      return sendIconFile(reply, iconsDir, `${bundled}.svg`, BUNDLED_ICON_TYPES);
     }
 
-    let configReal: string;
-    try {
-      configReal = realpathSync(resolve(configService.configDir));
-    } catch {
-      return reply.code(404).send({ status: 'not_found' });
-    }
-    const target = resolve(configReal, tile.icon);
-    // Lexical guard (fast reject) ...
-    if (target !== configReal && !target.startsWith(configReal + sep)) {
-      return reply.code(400).send({ status: 'bad_request' });
-    }
-    if (!existsSync(target)) {
-      return reply.code(404).send({ status: 'not_found' });
-    }
-    // ... then a filesystem-aware guard: resolve symlinks and re-check
-    // containment, so a symlink inside config/ can't point outside it.
-    const real = realpathSync(target);
-    if (real !== configReal && !real.startsWith(configReal + sep)) {
-      return reply.code(400).send({ status: 'bad_request' });
-    }
-
-    return reply
-      .header('X-Content-Type-Options', 'nosniff')
-      .header('Content-Security-Policy', "default-src 'none'")
-      .type(type)
-      .send(createReadStream(real));
+    // Otherwise a bare filename in config/ (a user-supplied override). Raster
+    // only — user SVG is rejected (it could carry inline <script>; stored XSS).
+    return sendIconFile(reply, configService.configDir, tile.icon, ICON_TYPES);
   });
 
   // --- API: local-media library (FR-C2; issue #32) -----------------------

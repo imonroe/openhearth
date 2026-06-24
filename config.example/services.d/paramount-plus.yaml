@@ -2,6 +2,7 @@
 services:
   - id: paramount-plus
     name: Paramount+
+    icon: bundled:paramount-plus # shipped logo; override with a config/ file or http(s) URL
     launch_url: https://www.paramountplus.com/
     group: Streaming
     order: 80

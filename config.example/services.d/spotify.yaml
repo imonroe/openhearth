@@ -2,6 +2,7 @@
 services:
   - id: spotify
     name: Spotify
+    icon: bundled:spotify # shipped logo; override with a config/ file or http(s) URL
     launch_url: https://open.spotify.com/
     group: Music
     order: 10

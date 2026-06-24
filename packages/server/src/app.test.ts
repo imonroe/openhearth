@@ -3,16 +3,24 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { PROTOCOL_VERSION } from '@openhearth/shared';
 import { buildApp } from './app.js';
 import { ConfigService } from './core/ConfigService.js';
 
+const here = path.dirname(fileURLToPath(import.meta.url));
+
 let dir: string;
 let cfg: ConfigService;
 let app: FastifyInstance;
+let iconsDirs: string[] = [];
 
-async function makeApp(yaml?: string, files: Record<string, string> = {}): Promise<void> {
+async function makeApp(
+  yaml?: string,
+  files: Record<string, string> = {},
+  opts: { iconsDir?: string } = {},
+): Promise<void> {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-app-'));
   if (yaml !== undefined) fs.writeFileSync(path.join(dir, 'openhearth.yaml'), yaml);
   for (const [rel, contents] of Object.entries(files)) {
@@ -22,7 +30,11 @@ async function makeApp(yaml?: string, files: Record<string, string> = {}): Promi
   }
   cfg = new ConfigService({ configDir: dir });
   await cfg.load();
-  app = buildApp({ configService: cfg, logLevel: 'silent' });
+  app = buildApp({
+    configService: cfg,
+    logLevel: 'silent',
+    ...(opts.iconsDir ? { iconsDir: opts.iconsDir } : {}),
+  });
   await app.ready();
 }
 
@@ -30,6 +42,8 @@ afterEach(async () => {
   await app?.close();
   await cfg?.stop();
   await fsp.rm(dir, { recursive: true, force: true });
+  for (const d of iconsDirs) await fsp.rm(d, { recursive: true, force: true });
+  iconsDirs = [];
 });
 
 describe('GET /api/v1/health', () => {
@@ -200,6 +214,92 @@ describe('GET /api/v1/services/:id/icon', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['content-security-policy']).toContain("default-src 'none'");
+  });
+
+  // --- bundled icon set (issue #108) ---
+  async function makeIconsDir(files: Record<string, string>): Promise<string> {
+    const d = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-icons-'));
+    for (const [name, contents] of Object.entries(files))
+      fs.writeFileSync(path.join(d, name), contents);
+    iconsDirs.push(d);
+    return d;
+  }
+
+  it('serves a bundled SVG icon for icon: bundled:<slug>', async () => {
+    const icons = await makeIconsDir({
+      'netflix.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+    });
+    await makeApp(
+      '{}',
+      {
+        'services.yaml':
+          'services:\n  - { id: netflix, name: Netflix, launch_url: "https://x/", icon: "bundled:netflix" }\n',
+      },
+      { iconsDir: icons },
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/netflix/icon' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('image/svg+xml');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toContain("default-src 'none'");
+    expect(res.body).toContain('<svg');
+  });
+
+  it('maps the service id, not the slug, in the route (bundled:<slug> is independent)', async () => {
+    const icons = await makeIconsDir({ 'max.svg': '<svg/>' });
+    await makeApp(
+      '{}',
+      {
+        // A service whose id differs from the bundled slug it points at.
+        'services.yaml':
+          'services:\n  - { id: hbo, name: HBO, launch_url: "https://x/", icon: "bundled:max" }\n',
+      },
+      { iconsDir: icons },
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/hbo/icon' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('<svg');
+  });
+
+  it('404s a bundled icon when no icons dir is configured', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: netflix, name: Netflix, launch_url: "https://x/", icon: "bundled:netflix" }\n',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/netflix/icon' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('404s a bundled icon whose file is missing from the set', async () => {
+    const icons = await makeIconsDir({ 'netflix.svg': '<svg/>' });
+    await makeApp(
+      '{}',
+      {
+        'services.yaml':
+          'services:\n  - { id: ghost, name: Ghost, launch_url: "https://x/", icon: "bundled:ghost" }\n',
+      },
+      { iconsDir: icons },
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/ghost/icon' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('the seeded config.example icon set is complete (every bundled:<slug> has a file)', async () => {
+    const repoRoot = path.resolve(here, '../../..');
+    const seedDir = path.join(repoRoot, 'config.example');
+    const iconsDir = path.join(repoRoot, 'assets', 'service-icons');
+    const yaml = [
+      fs.readFileSync(path.join(seedDir, 'services.yaml'), 'utf8'),
+      ...fs
+        .readdirSync(path.join(seedDir, 'services.d'))
+        .filter((f) => f.endsWith('.yaml'))
+        .map((f) => fs.readFileSync(path.join(seedDir, 'services.d', f), 'utf8')),
+    ].join('\n');
+    const slugs = [...yaml.matchAll(/icon:\s*bundled:([a-z0-9-]+)/g)].map((m) => m[1]!);
+    expect(slugs.length).toBeGreaterThan(0);
+    for (const slug of slugs) {
+      expect(fs.existsSync(path.join(iconsDir, `${slug}.svg`)), `missing ${slug}.svg`).toBe(true);
+    }
   });
 });
 

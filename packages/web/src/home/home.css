@@ -152,6 +152,14 @@
   object-fit: cover;
   display: block;
 }
+/* Service logos (the bundled icon set + most remote service icons) have varied
+   aspect ratios and transparent backgrounds, so contain them with padding rather
+   than cropping — the tile-bg shows through as a clean letterbox. Library posters
+   keep `cover`. */
+.tile--service .tile__art {
+  object-fit: contain;
+  padding: 0.625rem 1.25rem;
+}
 /* Placeholder when artwork is missing/failed (FR-A6): the service initial. */
 .tile__placeholder {
   display: flex;
