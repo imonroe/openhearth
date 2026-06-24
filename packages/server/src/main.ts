@@ -27,10 +27,11 @@ async function main(): Promise<void> {
   await configService.start();
 
   const port = configService.config.server?.port ?? Number(process.env.PORT ?? 8080);
-  const app = buildApp({ configService, webRoot: WEB_ROOT });
 
-  // Open the disposable library/cache DB. A failure here (e.g. an unwritable
-  // /cache mount) must not stop the server — local media just won't be indexed.
+  // Open the disposable library/cache DB before building the app so the library
+  // routes can serve it. A failure here (e.g. an unwritable /cache mount) must
+  // not stop the server — local media just won't be indexed, and the library
+  // endpoints degrade to an empty listing.
   let cacheStore: CacheStore | null = null;
   let libraryService: LibraryService | null = null;
   try {
@@ -41,11 +42,14 @@ async function main(): Promise<void> {
       getSources: () => configService.config.library?.sources ?? [],
     });
   } catch (err) {
-    app.log.warn(
-      { cacheDir: CACHE_DIR, err },
-      'could not open the cache DB (check /cache volume ownership); local library disabled',
-    );
+    console.error('OpenHearth: could not open the cache DB; local library disabled', err);
   }
+
+  const app = buildApp({
+    configService,
+    webRoot: WEB_ROOT,
+    ...(libraryService ? { libraryService } : {}),
+  });
 
   // Keep the active log level in sync with hot-reloaded config, and surface
   // changes the running process can't apply live.

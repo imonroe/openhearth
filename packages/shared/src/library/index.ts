@@ -58,3 +58,20 @@ export const libraryItemSchema = z
 export type LibraryItem = z.infer<typeof libraryItemSchema>;
 
 export const libraryItemJsonSchema = z.toJSONSchema(libraryItemSchema);
+
+/** A paginated page of library items (the `GET /api/v1/library` response). */
+export const libraryListResponseSchema = z
+  .object({
+    items: z.array(libraryItemSchema),
+    /** Total items matching the query (across all pages). */
+    total: z.number().int(),
+    limit: z.number().int(),
+    offset: z.number().int(),
+  })
+  .strict();
+
+export type LibraryListResponse = z.infer<typeof libraryListResponseSchema>;
+
+/** Default and max page sizes for the library listing. */
+export const LIBRARY_PAGE_DEFAULT = 100;
+export const LIBRARY_PAGE_MAX = 500;
