@@ -35,6 +35,9 @@ export default defineConfig({
   use: {
     baseURL: HOME_URL,
     trace: 'on-first-retry',
+    // Mirror the kiosk launch flag so the player can autostart media without a
+    // per-item user gesture (a real OpenHearth kiosk sets this — see #49).
+    launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
   },
   webServer: [
     {

@@ -17,9 +17,14 @@ test.describe('player', () => {
 
   /** From home: down into the library row, open the item, press Play. */
   async function openPlayer(page: Page): Promise<void> {
-    await page.goto('/');
-    // The library row renders the indexed fixture as a tile.
-    await expect(page.locator('.tile--library').first()).toBeVisible();
+    // The library is indexed asynchronously after the server starts listening, so
+    // a fresh load can race the scan and see an empty row — reload until the
+    // indexed fixture tile appears.
+    await expect(async () => {
+      await page.goto('/');
+      await expect(page.locator('.tile--library').first()).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
+
     await page.keyboard.press('ArrowDown'); // services row → library row
     await expect(page.locator('.tile--library.is-focused')).toBeVisible();
     await page.keyboard.press('Enter'); // open detail
@@ -61,7 +66,13 @@ test.describe('player', () => {
       const v = document.querySelector('video');
       return !!v && v.currentTime > 1.5;
     });
-    await page.keyboard.press('Escape'); // Back → save position + exit to detail
+    // Back saves the position (fire-and-forget PUT) and exits to the detail.
+    // Wait for that PUT to land so the re-entry GET can't race it.
+    const saved = page.waitForResponse(
+      (r) => r.url().includes('/resume') && r.request().method() === 'PUT',
+    );
+    await page.keyboard.press('Escape');
+    await saved;
     await expect(page.getByText('Play')).toBeVisible();
 
     // Re-enter → the player offers to resume from the saved position.
