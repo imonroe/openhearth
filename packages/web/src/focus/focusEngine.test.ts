@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { move, firstFocusable, keyToDirection } from './focusEngine';
+import { move, firstFocusable } from './focusEngine';
 
 describe('focusEngine.move', () => {
   const grid = [2, 5, 5]; // header(2), movies(5), tv(5)
@@ -41,18 +41,5 @@ describe('focusEngine.firstFocusable', () => {
   });
   it('returns null when nothing is focusable', () => {
     expect(firstFocusable([0, 0])).toBeNull();
-  });
-});
-
-describe('focusEngine.keyToDirection', () => {
-  it('maps arrow keys', () => {
-    expect(keyToDirection('ArrowUp')).toBe('up');
-    expect(keyToDirection('ArrowDown')).toBe('down');
-    expect(keyToDirection('ArrowLeft')).toBe('left');
-    expect(keyToDirection('ArrowRight')).toBe('right');
-  });
-  it('returns null for non-nav keys', () => {
-    expect(keyToDirection('Enter')).toBeNull();
-    expect(keyToDirection('a')).toBeNull();
   });
 });

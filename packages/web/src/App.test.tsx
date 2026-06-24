@@ -193,4 +193,41 @@ describe('App shell', () => {
     fireEvent.keyDown(window, { key: 'd' });
     await waitFor(() => expect(services[1]!.classList.contains('is-focused')).toBe(true));
   });
+
+  it('applies a binding remapped in-place after a config re-fetch (FR-R4 hot-reload)', async () => {
+    // Start with default bindings, then have the next config fetch return a
+    // remapped binding; a visibility re-fetch should swap behavior live.
+    const live: { keybindings?: Record<string, string[]> } = {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/v1/services')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockCatalog()) });
+        }
+        const config = mockConfig();
+        config.config.keybindings = live.keybindings;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(config) });
+      }),
+    );
+
+    const { container } = render(<App />);
+    await screen.findByText('Netflix');
+    const tile = (i: number): Element =>
+      container.querySelectorAll('.row')[0]!.querySelectorAll('.tile')[i]!;
+
+    // Initial focus is the first service tile; "d" is not bound yet (no-op).
+    expect(tile(0).classList.contains('is-focused')).toBe(true);
+    fireEvent.keyDown(window, { key: 'd' });
+    expect(tile(0).classList.contains('is-focused')).toBe(true);
+
+    // Hot-edit: remap "right" to "d"; trigger a config re-fetch via visibility.
+    live.keybindings = { right: ['d'] };
+    fireEvent(document, new Event('visibilitychange'));
+
+    // After the re-fetch applies, "d" drives navigation to the second tile.
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'd' });
+      expect(tile(1).classList.contains('is-focused')).toBe(true);
+    });
+  });
 });

@@ -20,7 +20,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { move, firstFocusable, type Direction, type FocusPosition } from './focusEngine';
+import { move, firstFocusable, type FocusPosition } from './focusEngine';
 import { buildKeyMap, type KeyMap } from '../keybindings';
 import type { ActionName } from '@openhearth/shared';
 
@@ -126,11 +126,13 @@ export function FocusProvider({
         case 'select':
           onSelectRef.current?.(focusedRef.current);
           return;
-        case 'navigate':
-          setFocused((prev) =>
-            move(rowLengthsRef.current, prev, bound.params?.direction as Direction),
-          );
+        case 'navigate': {
+          const dir = bound.params?.direction;
+          if (dir === 'up' || dir === 'down' || dir === 'left' || dir === 'right') {
+            setFocused((prev) => move(rowLengthsRef.current, prev, dir));
+          }
           return;
+        }
         default:
           // Any other action (play_pause, stop, seek, …) is routed to the
           // control path — no keyboard-specific handling here.

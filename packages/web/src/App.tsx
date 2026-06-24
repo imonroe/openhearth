@@ -19,6 +19,9 @@ type State =
 
 const EMPTY_CATALOG: ServiceCatalog = { groups: [], errors: [] };
 
+/** How often the kiosk re-fetches config to pick up a server hot-reload (FR-R4). */
+const CONFIG_POLL_MS = 30_000;
+
 /** `navigate` and `dispatch` are injectable so tests can assert behavior. */
 export function App({
   navigate = defaultNavigate,
@@ -51,17 +54,20 @@ export function App({
     };
     void load(true);
 
-    // Re-fetch config when the kiosk page becomes visible again, so a hot-edited
-    // keybinding (server hot-reload) takes effect without a restart (FR-R4).
-    // (Returning from a launched service is a full page reload, which also
-    // re-fetches; this covers edits made while staying on the home screen.)
+    // Pick up a server hot-reload (e.g. a re-mapped keybinding) without a restart
+    // (FR-R4) via two triggers: a low-frequency poll (a dedicated kiosk is always
+    // foregrounded, so we can't rely on visibility alone), plus a re-fetch when
+    // the page regains visibility. Returning from a launched service is a full
+    // page reload, which also re-fetches.
     const onVisible = (): void => {
       if (document.visibilityState === 'visible') void load(false);
     };
     document.addEventListener('visibilitychange', onVisible);
+    const poll = setInterval(() => void load(false), CONFIG_POLL_MS);
     return () => {
       controller.abort();
       document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(poll);
     };
   }, []);
 
