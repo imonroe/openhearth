@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime data (host-mapped volumes)
+/cache/
+/config/openhearth.local.yaml
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Environment
+.env
+.env.local
