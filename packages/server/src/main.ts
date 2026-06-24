@@ -170,6 +170,9 @@ async function main(): Promise<void> {
       configErrors: configService.errors,
       // Whether shared-token auth is on (never the token itself).
       authEnabled: Boolean(configService.config.server?.auth?.token),
+      // Metadata provider configured (reachability is confirmed lazily on first
+      // lookup, not pinged at boot — no speculative outbound call; NFR-9).
+      metadataProvider: metadataService?.providerName ?? null,
     },
     'OpenHearth server ready',
   );

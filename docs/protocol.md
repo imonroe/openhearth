@@ -218,7 +218,7 @@ and errors are a JSON object `{ "status": "<code>", "errors"?: string[] }`.
 
 | Method · Path | Success body |
 |---|---|
-| `GET /health` | `{ status: "ok", protocol_version: 1, uptime_s, config_valid }` |
+| `GET /health` | `{ status: "ok", ready, protocol_version: 1, uptime_s, config: { valid, errors }, config_valid, library: { enabled, items }, metadata: { provider } }`. `ready` is true whenever the endpoint is reachable (the server degrades rather than refusing to serve); the component summaries aid troubleshooting. `config_valid` is retained for older clients. Stays open even when token auth is enabled. |
 | `GET /config` | `{ config, errors, valid }` — secrets (e.g. `metadata.tmdbApiKey`) are **redacted** (`***`); this endpoint is unauthenticated. |
 
 ### Services (Strategy A)
