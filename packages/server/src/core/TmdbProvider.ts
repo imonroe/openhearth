@@ -105,7 +105,13 @@ export class TmdbProvider implements MetadataProvider {
     }
     const body = await this.request<TmdbSearchResponse>(path, params);
     const records = body?.results ?? [];
-    return records.filter((r) => typeof r.id === 'number').map((r) => toResult(this.name, kind, r));
+    return (
+      records
+        .filter((r) => typeof r.id === 'number')
+        .map((r) => toResult(this.name, kind, r))
+        // Drop records with no usable title rather than emitting an empty one.
+        .filter((r): r is MetadataResult => r !== null)
+    );
   }
 
   /** Build the URL, run it through the throttle, and parse JSON. */
@@ -135,7 +141,7 @@ export class TmdbProvider implements MetadataProvider {
   }
 
   private monotonicNow(): number {
-    // performance.now() is monotonic and available in Node 20; avoids Date.now.
+    // Monotonic clock: immune to wall-clock jumps that could skew the interval.
     return performance.now();
   }
 
@@ -164,8 +170,10 @@ function parseRef(ref: string): { kind: MetadataKind; id: string } | null {
   return { kind, id };
 }
 
-/** Map a TMDB record to the neutral result shape. */
-function toResult(provider: string, kind: MetadataKind, r: TmdbRecord): MetadataResult {
+/** Map a TMDB record to the neutral result shape; null if it has no usable title. */
+function toResult(provider: string, kind: MetadataKind, r: TmdbRecord): MetadataResult | null {
+  const title = ((kind === 'movie' ? r.title : r.name) ?? r.name ?? r.title ?? '').trim();
+  if (!title) return null;
   const date = kind === 'movie' ? r.release_date : r.first_air_date;
   const year = yearOf(date);
   const poster = r.poster_path ? `${IMAGE_BASE}/${POSTER_SIZE}${r.poster_path}` : undefined;
@@ -173,7 +181,7 @@ function toResult(provider: string, kind: MetadataKind, r: TmdbRecord): Metadata
   return {
     ref: `${provider}:${kind}:${r.id}`,
     kind,
-    title: (kind === 'movie' ? r.title : r.name) ?? r.name ?? r.title ?? '',
+    title,
     ...(year != null ? { year } : {}),
     ...(r.overview ? { overview: r.overview } : {}),
     artwork: {

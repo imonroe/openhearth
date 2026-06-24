@@ -109,6 +109,15 @@ describe('TmdbProvider.search', () => {
     expect(out.map((r) => r.ref).sort()).toEqual(['tmdb:movie:603', 'tmdb:tv:1396']);
   });
 
+  it('drops records with no usable title', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ results: [{ id: 1 }, { id: 2, title: 'Real' }] }),
+    );
+    const out = await provider(fetchImpl).search({ title: 'x', kind: 'movie' });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ ref: 'tmdb:movie:2', title: 'Real' });
+  });
+
   it('returns [] for a blank title without calling the network', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ results: [] }));
     expect(await provider(fetchImpl).search({ title: '   ' })).toEqual([]);
