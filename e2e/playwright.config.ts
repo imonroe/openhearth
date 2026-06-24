@@ -46,6 +46,9 @@ export default defineConfig({
       command: 'node packages/server/dist/main.js',
       cwd: repoRoot,
       url: `${HOME_URL}/api/v1/health`,
+      // Surface server logs (boot scan summary / cache warnings) in the CI log.
+      stdout: 'pipe',
+      stderr: 'pipe',
       // Locally we reuse an already-running :8080 to speed iteration; see the
       // README caveat — a dev server on :8080 with a *different* config would be
       // used instead of the fixtures. CI always starts fresh (false).

@@ -17,6 +17,11 @@ test.describe('player', () => {
 
   /** From home: down into the library row, open the item, press Play. */
   async function openPlayer(page: Page): Promise<void> {
+    // Diagnostic (bypasses the browser cache): what does the server actually
+    // return for the library? Reveals whether the boot scan indexed the fixture.
+    const lib = await page.request.get('/api/v1/library?source=media');
+    console.log(`[diag] GET /api/v1/library?source=media → ${lib.status()} ${await lib.text()}`);
+
     // The library is indexed asynchronously after the server starts listening, so
     // a fresh load can race the scan and see an empty row — reload until the
     // indexed fixture tile appears.

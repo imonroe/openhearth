@@ -20,7 +20,7 @@ library:
 
 server:
   port: 8080
-  logLevel: warn
+  logLevel: info
 
 keybindings:
   up: [ArrowUp]
