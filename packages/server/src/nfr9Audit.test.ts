@@ -43,8 +43,12 @@ function sourceFiles(dir: string): string[] {
 
 describe('NFR-9: no phone-home', () => {
   it('only the allowlisted modules contain outbound-network primitives', () => {
+    const files = sourceFiles(here);
+    // Guard against a vacuous pass: if the scan found nothing (wrong dir, etc.)
+    // the empty-offenders assertion would falsely succeed.
+    expect(files.length).toBeGreaterThan(10);
     const offenders: string[] = [];
-    for (const file of sourceFiles(here)) {
+    for (const file of files) {
       const rel = path.relative(here, file).split(path.sep).join('/');
       if (ALLOWED.has(rel)) continue;
       const text = fs.readFileSync(file, 'utf8');
