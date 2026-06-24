@@ -317,8 +317,9 @@ The `icon` field resolves in one of four ways. The default catalog uses
 [homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons)
 (Apache-2.0); see [`assets/service-icons/README.md`](../assets/service-icons/README.md)
 for the full list, provenance, and how to add more. Available slugs match the
-seeded service ids: `netflix`, `youtube`, `youtube-tv`, `disney-plus`, `hulu`,
-`max`, `prime-video`, `apple-tv`, `peacock`, `paramount-plus`, `spotify`.
+seeded service ids: `netflix`, `youtube`, `youtube-tv`, `sling-tv`,
+`disney-plus`, `hulu`, `max`, `prime-video`, `apple-tv`, `peacock`,
+`paramount-plus`, `plex`, `spotify`.
 
 **Overriding a bundled icon.** A user-supplied `icon` always wins. To replace
 Netflix's logo with your own, drop the file in `config/` and point `icon` at it:
