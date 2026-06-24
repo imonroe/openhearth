@@ -62,6 +62,8 @@ export const librarySourceSchema = z
   })
   .strict();
 
+export type LibrarySource = z.infer<typeof librarySourceSchema>;
+
 /** Local-media library options. */
 export const libraryConfigSchema = z
   .object({

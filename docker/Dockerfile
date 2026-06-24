@@ -19,6 +19,15 @@ FROM node:${NODE_VERSION}-bookworm-slim AS builder
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
+
+# Build toolchain for native deps (better-sqlite3). prebuild-install fetches a
+# prebuilt binary when available; python3/make/g++ are the node-gyp fallback so
+# the install never fails if a prebuild is missing for this Node ABI. None of
+# this leaks into the slim runtime stage.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /repo
 
 # Install dependencies first (better layer caching). Copy only the manifests

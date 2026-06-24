@@ -33,5 +33,10 @@
     "typescript": "^5.5.4",
     "typescript-eslint": "^8.0.0",
     "vitest": "^4.1.9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

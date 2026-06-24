@@ -5,12 +5,17 @@
  * the Fastify app, and listens on :8080. Emits structured startup diagnostics
  * (config validation summary, bound port, watched paths). No telemetry.
  */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { buildApp } from './app.js';
 import { ConfigService } from './core/ConfigService.js';
 import { seedConfigDir } from './core/seedConfig.js';
+import { CacheStore } from './core/CacheStore.js';
+import { LibraryService } from './core/LibraryService.js';
 
 const CONFIG_DIR = process.env.OPENHEARTH_CONFIG_DIR ?? '/config';
 const SEED_DIR = process.env.OPENHEARTH_SEED_DIR ?? '/app/config.example';
+const CACHE_DIR = process.env.OPENHEARTH_CACHE_DIR ?? '/cache';
 const HOST = process.env.HOST ?? '0.0.0.0';
 const WEB_ROOT = process.env.WEB_ROOT ?? '/app/public';
 
@@ -24,8 +29,27 @@ async function main(): Promise<void> {
   const port = configService.config.server?.port ?? Number(process.env.PORT ?? 8080);
   const app = buildApp({ configService, webRoot: WEB_ROOT });
 
+  // Open the disposable library/cache DB. A failure here (e.g. an unwritable
+  // /cache mount) must not stop the server — local media just won't be indexed.
+  let cacheStore: CacheStore | null = null;
+  let libraryService: LibraryService | null = null;
+  try {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    cacheStore = new CacheStore(path.join(CACHE_DIR, 'openhearth.db'));
+    libraryService = new LibraryService({
+      store: cacheStore,
+      getSources: () => configService.config.library?.sources ?? [],
+    });
+  } catch (err) {
+    app.log.warn(
+      { cacheDir: CACHE_DIR, err },
+      'could not open the cache DB (check /cache volume ownership); local library disabled',
+    );
+  }
+
   // Keep the active log level in sync with hot-reloaded config, and surface
   // changes the running process can't apply live.
+  let lastSources = JSON.stringify(configService.config.library?.sources ?? []);
   configService.on('change', () => {
     const next = configService.config.server?.logLevel;
     if (next && app.log.level !== next) {
@@ -42,13 +66,34 @@ async function main(): Promise<void> {
     if (configService.errors.length) {
       app.log.warn({ errors: configService.errors }, 'config reloaded with validation errors');
     }
+    // Re-index when the library sources change (added/removed/repointed), so a
+    // hot-edited path takes effect without a restart. Skipped when sources are
+    // unchanged to avoid a needless walk on unrelated config edits.
+    const sources = JSON.stringify(configService.config.library?.sources ?? []);
+    if (libraryService && sources !== lastSources) {
+      lastSources = sources;
+      setImmediate(() => {
+        try {
+          const summary = libraryService.scan();
+          app.log.info(
+            { totalIndexed: summary.totalIndexed },
+            'library re-indexed after config change',
+          );
+        } catch (err) {
+          app.log.warn({ err }, 'library re-scan failed');
+        }
+      });
+    }
   });
 
-  // Graceful shutdown: close the HTTP server and the config watcher.
+  // Graceful shutdown: close the HTTP server, the config watcher, and the cache.
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => {
       app.log.info({ signal }, 'shutting down');
-      void Promise.allSettled([app.close(), configService.stop()]).then(() => process.exit(0));
+      void Promise.allSettled([app.close(), configService.stop()]).then(() => {
+        cacheStore?.close();
+        process.exit(0);
+      });
     });
   }
 
@@ -75,6 +120,7 @@ async function main(): Promise<void> {
       host: HOST,
       configDir: CONFIG_DIR,
       watching: CONFIG_DIR,
+      cacheDir: CACHE_DIR,
       seededConfig: seed.seeded,
       webRoot: WEB_ROOT,
       configValid: configService.errors.length === 0,
@@ -82,6 +128,23 @@ async function main(): Promise<void> {
     },
     'OpenHearth server ready',
   );
+
+  // Build the local library index after the server is listening so health is
+  // green immediately. The scan is best-effort: a bad source path is reported
+  // per-source and never crashes the process (NFR-4 spirit).
+  if (libraryService) {
+    setImmediate(() => {
+      try {
+        const summary = libraryService.scan();
+        app.log.info(
+          { totalIndexed: summary.totalIndexed, sources: summary.sources },
+          'library scan complete',
+        );
+      } catch (err) {
+        app.log.warn({ err }, 'library scan failed');
+      }
+    });
+  }
 }
 
 main().catch((err) => {
