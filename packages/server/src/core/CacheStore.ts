@@ -10,10 +10,34 @@
  * local, and synchronous SQLite keeps the call sites simple and race-free.
  */
 import Database from 'better-sqlite3';
-import { libraryItemSchema, type LibraryItem } from '@openhearth/shared';
+import {
+  libraryItemSchema,
+  mediaItemSchema,
+  type LibraryItem,
+  type MediaItem,
+} from '@openhearth/shared';
 
-/** Current cache schema version — bump when the table shapes change. */
-const SCHEMA_VERSION = 1;
+/**
+ * Current cache schema version, written to `user_version`. Currently
+ * informational only — it is not read back, and migrations are unnecessary
+ * because every table is additive (`CREATE TABLE IF NOT EXISTS`) and the cache
+ * is disposable (a cold/incompatible DB is simply rebuilt). A future
+ * *non-additive* shape change must wire this into an actual read + migration (or
+ * a wipe-and-rebuild) rather than assuming it's handled automatically.
+ */
+const SCHEMA_VERSION = 2;
+
+/**
+ * A cached metadata lookup (#41). `item` is the resolved normalized media, or
+ * `null` for a cached miss (a title the provider found nothing for) — both are
+ * worth caching so a second load never refetches. Times are epoch milliseconds.
+ */
+export interface MetadataCacheEntry {
+  item: MediaItem | null;
+  fetched_at: number;
+  /** Epoch ms after which this entry is stale and should be refetched. */
+  expires_at: number;
+}
 
 export interface LibraryQuery {
   source_id?: string;
@@ -81,6 +105,13 @@ export class CacheStore {
         item_id TEXT PRIMARY KEY,
         position_sec INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS metadata_cache (
+        key TEXT PRIMARY KEY,
+        payload TEXT,            -- JSON MediaItem, or NULL for a cached miss
+        fetched_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
       );
     `);
     this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
@@ -197,6 +228,54 @@ export class CacheStore {
   /** Forget an item's resume position (e.g. on finish/stop-at-start). */
   clearResumePosition(itemId: string): void {
     this.db.prepare('DELETE FROM resume_positions WHERE item_id = ?').run(itemId);
+  }
+
+  /**
+   * Read a cached metadata lookup (#41), or undefined on a cold/missing entry.
+   * Expiry is the caller's concern (it owns the clock); this returns whatever is
+   * stored. A payload that fails validation is treated as absent so a stale
+   * schema can't crash the read — the entry is simply refetched.
+   */
+  getMetadata(key: string): MetadataCacheEntry | undefined {
+    const row = this.db
+      .prepare('SELECT payload, fetched_at, expires_at FROM metadata_cache WHERE key = ?')
+      .get(key) as { payload: string | null; fetched_at: number; expires_at: number } | undefined;
+    if (!row) return undefined;
+    let item: MediaItem | null = null;
+    if (row.payload !== null) {
+      // A corrupt row (non-JSON or a stale schema) is treated as absent so the
+      // read can never throw — the entry is simply refetched.
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(row.payload);
+      } catch {
+        return undefined;
+      }
+      const parsed = mediaItemSchema.safeParse(parsedJson);
+      if (!parsed.success) return undefined; // stale/invalid shape → refetch
+      item = parsed.data;
+    }
+    return { item, fetched_at: row.fetched_at, expires_at: row.expires_at };
+  }
+
+  /** Insert or replace a cached metadata lookup (positive or negative). */
+  setMetadata(key: string, entry: MetadataCacheEntry): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO metadata_cache (key, payload, fetched_at, expires_at)
+         VALUES (@key, @payload, @fetched_at, @expires_at)`,
+      )
+      .run({
+        key,
+        payload: entry.item ? JSON.stringify(entry.item) : null,
+        fetched_at: entry.fetched_at,
+        expires_at: entry.expires_at,
+      });
+  }
+
+  /** Drop one cached metadata entry (e.g. a forced refresh). */
+  clearMetadata(key: string): void {
+    this.db.prepare('DELETE FROM metadata_cache WHERE key = ?').run(key);
   }
 
   close(): void {

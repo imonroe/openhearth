@@ -77,3 +77,52 @@ describe('CacheStore', () => {
     store.close();
   });
 });
+
+describe('CacheStore — metadata cache (#41)', () => {
+  it('cold read is undefined; round-trips a positive entry', () => {
+    const store = new CacheStore(':memory:');
+    expect(store.getMetadata('movie|heat|1995')).toBeUndefined();
+
+    const mediaItem = { id: 'tmdb:movie:949', title: 'Heat', kind: 'movie' as const, year: 1995 };
+    store.setMetadata('movie|heat|1995', { item: mediaItem, fetched_at: 100, expires_at: 200 });
+    expect(store.getMetadata('movie|heat|1995')).toEqual({
+      item: mediaItem,
+      fetched_at: 100,
+      expires_at: 200,
+    });
+    store.close();
+  });
+
+  it('round-trips a negative (cached-miss) entry as item: null', () => {
+    const store = new CacheStore(':memory:');
+    store.setMetadata('movie|nope|', { item: null, fetched_at: 1, expires_at: 2 });
+    expect(store.getMetadata('movie|nope|')).toEqual({ item: null, fetched_at: 1, expires_at: 2 });
+    store.close();
+  });
+
+  it('treats a corrupt stored payload as absent (stale schema or non-JSON → refetch)', () => {
+    const store = new CacheStore(':memory:');
+    const raw = store as unknown as {
+      db: { prepare(sql: string): { run(...args: unknown[]): void } };
+    };
+    const corrupt = (key: string, payload: string): void => {
+      store.setMetadata(key, { item: null, fetched_at: 1, expires_at: 2 });
+      raw.db.prepare('UPDATE metadata_cache SET payload = ? WHERE key = ?').run(payload, key);
+    };
+    // Valid JSON, wrong shape (older schema):
+    corrupt('schema', '{"bad":true}');
+    expect(store.getMetadata('schema')).toBeUndefined();
+    // Not even JSON — getMetadata must not throw:
+    corrupt('garbage', 'not json{');
+    expect(store.getMetadata('garbage')).toBeUndefined();
+    store.close();
+  });
+
+  it('clears an entry', () => {
+    const store = new CacheStore(':memory:');
+    store.setMetadata('k', { item: null, fetched_at: 1, expires_at: 2 });
+    store.clearMetadata('k');
+    expect(store.getMetadata('k')).toBeUndefined();
+    store.close();
+  });
+});
