@@ -169,6 +169,12 @@ The service tile catalog. A `services:` list of tile definitions; selecting a ti
 navigates the kiosk to its `launch_url`. Files in `services.d/` are drop-in
 definitions merged on top of `services.yaml` (the shareable community catalog).
 
+> **A note on field casing.** Service fields use `snake_case` (`launch_url`,
+> `user_agent`) while `openhearth.yaml` uses `camelCase` (`tmdbApiKey`,
+> `logLevel`). This is deliberate: service definitions follow the shareable
+> community-catalog convention from PRD §10.3, so drop-in files match upstream
+> examples. `launch_url` must be an `http(s)` URL.
+
 > **Not yet schema-validated.** In Phase 1 these files are loaded as raw catalog
 > data and are **not** validated against a schema — the "Required"/"Type" columns
 > below describe the contract the `CatalogService` will enforce (issue #23), not

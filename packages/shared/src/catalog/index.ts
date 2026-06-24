@@ -18,8 +18,23 @@ export const serviceSchema = z
     id: z.string().min(1),
     /** Display label on the tile. */
     name: z.string().min(1),
-    /** Where the kiosk navigates on select (FR-A4: honored verbatim). */
-    launch_url: z.string().url(),
+    /**
+     * Where the kiosk navigates on select (FR-A4: honored verbatim). Constrained
+     * to http(s) at the validation seam: this is the literal navigation target,
+     * and tiles can come from community `services.d/*` drop-ins, so a
+     * `javascript:` / `data:` / `file:` URL would be a stored-injection or
+     * local-file-exfil vector. Defense-in-depth — #25 also guards at nav time.
+     */
+    launch_url: z.string().refine(
+      (u) => {
+        try {
+          return ['http:', 'https:'].includes(new URL(u).protocol);
+        } catch {
+          return false;
+        }
+      },
+      { message: 'launch_url must be an http(s) URL' },
+    ),
     /** Local file in config/, a remote URL, or omitted (metadata fallback). */
     icon: z.string().optional(),
     /** Row/section grouping (matched by ui.rows[].group). */
@@ -35,12 +50,15 @@ export const serviceSchema = z
 
 export type ServiceTile = z.infer<typeof serviceSchema>;
 
-/** The shape of a `services.yaml` / `services.d/*.yaml` file. */
-export const serviceFileSchema = z
-  .object({
-    services: z.array(z.unknown()).optional(),
-  })
-  .strict();
+/**
+ * The shape of a `services.yaml` / `services.d/*.yaml` file. NOT strict at the
+ * file level: a stray top-level key (a stray `comment:`, `version:`, …) must not
+ * nuke every tile in the file. Unknown keys are ignored; per-entry validation
+ * (serviceSchema, strict) catches malformed tiles individually.
+ */
+export const serviceFileSchema = z.object({
+  services: z.array(z.unknown()).optional(),
+});
 
 /** One group of tiles, in display order. */
 export interface ServiceGroup {

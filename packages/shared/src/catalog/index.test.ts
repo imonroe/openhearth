@@ -29,6 +29,24 @@ describe('serviceSchema', () => {
     expect(serviceSchema.safeParse({ id: 'a', name: 'A', launch_url: 'nope' }).success).toBe(false);
   });
 
+  it('rejects dangerous launch_url schemes (only http/https allowed)', () => {
+    for (const url of [
+      'javascript:alert(1)',
+      'data:text/html,<script>1</script>',
+      'file:///etc/passwd',
+      'vbscript:msgbox(1)',
+      'ftp://host/file',
+    ]) {
+      expect(serviceSchema.safeParse({ id: 'a', name: 'A', launch_url: url }).success).toBe(false);
+    }
+    expect(serviceSchema.safeParse({ id: 'a', name: 'A', launch_url: 'http://x/' }).success).toBe(
+      true,
+    );
+    expect(serviceSchema.safeParse({ id: 'a', name: 'A', launch_url: 'https://x/' }).success).toBe(
+      true,
+    );
+  });
+
   it('rejects an empty id and unknown fields (strict)', () => {
     expect(serviceSchema.safeParse({ id: '', name: 'A', launch_url: 'https://a/' }).success).toBe(
       false,

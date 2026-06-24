@@ -124,4 +124,39 @@ describe('buildCatalog', () => {
   it('is empty (no error) when there are no services', () => {
     expect(buildCatalog(raw(undefined))).toEqual({ groups: [], errors: [] });
   });
+
+  it('tolerates a stray top-level key in a services file (keeps the tiles)', () => {
+    const cat = buildCatalog(
+      raw({ version: 1, comment: 'hi', services: [svc({ id: 'ok', name: 'OK' })] }),
+    );
+    expect(cat.errors).toEqual([]);
+    expect(cat.groups.flatMap((g) => g.services.map((s) => s.id))).toEqual(['ok']);
+  });
+
+  it('warns on a duplicate id within the same file (last wins)', () => {
+    const cat = buildCatalog(
+      raw({
+        services: [
+          svc({ id: 'dup', name: 'First', launch_url: 'https://first.example/' }),
+          svc({ id: 'dup', name: 'Second', launch_url: 'https://second.example/' }),
+        ],
+      }),
+    );
+    const all = cat.groups.flatMap((g) => g.services);
+    expect(all).toHaveLength(1);
+    expect(all[0]!.name).toBe('Second'); // last wins
+    expect(cat.errors.some((e) => e.includes('duplicate id "dup"'))).toBe(true);
+  });
+
+  it('does not warn on a cross-file override (intended community feature)', () => {
+    const cat = buildCatalog(
+      raw(
+        { services: [svc({ id: 'netflix', name: 'Netflix' })] },
+        {
+          'override.yaml': { services: [svc({ id: 'netflix', name: 'Netflix 2' })] },
+        },
+      ),
+    );
+    expect(cat.errors).toEqual([]);
+  });
 });

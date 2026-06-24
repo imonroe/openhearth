@@ -54,6 +54,7 @@ export function buildCatalog(raw: RawServiceCatalog): ServiceCatalog {
     }
 
     const entries = file.data.services ?? [];
+    const idsInThisFile = new Set<string>();
     entries.forEach((entry, index) => {
       const parsed = serviceSchema.safeParse(entry);
       if (!parsed.success) {
@@ -64,6 +65,15 @@ export function buildCatalog(raw: RawServiceCatalog): ServiceCatalog {
         }
         return; // skip this entry, keep the rest of the catalog
       }
+      // A duplicate id *within the same file* is almost always a typo (unlike a
+      // cross-file override, which is the intended community-catalog feature) —
+      // surface it as a non-fatal warning. Last-wins either way.
+      if (idsInThisFile.has(parsed.data.id)) {
+        errors.push(
+          `${label}[${index}]: duplicate id "${parsed.data.id}" in the same file (last wins)`,
+        );
+      }
+      idsInThisFile.add(parsed.data.id);
       byId.set(parsed.data.id, parsed.data);
     });
   }
@@ -92,5 +102,6 @@ function compareTiles(a: ServiceTile, b: ServiceTile): number {
   const ao = a.order ?? Number.POSITIVE_INFINITY;
   const bo = b.order ?? Number.POSITIVE_INFINITY;
   if (ao !== bo) return ao - bo;
-  return a.name.localeCompare(b.name);
+  // Pin the locale so ordering is deterministic across hosts.
+  return a.name.localeCompare(b.name, 'en');
 }
