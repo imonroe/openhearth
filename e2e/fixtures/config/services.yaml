@@ -1,0 +1,15 @@
+# E2E service catalog. Tiles launch the local stub service (port 8090) so the
+# Home/Back return test exercises a real cross-origin navigation + the kiosk
+# home-guard extension, with no external network.
+services:
+  - id: fakeflix
+    name: FakeFlix
+    launch_url: http://localhost:8090/
+    group: Streaming
+    order: 10
+
+  - id: stubtube
+    name: StubTube
+    launch_url: http://localhost:8090/?service=stubtube
+    group: Streaming
+    order: 20

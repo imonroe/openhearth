@@ -19,10 +19,12 @@
     "dev": "pnpm -r --if-present --parallel dev",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "e2e": "pnpm build && playwright test -c e2e/playwright.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
+    "@playwright/test": "1.56.0",
     "@types/node": "^20.14.0",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^9.9.0",
