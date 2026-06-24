@@ -55,6 +55,81 @@ to `config`/`cache` are owned by your host user.
   - **Drive bind mounts:** `C:\Users\me\openhearth\config:/config` works via Docker
     Desktop file sharing; expect slower I/O. Use forward slashes or escaped paths in
     compose.
+  - **Network shares / NAS (`/media` from a NAS):** see the next section — a
+    **mapped drive letter does not work**; mount the SMB share directly.
+
+### Windows: mounting `/media` from a network share (SMB/CIFS)
+
+This is the most common Windows surprise. If your library lives on a NAS or
+another PC, **do not** bind-mount a mapped drive letter:
+
+```yaml
+# WRONG — comes up empty, no error
+volumes:
+  - Z:/Media/Video:/media:ro
+```
+
+A mapped drive (`Z:`) only exists in your **interactive Windows login session**.
+Docker Desktop runs in a WSL2 VM that never sees that mapping, so the bind mount
+resolves to an empty directory and the library scan finds nothing. No
+path-formatting change fixes this — the drive letter itself is the dead end.
+
+Instead, mount the underlying SMB share as a **CIFS named volume**. Docker
+connects to the share from inside the VM, independent of any Windows drive
+mapping:
+
+```yaml
+services:
+  openhearth:
+    volumes:
+      - media:/media:ro            # uses the named volume below
+
+volumes:
+  media:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: '//192.168.1.223/Ian/Media/Video'   # forward slashes; UNC host + share + subpath
+      o: 'addr=192.168.1.223,username=${SMB_USER},password=${SMB_PASS},ro,uid=${PUID:-1000},gid=${PGID:-1000},file_mode=0444,dir_mode=0555,vers=3.0'
+```
+
+**Finding the share path.** A mapped drive's UNC target is its `\\host\share`.
+In PowerShell: `Get-SmbMapping -LocalPath 'Z:'` → e.g. `\\192.168.1.223\Ian`.
+Append any subfolder and switch to forward slashes for `device:`
+(`//192.168.1.223/Ian/Media/Video`).
+
+**Credentials — the SMB variables.** Keep them in `.env` next to the compose
+file (gitignored — never commit), where they fill the `${...}` placeholders
+above. See [`.env.example`](../../.env.example).
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `SMB_USER` | yes (unless guest) | Share login. `DOMAIN\user` for a domain account; just the username for a local NAS account. **No trailing spaces** — CIFS includes them in the value and auth fails intermittently. |
+| `SMB_PASS` | yes (unless guest) | Password for `SMB_USER`. |
+| `PUID` / `PGID` | no (default 1000) | Reused as the mount's `uid`/`gid` so the container's run-as user can read the files. |
+
+Notes on the `o:` options:
+
+- **`ro` + `file_mode=0444` / `dir_mode=0555`** keep the whole mount read-only,
+  matching `/media`'s `:ro` contract.
+- **`vers=3.0`** suits most modern NAS/Windows shares. If the mount errors, try
+  `vers=2.1` or `vers=1.0` for older devices/Samba.
+- **Guest shares:** if the share allows anonymous access, drop `username`/
+  `password` and use `guest` instead (leave `SMB_USER`/`SMB_PASS` blank).
+
+**Applying changes.** Docker caches volume definitions, so after editing the
+options you must recreate the volume:
+
+```sh
+docker compose down
+docker volume rm openhearth_media        # ignore "no such volume" the first time
+docker compose up -d
+docker compose exec openhearth ls -la /media   # should list your media
+```
+
+> The same CIFS named-volume approach works on **Linux** too, but there a regular
+> bind mount of a locally-mounted share (e.g. via `/etc/fstab`) is usually
+> simpler. The named volume is specifically the clean answer for Windows.
 - **Permissions:** Docker Desktop's VM handles bind-mount ownership, so the UID-1000
   issue rarely bites — bind-mounted Windows dirs are writable by the container.
   (Named volumes for `cache` sidestep it entirely and are faster.)

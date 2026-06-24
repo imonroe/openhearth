@@ -25,7 +25,7 @@ services:
       - '8080:8080' # web UI + API + WS
     volumes:
       - ./config:/config # host-mapped YAML (read/write, source of truth)
-      - /path/to/media:/media:ro # library source(s), read-only
+      - media:/media:ro # SMB share \\192.168.1.223\Ian\Media\Video (see volumes: below)
       - ./cache:/cache # derived index/artwork/transcode cache (disposable)
     environment:
       - TMDB_API_KEY=${TMDB_API_KEY:-} # optional; app is fully usable without it
@@ -49,3 +49,19 @@ services:
     #       devices:
     #         - { driver: nvidia, count: 1, capabilities: [gpu, video] }
     restart: unless-stopped
+
+# Mounts the SMB/CIFS share directly from inside the Docker VM, so it does NOT
+# depend on the Windows `Z:` mapping (mapped drive letters only exist in your
+# interactive login session and are invisible to Docker Desktop's WSL2 VM).
+# Put SMB_USER / SMB_PASS in a `.env` file next to this compose file. uid/gid
+# match the container user (PUID/PGID, default 1000) so the `node` user can read
+# the files; ro + 0444/0555 keep the whole mount read-only.
+# Full walkthrough (finding the share path, vers=, guest shares, recreating the
+# volume): docs/deployment/host-parity.md § "mounting /media from a network share".
+volumes:
+  media:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: '//192.168.1.223/Ian/Media/Video'
+      o: 'addr=192.168.1.223,username=${SMB_USER},password=${SMB_PASS},ro,uid=${PUID:-1000},gid=${PGID:-1000},file_mode=0444,dir_mode=0555,vers=3.0'
