@@ -31,6 +31,7 @@ renamed to match the OpenHearth service `id`:
 | `peacock.svg`        | `peacock.svg`          |
 | `paramount-plus.svg` | `paramount-plus.svg`   |
 | `spotify.svg`        | `spotify.svg`          |
+| `plex.svg`           | `plex.svg`             |
 
 The Apache-2.0 license covers the icon **files**. The logos themselves are
 **trademarks of their respective owners**; bundling them here is for
@@ -38,6 +39,18 @@ service identification on the launcher only and implies no affiliation or
 endorsement.
 
 [homarr-labs/dashboard-icons]: https://github.com/homarr-labs/dashboard-icons
+
+### Original icons (not from dashboard-icons)
+
+These are simple, original brand-colored marks drawn for OpenHearth because
+dashboard-icons has no entry for the service. They exist for service
+identification on the launcher only; the names/logos remain trademarks of
+their respective owners. CC0 / public-domain as far as OpenHearth is concerned —
+replace any of them with your own `icon:` override at any time.
+
+| File (`id`)    | Notes                                             |
+| -------------- | ------------------------------------------------- |
+| `sling-tv.svg` | Original Sling TV mark (no dashboard-icons entry) |
 
 ## Customizing
 

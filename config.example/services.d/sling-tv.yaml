@@ -1,0 +1,14 @@
+# Drop-in service definition (community catalog).
+services:
+  - id: sling-tv
+    name: Sling TV
+    icon: bundled:sling-tv # shipped logo; override with a config/ file or http(s) URL
+    launch_url: https://watch.sling.com/
+    group: Live TV
+    order: 20
+    notes: >-
+      US-only live-TV subscription. Widevine-protected live streams; L3 in a
+      generic Chromium may cap resolution. The web player is mouse-oriented —
+      D-pad focus works but is less polished than a leanback surface. Sign-in
+      can require a one-time desktop-class UA; set `user_agent` if the player
+      refuses to load.
