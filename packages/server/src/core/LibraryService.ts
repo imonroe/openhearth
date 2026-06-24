@@ -144,7 +144,18 @@ export class LibraryService {
     try {
       files = this.walk(source.path);
     } catch (err) {
-      result.errors.push(`source "${source.id}" (${source.path}): ${(err as Error).message}`);
+      const resolved = path.resolve(source.path);
+      // A relative `path` resolves against the server's CWD (/app), not the media
+      // mount — the #1 misconfiguration. Spell that out so it fails loudly: a bad
+      // root otherwise just leaves stale items in the index and 403s at play time.
+      const hint = path.isAbsolute(source.path)
+        ? ''
+        : ` — "${source.path}" is relative and resolved to "${resolved}"; use an` +
+          ` absolute container path under your media mount (e.g. /media/${source.path}).`;
+      result.errors.push(
+        `library source root not found: source "${source.id}" (${source.path}): ` +
+          `${(err as Error).message}${hint}`,
+      );
       return result;
     }
 

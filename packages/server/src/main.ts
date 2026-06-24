@@ -7,11 +7,12 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { type FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigService } from './core/ConfigService.js';
 import { seedConfigDir } from './core/seedConfig.js';
 import { CacheStore } from './core/CacheStore.js';
-import { LibraryService } from './core/LibraryService.js';
+import { LibraryService, type ScanSummary } from './core/LibraryService.js';
 import { TranscodeService } from './core/TranscodeService.js';
 import { createMetadataProvider, MetadataService } from './core/MetadataService.js';
 import { ArtworkCache } from './core/ArtworkCache.js';
@@ -28,6 +29,20 @@ const ICONS_DIR = process.env.OPENHEARTH_ICONS_DIR ?? '/app/service-icons';
 // Docker bind mounts when the host edits the file. Set OPENHEARTH_CONFIG_POLL=0
 // (or `false`) on a host where native events work to avoid the polling cost.
 const CONFIG_POLL = !/^(0|false|no)$/i.test(process.env.OPENHEARTH_CONFIG_POLL ?? '');
+
+/**
+ * Surface per-source scan errors as warnings. The scan itself is best-effort and
+ * lumps source results into one info log, which hid the most common misconfig —
+ * a non-absolute `library.sources[].path` — until playback 403'd. A WARN per bad
+ * source makes it fail loudly in the logs.
+ */
+function warnOnSourceErrors(app: FastifyInstance, summary: ScanSummary): void {
+  for (const source of summary.sources) {
+    for (const message of source.errors) {
+      app.log.warn({ source: source.source_id }, message);
+    }
+  }
+}
 
 async function main(): Promise<void> {
   // First run: seed an empty/missing /config from the bundled defaults.
@@ -129,6 +144,7 @@ async function main(): Promise<void> {
             { totalIndexed: summary.totalIndexed },
             'library re-indexed after config change',
           );
+          warnOnSourceErrors(app, summary);
           primeMetadata();
         } catch (err) {
           app.log.warn({ err }, 'library re-scan failed');
@@ -197,6 +213,7 @@ async function main(): Promise<void> {
           { totalIndexed: summary.totalIndexed, sources: summary.sources },
           'library scan complete',
         );
+        warnOnSourceErrors(app, summary);
         primeMetadata();
       } catch (err) {
         app.log.warn({ err }, 'library scan failed');

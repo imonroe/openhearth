@@ -89,7 +89,7 @@ ui:
 |---|---|---|---|
 | `id` | yes | string | Stable id referenced by `ui.rows[].source`. |
 | `label` | no | string | Display label for the shelf. |
-| `path` | yes | string | Host-mapped, read-only path inside the container (e.g. `/media/movies`). |
+| `path` | yes | string | **Absolute** host-mapped, read-only path inside the container (e.g. `/media/movies`). Must start with `/`. A relative path is resolved against the server's working directory (`/app`), not `/media`, so it won't be found — the scan logs a warning and playback returns 403. |
 | `kind` | no | `movies` \| `tv` \| `music` \| `mixed` | Hint for naming detection. |
 
 ```yaml
@@ -101,6 +101,17 @@ library:
       kind: movies
   integrations: []
 ```
+
+> **Paths are container paths, and must be absolute.** `path` is where the folder
+> lives *inside the container* (the right-hand side of your `:/media` volume
+> mount), not a host path or a Windows drive. Mount your media at `/media` in
+> `docker-compose.yml`, then point each source at an absolute subfolder of it
+> (`/media/Movies`, `/media/TV`). A bare relative value like `Movies` resolves
+> against the server's working directory (`/app`), finds nothing, and the file
+> never validates as inside a library root — playback returns **403**. The scan
+> logs a `library source root not found` warning naming the resolved path so this
+> fails loudly rather than silently. For mounting a network share at `/media` on
+> Windows, see [host-parity.md](deployment/host-parity.md).
 
 ### `metadata`
 
