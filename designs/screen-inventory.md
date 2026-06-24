@@ -393,6 +393,51 @@ Appears on any keypress; auto-hides after ~3–5 seconds of inactivity.
 
 ---
 
+## Screen 15 — Settings Screen
+
+**Role:** Full-screen configuration panel accessible from the Home Screen header. Allows the user to inspect and adjust all OpenHearth settings without leaving the UI or editing YAML directly (read-oriented in v1; write support is future work).
+
+**Entry point:** Settings button (gear icon + label) in the Home Screen header, top-right. Reachable by navigating up from the top row, then right. Also accessible from any screen's back navigation chain.
+
+**Layout:** Two-column — left sidebar (category nav) + right content panel.
+
+**Sidebar categories:**
+- Library — sources, scan settings
+- Services — service tile list and ordering
+- Playback — transcode quality, direct-play preference, subtitle defaults
+- Metadata — provider, API key status
+- Controls — key binding reference
+- Display — theme, overscan
+- Help & Docs — link to documentation
+
+**Library panel (default active):**
+- Section: Library Sources — cards for each configured source (label, path, kind); focused card has amber outline; Add Source affordance
+- Section: Scan Settings — Scan on startup toggle, Watch for changes toggle, Rescan interval value
+- Action: Scan library now button
+
+**States to design:**
+- `library-panel` — Library category active (default on entry) — **designed**
+- `services-panel` — Services list focused
+- `playback-panel` — Transcode and subtitle settings
+- `metadata-panel` — Provider name + API key status (masked)
+- `controls-panel` — Key binding table (read-only reference)
+
+**Navigation context:**
+- Up/Down in sidebar: switch category, content panel updates
+- Right from sidebar: move focus into content panel
+- Left from content panel: return focus to sidebar
+- Back / Home: return to Home Screen
+
+**Design considerations:**
+- Settings is informational-first in v1; most values mirror the YAML config and are shown read-only with a note pointing to the config file
+- The sidebar's amber left-border indicator clearly marks the active category at 10-foot distance
+- Toggle switches use the amber fill to signal "on" — consistent with the rest of the design language
+- The two-column layout is a natural TV settings pattern (cf. Apple TV, PS5, Xbox)
+
+**PRD refs:** FR-CFG1, FR-CFG2, FR-CFG4, FR-CFG5, §10
+
+---
+
 ## Screen 13 — Search Screen
 
 **Role:** A text search over the local library (v1 scope; extensible to cross-service in v1.x). Accessible from the Home Screen via a configurable key binding.
@@ -481,8 +526,9 @@ These are not separate screens but must be designed as part of the component lib
 | 12 | Degraded / No-Metadata Tile | Component state | Low |
 | 13 | Search Screen | Discovery | Medium |
 | 14 | Error / Server Unreachable | System | Low |
+| 15 | Settings | System / Config | Medium |
 
-**Total: 15 screens / states** (14 primary + 1 component variant)
+**Total: 16 screens / states** (15 primary + 1 component variant)
 
 ---
 
