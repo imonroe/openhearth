@@ -1,11 +1,12 @@
 # Reference docker-compose for OpenHearth. See PRD §15.1.
 #
-# Quick start:
+# Quick start (build locally from this checkout):
 #   docker compose up --build
 # then open http://localhost:8080.
 #
-# `image:` points at the published container; uncomment `build:` instead to
-# build locally from this checkout.
+# `build:` compiles the image from docker/Dockerfile and tags it as `image:`.
+# To instead pull the published container, drop the `build:` block and run
+# `docker compose up` — it will fetch `ghcr.io/imonroe/openhearth:latest`.
 services:
   openhearth:
     image: ghcr.io/imonroe/openhearth:latest
