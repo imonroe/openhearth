@@ -69,3 +69,12 @@ function first(value: unknown): string | undefined {
   if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : undefined;
   return typeof value === 'string' ? value : undefined;
 }
+
+/**
+ * Redact a `?token=` value from a URL string for logging, so the shared token
+ * never lands in the request log (clients that can't set headers — e.g. the WS
+ * handshake — pass it as a query param). Leaves everything else intact.
+ */
+export function redactTokenInUrl(url: string): string {
+  return url.replace(/([?&]token=)[^&]*/gi, `$1${'***'}`);
+}

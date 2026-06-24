@@ -3,7 +3,7 @@
  * when set; token pulled from Authorization: Bearer or ?token=.
  */
 import { describe, it, expect } from 'vitest';
-import { AuthGuard, tokenFromRequest } from './auth.js';
+import { AuthGuard, tokenFromRequest, redactTokenInUrl } from './auth.js';
 
 describe('AuthGuard', () => {
   it('is disabled (accepts everything) with no token', () => {
@@ -55,5 +55,20 @@ describe('tokenFromRequest', () => {
     expect(tokenFromRequest({ headers: {}, query: { token: ['a', 'b'] } })).toBe('a');
     expect(tokenFromRequest({ headers: {} })).toBeUndefined();
     expect(tokenFromRequest({ headers: { authorization: 'Basic x' } })).toBeUndefined();
+  });
+});
+
+describe('redactTokenInUrl', () => {
+  it('masks a token query value but leaves the rest intact', () => {
+    expect(redactTokenInUrl('/api/v1/library?token=s3cret')).toBe('/api/v1/library?token=***');
+    expect(redactTokenInUrl('/api/v1/library?source=movies&token=s3cret&limit=5')).toBe(
+      '/api/v1/library?source=movies&token=***&limit=5',
+    );
+    expect(redactTokenInUrl('/api/v1/control/ws?token=abc')).toBe('/api/v1/control/ws?token=***');
+  });
+
+  it('leaves a URL without a token unchanged', () => {
+    expect(redactTokenInUrl('/api/v1/library?source=movies')).toBe('/api/v1/library?source=movies');
+    expect(redactTokenInUrl('/api/v1/health')).toBe('/api/v1/health');
   });
 });

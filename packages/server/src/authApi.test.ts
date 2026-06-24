@@ -5,6 +5,7 @@
  * stays open, the WS upgrade is gated, and /config redacts the token.
  */
 import { describe, it, expect, afterEach } from 'vitest';
+import { Writable } from 'node:stream';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -18,7 +19,22 @@ let cfg: ConfigService;
 let app: FastifyInstance;
 const TOKEN = 's3cret-token';
 
-async function makeApp(withToken: boolean): Promise<void> {
+/** A writable that accumulates everything the logger emits. */
+function captureStream(): { stream: Writable; text: () => string } {
+  let buf = '';
+  const stream = new Writable({
+    write(chunk: Buffer, _enc, cb) {
+      buf += chunk.toString();
+      cb();
+    },
+  });
+  return { stream, text: () => buf };
+}
+
+async function makeApp(
+  withToken: boolean,
+  opts: { logDestination?: Writable; logLevel?: string } = {},
+): Promise<void> {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-auth-'));
   if (withToken) {
     await fsp.writeFile(
@@ -28,7 +44,11 @@ async function makeApp(withToken: boolean): Promise<void> {
   }
   cfg = new ConfigService({ configDir: dir });
   await cfg.load();
-  app = buildApp({ configService: cfg, logLevel: 'silent' });
+  app = buildApp({
+    configService: cfg,
+    logLevel: opts.logLevel ?? 'silent',
+    ...(opts.logDestination ? { logDestination: opts.logDestination } : {}),
+  });
   await app.ready();
 }
 
@@ -93,6 +113,24 @@ describe('token configured — API/WS require it', () => {
     await makeApp(true);
     // A plain GET to the WS path exercises the onRequest gate (no upgrade).
     expect((await app.inject({ url: '/api/v1/control/ws' })).statusCode).toBe(401);
+  });
+
+  it('uses exact-path exemptions (no prefix bypass)', async () => {
+    await makeApp(true);
+    // `/api/v1/healthz` shares the `/api/v1/health` prefix but is NOT the exempt
+    // path, so it must be gated (401), not slip through to a 404.
+    expect((await app.inject({ url: '/api/v1/healthz' })).statusCode).toBe(401);
+  });
+
+  it('never writes the token to the request log, even via ?token= (#47)', async () => {
+    const cap = captureStream();
+    await makeApp(true, { logDestination: cap.stream, logLevel: 'info' });
+    // A request that carries the token in the query string (the WS/header-less path).
+    await app.inject({ url: `/api/v1/library?token=${TOKEN}` });
+    const logs = cap.text();
+    expect(logs).toContain('incoming request'); // the request WAS logged…
+    expect(logs).not.toContain(TOKEN); // …but the token was redacted out
+    expect(logs).toContain('token=***');
   });
 
   it('control/command accepts the token in the reserved `auth` field', async () => {
