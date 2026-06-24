@@ -100,6 +100,22 @@ describe('ConfigService.load', () => {
   });
 });
 
+describe('ConfigService env-value YAML injection resistance', () => {
+  it('does not let a ${VAR} value inject new config structure', async () => {
+    // A hostile/garbled env value with YAML-significant characters must stay a
+    // scalar — it cannot introduce a new top-level `server:` key.
+    write('openhearth.yaml', 'metadata:\n  tmdbApiKey: ${KEY}\n');
+    svc = new ConfigService({
+      configDir: dir,
+      env: { KEY: 'abc\nserver:\n  port: 99999' },
+    });
+    const snap = await svc.load();
+    expect(snap.errors).toEqual([]);
+    expect(snap.config.server).toBeUndefined();
+    expect(snap.config.metadata?.tmdbApiKey).toBe('abc\nserver:\n  port: 99999');
+  });
+});
+
 describe('ConfigService hot-reload (NFR-4)', () => {
   it('applies a valid edit without restart', async () => {
     write('openhearth.yaml', 'server:\n  port: 8080\n');
@@ -115,6 +131,22 @@ describe('ConfigService hot-reload (NFR-4)', () => {
     await changed;
     expect(svc.config.server?.port).toBe(9090);
     expect(svc.errors).toEqual([]);
+  });
+
+  it('retains last-good services when a services file becomes malformed', async () => {
+    write('openhearth.yaml', 'server:\n  port: 8080\n');
+    write('services.yaml', 'rows:\n  - id: streaming\n');
+    svc = new ConfigService({ configDir: dir, debounceMs: 20 });
+    await svc.start();
+    expect(svc.services.base).toEqual({ rows: [{ id: 'streaming' }] });
+
+    const changed = waitForChange(svc, (s) => s.errors.length > 0);
+    write('services.yaml', 'rows:\n  - id: [unclosed\n'); // malformed YAML
+    await changed;
+
+    // The good services data survives; only the error is reported.
+    expect(svc.services.base).toEqual({ rows: [{ id: 'streaming' }] });
+    expect(svc.errors.some((e) => e.includes('services.yaml'))).toBe(true);
   });
 
   it('retains last-good config on an invalid edit and reports the error', async () => {

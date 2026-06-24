@@ -51,7 +51,11 @@ const OPENHEARTH_FILE = 'openhearth.yaml';
 const SERVICES_FILE = 'services.yaml';
 const SERVICES_DIR = 'services.d';
 
-/** Replace `${VAR}` / `${VAR:-default}` with values from `env`. */
+/**
+ * Replace `${VAR}` / `${VAR:-default}` in a single string with values from
+ * `env`. An empty env value is treated as unset (so it falls through to the
+ * default) — appropriate for optional secrets.
+ */
 export function interpolateEnv(input: string, env: NodeJS.ProcessEnv): string {
   return input.replace(
     /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}/g,
@@ -61,6 +65,25 @@ export function interpolateEnv(input: string, env: NodeJS.ProcessEnv): string {
       return def ?? '';
     },
   );
+}
+
+/**
+ * Interpolate `${VAR}` references in every string *leaf* of an already-parsed
+ * YAML tree. Interpolating after parsing (rather than on the raw text) means an
+ * env value can never inject YAML structure — it only ever fills the scalar it
+ * appears in, even if the value contains `:` or newlines.
+ */
+export function interpolateTree(node: unknown, env: NodeJS.ProcessEnv): unknown {
+  if (typeof node === 'string') return interpolateEnv(node, env);
+  if (Array.isArray(node)) return node.map((item) => interpolateTree(item, env));
+  if (node !== null && typeof node === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(node)) {
+      out[key] = interpolateTree(value, env);
+    }
+    return out;
+  }
+  return node;
 }
 
 export class ConfigService extends EventEmitter {
@@ -75,6 +98,7 @@ export class ConfigService extends EventEmitter {
   };
   private watcher: FSWatcher | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
+  private loadToken = 0;
 
   constructor(options: ConfigServiceOptions) {
     super();
@@ -105,7 +129,13 @@ export class ConfigService extends EventEmitter {
 
   /** Read + validate `/config` once. Never throws; falls back to last-good. */
   async load(): Promise<ConfigSnapshot> {
+    // Generation token: if a newer load() starts while this one is awaiting the
+    // filesystem, the newer one wins and this (now-stale) result is discarded.
+    // Serializes overlapping reloads/loads so the latest read always wins.
+    const token = ++this.loadToken;
     const next = await this.read();
+    if (token !== this.loadToken) return this.current;
+
     if (next.fatal) {
       // Keep last-good config; only replace the reported errors.
       this.current = { ...this.current, errors: next.errors };
@@ -174,13 +204,16 @@ export class ConfigService extends EventEmitter {
   > {
     const errors: string[] = [];
 
+    // Interpolation runs on parsed string leaves, never on raw text, so an env
+    // value can't inject YAML structure (see interpolateTree).
+
     // --- openhearth.yaml (the validated primary config) ---
     let parsed: unknown = {};
     const primaryPath = path.join(this.configDir, OPENHEARTH_FILE);
     if (fs.existsSync(primaryPath)) {
       try {
         const raw = await fsp.readFile(primaryPath, 'utf8');
-        parsed = parseYaml(interpolateEnv(raw, this.env)) ?? {};
+        parsed = interpolateTree(parseYaml(raw) ?? {}, this.env);
       } catch (err) {
         return { fatal: true, errors: [`${OPENHEARTH_FILE}: ${(err as Error).message}`] };
       }
@@ -195,13 +228,19 @@ export class ConfigService extends EventEmitter {
     }
 
     // --- services.yaml + services.d/*.yaml (raw; parsed by CatalogService) ---
+    // Seed from last-good so a malformed file retains its previous value rather
+    // than clobbering good state with undefined (NFR-4). A file that is *deleted*
+    // (no longer on disk) is correctly dropped, since we only repopulate from
+    // files that still exist.
+    const prev = this.current.services;
     const services: RawServiceCatalog = { base: undefined, overlays: {} };
     const basePath = path.join(this.configDir, SERVICES_FILE);
     if (fs.existsSync(basePath)) {
       try {
-        services.base = parseYaml(interpolateEnv(await fsp.readFile(basePath, 'utf8'), this.env));
+        services.base = interpolateTree(parseYaml(await fsp.readFile(basePath, 'utf8')), this.env);
       } catch (err) {
         errors.push(`${SERVICES_FILE}: ${(err as Error).message}`);
+        services.base = prev.base; // retain last-good
       }
     }
     const overlayDir = path.join(this.configDir, SERVICES_DIR);
@@ -210,9 +249,10 @@ export class ConfigService extends EventEmitter {
       for (const file of entries) {
         try {
           const raw = await fsp.readFile(path.join(overlayDir, file), 'utf8');
-          services.overlays[file] = parseYaml(interpolateEnv(raw, this.env));
+          services.overlays[file] = interpolateTree(parseYaml(raw), this.env);
         } catch (err) {
           errors.push(`${SERVICES_DIR}/${file}: ${(err as Error).message}`);
+          if (file in prev.overlays) services.overlays[file] = prev.overlays[file]; // retain last-good
         }
       }
     }
