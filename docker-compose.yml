@@ -14,6 +14,13 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     container_name: openhearth
+    # Run the container as your host user so files written to ./config and
+    # ./cache are owned by you, not root. Set PUID/PGID in a `.env` file next to
+    # this compose file (copy .env.example) — find your values with `id -u` and
+    # `id -g`. Defaults to 1000:1000 (the image's built-in `node` user) when
+    # unset. /media is read-only, so its ownership only needs to be readable by
+    # this user.
+    user: '${PUID:-1000}:${PGID:-1000}'
     ports:
       - '8080:8080' # web UI + API + WS
     volumes:

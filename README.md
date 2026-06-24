@@ -21,6 +21,10 @@ monitor whose browser will run the kiosk.
      - ./cache:/cache # derived index/artwork/transcode cache (disposable)
    ```
 
+   On Linux, also copy [`.env.example`](.env.example) to `.env` and set
+   `PUID`/`PGID` to your `id -u`/`id -g` so files written to `./config` and
+   `./cache` are owned by you rather than UID 1000 (or root).
+
 2. **Start it:**
 
    ```sh
