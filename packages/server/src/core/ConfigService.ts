@@ -87,7 +87,8 @@ export function interpolateTree(node: unknown, env: NodeJS.ProcessEnv): unknown 
 }
 
 export class ConfigService extends EventEmitter {
-  private readonly configDir: string;
+  /** Directory holding the host-mapped YAML (and service icon files). */
+  readonly configDir: string;
   private readonly env: NodeJS.ProcessEnv;
   private readonly debounceMs: number;
 

@@ -11,6 +11,16 @@
  */
 import { z } from 'zod';
 
+/** True for an http(s) URL or a safe relative filename (no scheme/abs/`..`). */
+export function isSafeIcon(value: string): boolean {
+  if (value.length === 0 || value.includes('\0')) return false;
+  if (/^https?:\/\//i.test(value)) return true;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return false; // any other scheme (javascript:, data:, file:…)
+  if (value.startsWith('/') || value.startsWith('\\')) return false; // absolute
+  if (value.split(/[\\/]/).includes('..')) return false; // traversal
+  return true;
+}
+
 /** A single service tile definition. */
 export const serviceSchema = z
   .object({
@@ -35,8 +45,17 @@ export const serviceSchema = z
       },
       { message: 'launch_url must be an http(s) URL' },
     ),
-    /** Local file in config/, a remote URL, or omitted (metadata fallback). */
-    icon: z.string().optional(),
+    /**
+     * Local file in config/, a remote http(s) URL, or omitted (metadata
+     * fallback). Constrained to an http(s) URL or a *safe relative filename* (no
+     * scheme, not absolute, no `..` traversal) — `icon` is rendered as an
+     * `<img src>` and resolved against config/, so an arbitrary scheme or path
+     * would be an SSRF / file-disclosure vector.
+     */
+    icon: z
+      .string()
+      .refine(isSafeIcon, { message: 'icon must be an http(s) URL or a safe relative filename' })
+      .optional(),
     /** Row/section grouping (matched by ui.rows[].group). */
     group: z.string().optional(),
     /** Sort hint within a group (ascending). */

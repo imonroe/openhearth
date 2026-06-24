@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ConfigResponse } from './api';
+import type { ServiceCatalog } from '@openhearth/shared';
 import { App } from './App';
 
 function mockConfig(): ConfigResponse {
@@ -21,10 +22,39 @@ function mockConfig(): ConfigResponse {
   };
 }
 
+function mockCatalog(): ServiceCatalog {
+  return {
+    errors: [],
+    groups: [
+      {
+        group: 'Streaming',
+        services: [
+          {
+            id: 'netflix',
+            name: 'Netflix',
+            launch_url: 'https://www.netflix.com/',
+            icon: 'https://cdn/netflix.png',
+            group: 'Streaming',
+          },
+          {
+            id: 'youtube',
+            name: 'YouTube',
+            launch_url: 'https://www.youtube.com/tv',
+            group: 'Streaming',
+          },
+        ],
+      },
+    ],
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(mockConfig()) })),
+    vi.fn((url: string) => {
+      const body = url.includes('/api/v1/services') ? mockCatalog() : mockConfig();
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    }),
   );
 });
 
@@ -33,17 +63,45 @@ afterEach(() => {
 });
 
 describe('App shell', () => {
-  it('fetches config and renders the configured rows', async () => {
+  it('fetches config + services and renders the grouped rows with service tiles', async () => {
     render(<App />);
     expect(await screen.findByText('Streaming')).toBeTruthy();
     expect(screen.getByText('Movies')).toBeTruthy();
-    // Header wordmark rendered.
     expect(screen.getByText('OPENHEARTH')).toBeTruthy();
+    // Real service tiles render with their names.
+    expect(screen.getByText('Netflix')).toBeTruthy();
+    expect(screen.getByText('YouTube')).toBeTruthy();
   });
 
-  it('seats focus on the first tile and moves it with arrow keys', async () => {
+  it('renders artwork for a service with an icon and a placeholder for one without', async () => {
     const { container } = render(<App />);
-    await screen.findByText('Streaming');
+    await screen.findByText('Netflix');
+    // Netflix has a remote icon -> <img>.
+    expect(container.querySelector('img.tile__art')).toBeTruthy();
+    // YouTube has no icon -> placeholder initial 'Y'.
+    const placeholders = Array.from(container.querySelectorAll('.tile__placeholder')).map(
+      (el) => el.textContent,
+    );
+    expect(placeholders).toContain('Y');
+  });
+
+  it('falls back to a placeholder when artwork fails to load (FR-A6)', async () => {
+    const { container } = render(<App />);
+    await screen.findByText('Netflix');
+    const img = container.querySelector('img.tile__art');
+    expect(img).toBeTruthy();
+    fireEvent.error(img!); // simulate a broken image
+    await waitFor(() => {
+      const placeholders = Array.from(container.querySelectorAll('.tile__placeholder')).map(
+        (el) => el.textContent,
+      );
+      expect(placeholders).toContain('N'); // Netflix now shows its initial
+    });
+  });
+
+  it('seats focus on the first service tile and moves it with arrow keys', async () => {
+    const { container } = render(<App />);
+    await screen.findByText('Netflix');
 
     const tilesIn = (rowIndex: number): Element[] => {
       const row = container.querySelectorAll('.row')[rowIndex];
@@ -53,30 +111,26 @@ describe('App shell', () => {
     const isFocused = (el: Element): boolean => el.classList.contains('is-focused');
 
     expect(container.querySelectorAll('.tile.is-focused')).toHaveLength(1);
-    // First content row, first tile is focused initially.
-    const firstRowTiles = tilesIn(0);
-    expect(isFocused(firstRowTiles[0]!)).toBe(true);
+    const services = tilesIn(0); // first content row = Streaming services
+    expect(isFocused(services[0]!)).toBe(true); // Netflix focused
 
-    // ArrowRight moves focus to the second tile in the same row.
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     await waitFor(() => {
-      expect(isFocused(firstRowTiles[1]!)).toBe(true);
-      expect(isFocused(firstRowTiles[0]!)).toBe(false);
+      expect(isFocused(services[1]!)).toBe(true); // YouTube
+      expect(isFocused(services[0]!)).toBe(false);
     });
 
-    // ArrowDown moves to the next row.
     fireEvent.keyDown(window, { key: 'ArrowDown' });
     await waitFor(() => {
-      expect(isFocused(tilesIn(1)[1]!)).toBe(true);
+      expect(isFocused(tilesIn(1)[1]!)).toBe(true); // library placeholder row
     });
 
-    // Exactly one focused element at all times.
     expect(container.querySelectorAll('.is-focused')).toHaveLength(1);
   });
 
   it('applies the configured theme to the document', async () => {
     render(<App />);
-    await screen.findByText('Streaming');
+    await screen.findByText('Netflix');
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 });

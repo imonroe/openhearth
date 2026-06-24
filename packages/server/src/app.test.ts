@@ -112,6 +112,88 @@ describe('GET /api/v1/services', () => {
   });
 });
 
+describe('GET /api/v1/services/:id/icon', () => {
+  it('serves a local icon file from config/', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: netflix, name: Netflix, launch_url: "https://www.netflix.com/", icon: netflix.png }\n',
+      'netflix.png': 'PNGDATA',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/netflix/icon' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('image/png');
+    expect(res.body).toBe('PNGDATA');
+  });
+
+  it('404s when the service has a remote (http) icon', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: yt, name: YT, launch_url: "https://www.youtube.com/", icon: "https://cdn/yt.png" }\n',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/yt/icon' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('404s for an unknown service or missing icon', async () => {
+    await makeApp('{}', {
+      'services.yaml': 'services:\n  - { id: noicon, name: NoIcon, launch_url: "https://x/" }\n',
+    });
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/services/noicon/icon' })).statusCode,
+    ).toBe(404);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/services/ghost/icon' })).statusCode,
+    ).toBe(404);
+  });
+
+  it('does not serve a non-image config file via the icon route (secret leak)', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: leak, name: Leak, launch_url: "https://x/", icon: "secret.yaml" }\n',
+      'secret.yaml': 'tmdbApiKey: SUPER-SECRET\n',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/leak/icon' });
+    expect(res.statusCode).toBe(404); // .yaml not an allowed image type
+    expect(res.body).not.toContain('SUPER-SECRET');
+  });
+
+  it('does not serve an SVG icon (inline-script XSS risk)', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: svgtile, name: SVG, launch_url: "https://x/", icon: "evil.svg" }\n',
+      'evil.svg': '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/svgtile/icon' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('rejects a symlink that escapes config/ (filesystem-aware guard)', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: symtile, name: Sym, launch_url: "https://x/", icon: "escape.png" }\n',
+    });
+    // Create a file outside config/ and a symlink to it inside config/.
+    const outside = path.join(os.tmpdir(), `oh-outside-${process.pid}-${Date.now()}.png`);
+    fs.writeFileSync(outside, 'OUTSIDE');
+    fs.symlinkSync(outside, path.join(dir, 'escape.png'));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/symtile/icon' });
+    expect(res.statusCode).toBe(400);
+    fs.rmSync(outside, { force: true });
+  });
+
+  it('sets nosniff and a restrictive CSP on a served icon', async () => {
+    await makeApp('{}', {
+      'services.yaml':
+        'services:\n  - { id: netflix, name: Netflix, launch_url: "https://x/", icon: netflix.png }\n',
+      'netflix.png': 'PNG',
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/services/netflix/icon' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toContain("default-src 'none'");
+  });
+});
+
 describe('unknown routes', () => {
   beforeEach(() => makeApp('{}'));
 

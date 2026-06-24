@@ -3,29 +3,39 @@
  * shell under the focus engine.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Config } from '@openhearth/shared';
-import { fetchConfig } from './api';
+import type { Config, ServiceCatalog } from '@openhearth/shared';
+import { fetchConfig, fetchServices } from './api';
 import { FocusProvider } from './focus/FocusProvider';
-import { buildHomeModel, rowLengths } from './home/homeModel';
+import { buildHomeModel, rowLengths, firstContentRow } from './home/homeModel';
 import { Home } from './home/Home';
 
 type State =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; config: Config };
+  | { status: 'ready'; config: Config; catalog: ServiceCatalog };
+
+const EMPTY_CATALOG: ServiceCatalog = { groups: [], errors: [] };
 
 export function App(): ReactNode {
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchConfig(controller.signal)
-      .then((res) => setState({ status: 'ready', config: res.config }))
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        console.error('OpenHearth: failed to load config', err);
-        setState({ status: 'error', message: String(err) });
+    const load = async (): Promise<void> => {
+      const config = await fetchConfig(controller.signal);
+      // The catalog is non-essential to boot — fall back to empty on failure so
+      // the shell still renders (NFR-4 spirit).
+      const catalog = await fetchServices(controller.signal).catch((err: unknown) => {
+        console.error('OpenHearth: failed to load services', err);
+        return EMPTY_CATALOG;
       });
+      setState({ status: 'ready', config: config.config, catalog });
+    };
+    load().catch((err: unknown) => {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.error('OpenHearth: failed to load config', err);
+      setState({ status: 'error', message: String(err) });
+    });
     return () => controller.abort();
   }, []);
 
@@ -39,14 +49,19 @@ export function App(): ReactNode {
   // don't change the config — otherwise FocusProvider's reseat effect (keyed on
   // the rowLengths array) would re-fire on every render.
   const config = state.status === 'ready' ? state.config : null;
-  const model = useMemo(() => (config ? buildHomeModel(config) : null), [config]);
-  const lengths = useMemo(() => (model ? rowLengths(model) : []), [model]);
-  // Focus enters on the first tile of the first content row (row 1; row 0 is the
-  // header), matching the Home screen focus-entry spec.
-  const initialPosition = useMemo(
-    () => (model && model.rows.length > 1 ? { row: 1, col: 0 } : undefined),
-    [model],
+  const catalog = state.status === 'ready' ? state.catalog : null;
+  const model = useMemo(
+    () => (config ? buildHomeModel(config, catalog ?? undefined) : null),
+    [config, catalog],
   );
+  const lengths = useMemo(() => (model ? rowLengths(model) : []), [model]);
+  // Focus enters on the first tile of the first non-empty content row (the
+  // header is row 0), matching the Home screen focus-entry spec.
+  const initialPosition = useMemo(() => {
+    if (!model) return undefined;
+    const row = firstContentRow(model);
+    return row !== null ? { row, col: 0 } : undefined;
+  }, [model]);
 
   if (state.status === 'loading') {
     return (
