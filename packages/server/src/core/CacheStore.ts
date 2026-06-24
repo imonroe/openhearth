@@ -69,6 +69,8 @@ type Row = Record<(typeof COLUMNS)[number], unknown>;
 
 export class CacheStore {
   private readonly db: Database.Database;
+  /** Memoized prepared statements, keyed by SQL — hot reads compile once. */
+  private readonly statements = new Map<string, Database.Statement>();
 
   /** Open (or create) the cache DB. Pass `:memory:` for tests. */
   constructor(dbPath: string) {
@@ -76,6 +78,16 @@ export class CacheStore {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.migrate();
+  }
+
+  /** Prepare a statement once and reuse it (avoids recompiling on hot paths). */
+  private stmt(sql: string): Database.Statement {
+    let s = this.statements.get(sql);
+    if (!s) {
+      s = this.db.prepare(sql);
+      this.statements.set(sql, s);
+    }
+    return s;
   }
 
   /** Create tables on a cold DB. Idempotent. */
@@ -237,9 +249,9 @@ export class CacheStore {
    * schema can't crash the read — the entry is simply refetched.
    */
   getMetadata(key: string): MetadataCacheEntry | undefined {
-    const row = this.db
-      .prepare('SELECT payload, fetched_at, expires_at FROM metadata_cache WHERE key = ?')
-      .get(key) as { payload: string | null; fetched_at: number; expires_at: number } | undefined;
+    const row = this.stmt(
+      'SELECT payload, fetched_at, expires_at FROM metadata_cache WHERE key = ?',
+    ).get(key) as { payload: string | null; fetched_at: number; expires_at: number } | undefined;
     if (!row) return undefined;
     let item: MediaItem | null = null;
     if (row.payload !== null) {

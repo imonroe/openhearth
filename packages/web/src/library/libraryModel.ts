@@ -33,7 +33,7 @@ export function isShow(entry: LibraryEntry): entry is ShowGroup {
 
 /** Poster URL for an entry, or undefined when none was resolved (placeholder). */
 export function entryArtworkUrl(entry: LibraryEntry): string | undefined {
-  return entry.artwork_url ?? undefined;
+  return entry.artwork_url ?? undefined; // null (no match) → undefined for the view
 }
 
 /** Title used for display and ordering (works for both entry shapes). */
