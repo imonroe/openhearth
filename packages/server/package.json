@@ -16,6 +16,8 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@openhearth/shared": "workspace:*"
+    "@openhearth/shared": "workspace:*",
+    "chokidar": "^5.0.0",
+    "yaml": "^2.9.0"
   }
 }
