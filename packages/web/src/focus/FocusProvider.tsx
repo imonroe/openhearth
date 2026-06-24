@@ -27,6 +27,10 @@ import type { ActionName } from '@openhearth/shared';
 interface FocusContextValue {
   focused: FocusPosition;
   isFocused: (row: number, col: number) => boolean;
+  /** Move focus to a cell without selecting it — for mouse hover. */
+  focusAt: (position: FocusPosition) => void;
+  /** Focus a cell and fire its `select` action — for a mouse click. */
+  activate: (position: FocusPosition) => void;
 }
 
 const FocusContext = createContext<FocusContextValue | null>(null);
@@ -162,7 +166,23 @@ export function FocusProvider({
     [focused],
   );
 
-  const value = useMemo<FocusContextValue>(() => ({ focused, isFocused }), [focused, isFocused]);
+  // Mouse support: hovering a cell focuses it; clicking focuses and selects.
+  // Keyboard stays primary — these mirror the keydown handler's `navigate` and
+  // `select` paths so a click behaves exactly like focusing then pressing Enter.
+  const focusAt = useCallback((position: FocusPosition): void => {
+    setFocused((prev) =>
+      prev.row === position.row && prev.col === position.col ? prev : position,
+    );
+  }, []);
+  const activate = useCallback((position: FocusPosition): void => {
+    setFocused(position);
+    onSelectRef.current?.(position);
+  }, []);
+
+  const value = useMemo<FocusContextValue>(
+    () => ({ focused, isFocused, focusAt, activate }),
+    [focused, isFocused, focusAt, activate],
+  );
 
   return <FocusContext.Provider value={value}>{children}</FocusContext.Provider>;
 }

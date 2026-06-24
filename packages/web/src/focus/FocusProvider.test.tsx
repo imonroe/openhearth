@@ -10,6 +10,51 @@ function Probe(): ReactNode {
 
 afterEach(cleanup);
 
+describe('FocusProvider mouse support', () => {
+  // A small grid whose cells call focusAt (hover) and activate (click).
+  function Grid(): ReactNode {
+    const { focused, focusAt, activate } = useFocus();
+    return (
+      <>
+        <div data-testid="pos">{`${focused.row},${focused.col}`}</div>
+        {[0, 1].map((col) => (
+          <button
+            key={col}
+            data-testid={`cell-${col}`}
+            onMouseEnter={() => focusAt({ row: 0, col })}
+            onClick={() => activate({ row: 0, col })}
+          />
+        ))}
+      </>
+    );
+  }
+
+  it('focusAt moves focus on hover without selecting', () => {
+    const onSelect = vi.fn();
+    const { getByTestId } = render(
+      <FocusProvider rowLengths={[2]} initialPosition={{ row: 0, col: 0 }} onSelect={onSelect}>
+        <Grid />
+      </FocusProvider>,
+    );
+    expect(getByTestId('pos').textContent).toBe('0,0');
+    fireEvent.mouseEnter(getByTestId('cell-1'));
+    expect(getByTestId('pos').textContent).toBe('0,1');
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('activate focuses the clicked cell and fires onSelect with its position', () => {
+    const onSelect = vi.fn();
+    const { getByTestId } = render(
+      <FocusProvider rowLengths={[2]} initialPosition={{ row: 0, col: 0 }} onSelect={onSelect}>
+        <Grid />
+      </FocusProvider>,
+    );
+    fireEvent.click(getByTestId('cell-1'));
+    expect(getByTestId('pos').textContent).toBe('0,1');
+    expect(onSelect).toHaveBeenCalledWith({ row: 0, col: 1 });
+  });
+});
+
 describe('FocusProvider reserved Home/Back (FR-A3)', () => {
   it('Home resets focus to the entry position and calls onHome', () => {
     const onHome = vi.fn();

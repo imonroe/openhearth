@@ -9,7 +9,7 @@ import { useFocus } from '../focus/FocusProvider';
 const HEADER_ROW = 0;
 
 export function Header({ title }: { title: string }): ReactNode {
-  const { isFocused } = useFocus();
+  const { isFocused, focusAt, activate } = useFocus();
   return (
     <header className="header">
       <div className="header__logo">
@@ -22,12 +22,16 @@ export function Header({ title }: { title: string }): ReactNode {
           type="button"
           className={`header__action header__action--icon ${isFocused(HEADER_ROW, 0) ? 'is-focused' : ''}`}
           aria-label="Search"
+          onMouseEnter={() => focusAt({ row: HEADER_ROW, col: 0 })}
+          onClick={() => activate({ row: HEADER_ROW, col: 0 })}
         >
           ⌕
         </button>
         <button
           type="button"
           className={`header__action ${isFocused(HEADER_ROW, 1) ? 'is-focused' : ''}`}
+          onMouseEnter={() => focusAt({ row: HEADER_ROW, col: 1 })}
+          onClick={() => activate({ row: HEADER_ROW, col: 1 })}
         >
           ⚙ Settings
         </button>

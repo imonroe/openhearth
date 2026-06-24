@@ -147,9 +147,22 @@ export function Player({
     v.currentTime = Math.min(Math.max(0, v.currentTime + delta), max);
   }, []);
 
+  // Mouse: click the progress bar to scrub to that fraction. Mirrors the keyboard
+  // `seek` to the control path so a click behaves like the remote.
+  const seekToFraction = useCallback(
+    (fraction: number) => {
+      const v = videoRef.current;
+      if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+      const target = Math.min(Math.max(0, fraction), 1) * v.duration;
+      dispatch('seek', { delta: target - v.currentTime });
+      v.currentTime = target;
+    },
+    [dispatch],
+  );
+
   // Capture-phase key handling for the whole player. Reserved keys stop
   // propagation so nothing downstream can shadow them.
-  const startRef = useRef<(from: number) => void>(() => {});
+  const choosePromptRef = useRef<(idx: number) => void>(() => {});
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const bound = keyMap.get(event.key);
@@ -171,12 +184,10 @@ export function Player({
           exit();
           return;
         case 'select':
-          if (phase === 'prompt') {
-            // "Start over" (idx 1) forgets the saved position so a quick exit
-            // doesn't leave the stale resume row behind.
-            if (promptIdx === 1) clearResume(item.id);
-            startRef.current(promptIdx === 0 ? resumeSec : 0);
-          } else togglePlay();
+          // "Start over" forgets the saved position so a quick exit doesn't
+          // leave the stale resume row behind (handled in choosePrompt).
+          if (phase === 'prompt') choosePromptRef.current(promptIdx);
+          else togglePlay();
           return;
         case 'play_pause':
           dispatch('play_pause');
@@ -209,25 +220,30 @@ export function Player({
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [
-    keyMap,
-    phase,
-    promptIdx,
-    resumeSec,
-    item.id,
-    goHome,
-    exit,
-    togglePlay,
-    seekBy,
-    cycleSubs,
-    dispatch,
-  ]);
+  }, [keyMap, phase, promptIdx, goHome, exit, togglePlay, seekBy, cycleSubs, dispatch]);
 
   const start = useCallback((from: number) => {
     startSecRef.current = from;
     setPhase('playing');
   }, []);
-  startRef.current = start;
+
+  // Choose a resume option (keyboard select or mouse click on a prompt button).
+  // "Start over" (idx 1) forgets the saved position; idx 0 resumes.
+  const choosePrompt = useCallback(
+    (idx: number) => {
+      if (idx === 1) clearResume(item.id);
+      setPromptIdx(idx);
+      start(idx === 0 ? resumeSec : 0);
+    },
+    [item.id, resumeSec, start],
+  );
+  choosePromptRef.current = choosePrompt;
+
+  // Mouse: clicking the video toggles play/pause, mirroring the control path.
+  const clickTogglePlay = useCallback(() => {
+    dispatch('play_pause');
+    togglePlay();
+  }, [dispatch, togglePlay]);
 
   if (phase === 'loading') {
     return <div className="player player--loading">Loading…</div>;
@@ -242,6 +258,8 @@ export function Player({
             className={`player__resume-btn ${promptIdx === 0 ? 'is-focused' : ''}`}
             role="button"
             aria-selected={promptIdx === 0}
+            onMouseEnter={() => setPromptIdx(0)}
+            onClick={() => choosePrompt(0)}
           >
             ↩ Resume from {fmt(resumeSec)}
           </div>
@@ -249,6 +267,8 @@ export function Player({
             className={`player__resume-btn ${promptIdx === 1 ? 'is-focused' : ''}`}
             role="button"
             aria-selected={promptIdx === 1}
+            onMouseEnter={() => setPromptIdx(1)}
+            onClick={() => choosePrompt(1)}
           >
             ▶ Start over
           </div>
@@ -264,6 +284,7 @@ export function Player({
         className="player__video"
         src={libraryStreamUrl(item.id, startSecRef.current)}
         autoPlay
+        onClick={clickTogglePlay}
         onLoadedMetadata={(e) => {
           const v = e.currentTarget;
           setDuration(v.duration);
@@ -294,7 +315,13 @@ export function Player({
       </video>
       <div className="player__osd" aria-hidden="true">
         <div className="player__osd-title">{item.title}</div>
-        <div className="player__progress">
+        <div
+          className="player__progress"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            if (rect.width > 0) seekToFraction((e.clientX - rect.left) / rect.width);
+          }}
+        >
           <div
             className="player__progress-fill"
             style={{ width: duration > 0 ? `${(current / duration) * 100}%` : '0%' }}

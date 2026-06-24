@@ -18,7 +18,7 @@ export function LibraryTileView({
   row: number;
   col: number;
 }): ReactNode {
-  const { isFocused } = useFocus();
+  const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(row, col);
   const [failed, setFailed] = useState(false);
   const className = ['tile', 'tile--library', focused ? 'is-focused' : '']
@@ -33,7 +33,14 @@ export function LibraryTileView({
   const poster = failed ? undefined : entryArtworkUrl(entry);
 
   return (
-    <div className={className} role="gridcell" aria-selected={focused} aria-label={entry.title}>
+    <div
+      className={className}
+      role="gridcell"
+      aria-selected={focused}
+      aria-label={entry.title}
+      onMouseEnter={() => focusAt({ row, col })}
+      onClick={() => activate({ row, col })}
+    >
       <div className="tile__frame">
         {poster ? (
           <img
