@@ -327,4 +327,50 @@ describe('App shell', () => {
       expect(tile(1).classList.contains('is-focused')).toBe(true);
     });
   });
+
+  // Mouse is a secondary input alongside the keyboard: hover focuses, click
+  // selects — behaving exactly like focusing then pressing Enter.
+  describe('mouse input', () => {
+    const servicesRow = (container: HTMLElement): Element[] =>
+      Array.from(container.querySelectorAll('.row')[0]!.querySelectorAll('.tile'));
+
+    it('moves focus to a service tile on hover', async () => {
+      const { container } = render(<App />);
+      await screen.findByText('Netflix');
+      const services = servicesRow(container);
+      // Netflix (col 0) is focused on entry; hovering YouTube (col 1) moves it.
+      expect(services[0]!.classList.contains('is-focused')).toBe(true);
+      fireEvent.mouseEnter(services[1]!);
+      await waitFor(() => {
+        expect(services[1]!.classList.contains('is-focused')).toBe(true);
+        expect(services[0]!.classList.contains('is-focused')).toBe(false);
+      });
+      // Exactly one focused element at all times (the core focus invariant).
+      expect(container.querySelectorAll('.is-focused')).toHaveLength(1);
+    });
+
+    it('launches a service tile on click (FR-A2)', async () => {
+      const navigate = vi.fn();
+      const { container } = render(<App navigate={navigate} />);
+      await screen.findByText('Netflix');
+      // Click YouTube directly, without arrowing to it first.
+      fireEvent.click(servicesRow(container)[1]!);
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('https://www.youtube.com/tv'));
+    });
+
+    it('opens a library item detail on click', async () => {
+      const dispatch = vi.fn();
+      const { container } = render(<App dispatch={dispatch} />);
+      await screen.findByText('Arrival');
+      const libraryTile = (label: string): Element =>
+        Array.from(container.querySelectorAll('.tile--library')).find((el) =>
+          el.textContent?.includes(label),
+        )!;
+      fireEvent.click(libraryTile('Arrival'));
+      // The movie's detail screen opens; its Play CTA dispatches play_item.
+      await screen.findByText('Play');
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+      expect(dispatch).toHaveBeenCalledWith('play_item', { id: 'm1' });
+    });
+  });
 });

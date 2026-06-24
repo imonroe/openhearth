@@ -227,23 +227,35 @@ function ShowDetail({
 }
 
 function PlayButton({ row, col, label }: { row: number; col: number; label: string }): ReactNode {
-  const { isFocused } = useFocus();
+  const { isFocused, focusAt, activate } = useFocus();
   const className = ['detail__play', isFocused(row, col) ? 'is-focused' : '']
     .filter(Boolean)
     .join(' ');
   return (
-    <div className={className} role="button" aria-label={label}>
+    <div
+      className={className}
+      role="button"
+      aria-label={label}
+      onMouseEnter={() => focusAt({ row, col })}
+      onClick={() => activate({ row, col })}
+    >
       <span aria-hidden="true">▶</span> {label}
     </div>
   );
 }
 
 function SeasonTab({ season, col }: { season: number; col: number }): ReactNode {
-  const { isFocused } = useFocus();
+  const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(0, col);
   const className = ['detail__season-tab', focused ? 'is-focused' : ''].filter(Boolean).join(' ');
   return (
-    <div className={className} role="tab" aria-selected={focused}>
+    <div
+      className={className}
+      role="tab"
+      aria-selected={focused}
+      onMouseEnter={() => focusAt({ row: 0, col })}
+      onClick={() => activate({ row: 0, col })}
+    >
       Season {season}
     </div>
   );
@@ -258,11 +270,16 @@ function EpisodeCard({
   number: number;
   title: string;
 }): ReactNode {
-  const { isFocused } = useFocus();
+  const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(1, col);
   const className = ['detail__episode', focused ? 'is-focused' : ''].filter(Boolean).join(' ');
   return (
-    <div className={className} role="listitem">
+    <div
+      className={className}
+      role="listitem"
+      onMouseEnter={() => focusAt({ row: 1, col })}
+      onClick={() => activate({ row: 1, col })}
+    >
       <div className="detail__episode-thumb">
         <span className="detail__episode-num" aria-hidden="true">
           {number}

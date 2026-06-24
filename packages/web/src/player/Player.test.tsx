@@ -148,6 +148,32 @@ describe('Player', () => {
     expect(await screen.findByText('CC: Off')).toBeTruthy();
   });
 
+  it('toggles play/pause when the video is clicked (mouse)', async () => {
+    const dispatch = vi.fn();
+    const { container } = render(
+      <Player item={item} keyMap={keyMap} dispatch={dispatch} onExit={vi.fn()} onHome={vi.fn()} />,
+    );
+    await waitFor(() => expect(videoEl(container)).toBeTruthy());
+    fireEvent.click(videoEl(container)!);
+    expect(dispatch).toHaveBeenCalledWith('play_pause');
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  it('resumes when the Resume prompt button is clicked (mouse)', async () => {
+    resumeValue = { position_sec: 125, updated_at: 1 };
+    const { container } = render(
+      <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
+    );
+    await screen.findByText(/Resume from 2:05/);
+    // Click "Start over" instead of arrowing to it: starts from the top and
+    // clears the saved position.
+    fireEvent.click(screen.getByText('▶ Start over'));
+    await waitFor(() =>
+      expect(videoEl(container)!.getAttribute('src')).toBe('/api/v1/library/m1/stream'),
+    );
+    expect(deleteCount).toBe(1);
+  });
+
   it('Back exits and Home returns home', async () => {
     const onExit = vi.fn();
     const onHome = vi.fn();

@@ -18,7 +18,7 @@ export function ServiceTileView({
   row: number;
   col: number;
 }): ReactNode {
-  const { isFocused } = useFocus();
+  const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(row, col);
   const [failed, setFailed] = useState(false);
 
@@ -28,7 +28,13 @@ export function ServiceTileView({
     .join(' ');
 
   return (
-    <div className={className} role="gridcell" aria-selected={focused}>
+    <div
+      className={className}
+      role="gridcell"
+      aria-selected={focused}
+      onMouseEnter={() => focusAt({ row, col })}
+      onClick={() => activate({ row, col })}
+    >
       <div className="tile__frame">
         {src ? (
           <img

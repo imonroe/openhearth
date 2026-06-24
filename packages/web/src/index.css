@@ -104,6 +104,9 @@ body.cursor-visible .tile,
 body.cursor-visible button,
 body.cursor-visible a,
 body.cursor-visible [role='button'],
-body.cursor-visible [role='gridcell'] {
+body.cursor-visible [role='gridcell'],
+body.cursor-visible [role='tab'],
+body.cursor-visible [role='listitem'],
+body.cursor-visible .player__progress {
   cursor: pointer;
 }
