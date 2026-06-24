@@ -8,7 +8,7 @@
  * Logging is structured JSON to stdout via Fastify's built-in pino, at a
  * configurable level. There is no telemetry and no outbound calls (NFR-9).
  */
-import { existsSync, createReadStream } from 'node:fs';
+import { existsSync, createReadStream, realpathSync } from 'node:fs';
 import { join, resolve, sep, extname } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -16,11 +16,13 @@ import { PROTOCOL_VERSION, redactConfig } from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
 
+// Raster image types only. SVG is deliberately excluded: it can carry inline
+// <script>, and a malicious community services.d/* icon served from this origin
+// (which also hosts the API/control WS) would be stored XSS.
 const ICON_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
   '.webp': 'image/webp',
   '.gif': 'image/gif',
 };
@@ -79,18 +81,41 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     if (!tile?.icon || /^https?:\/\//i.test(tile.icon)) {
       return reply.code(404).send({ status: 'not_found' });
     }
-    const configDir = resolve(configService.configDir);
-    const target = resolve(configDir, tile.icon);
-    // Guard against path traversal out of config/.
-    if (target !== configDir && !target.startsWith(configDir + sep)) {
+
+    // Type allowlist: only ever serve known image extensions. This stops the
+    // route from streaming arbitrary config files (e.g. icon: "openhearth.yaml",
+    // which holds secrets) through the image endpoint.
+    const type = ICON_TYPES[extname(tile.icon).toLowerCase()];
+    if (!type) {
+      return reply.code(404).send({ status: 'not_found' });
+    }
+
+    let configReal: string;
+    try {
+      configReal = realpathSync(resolve(configService.configDir));
+    } catch {
+      return reply.code(404).send({ status: 'not_found' });
+    }
+    const target = resolve(configReal, tile.icon);
+    // Lexical guard (fast reject) ...
+    if (target !== configReal && !target.startsWith(configReal + sep)) {
       return reply.code(400).send({ status: 'bad_request' });
     }
     if (!existsSync(target)) {
       return reply.code(404).send({ status: 'not_found' });
     }
+    // ... then a filesystem-aware guard: resolve symlinks and re-check
+    // containment, so a symlink inside config/ can't point outside it.
+    const real = realpathSync(target);
+    if (real !== configReal && !real.startsWith(configReal + sep)) {
+      return reply.code(400).send({ status: 'bad_request' });
+    }
+
     return reply
-      .type(ICON_TYPES[extname(target).toLowerCase()] ?? 'application/octet-stream')
-      .send(createReadStream(target));
+      .header('X-Content-Type-Options', 'nosniff')
+      .header('Content-Security-Policy', "default-src 'none'")
+      .type(type)
+      .send(createReadStream(real));
   });
 
   // --- Static SPA (optional; placeholder until the real bundle lands) -----

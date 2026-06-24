@@ -56,6 +56,21 @@ describe('serviceSchema', () => {
     ).toBe(false);
   });
 
+  it('accepts safe icons and rejects dangerous ones', () => {
+    const ok = (icon: string): boolean =>
+      serviceSchema.safeParse({ id: 'a', name: 'A', launch_url: 'https://a/', icon }).success;
+    // Allowed: http(s) URLs and safe relative filenames.
+    expect(ok('https://cdn/x.png')).toBe(true);
+    expect(ok('netflix.png')).toBe(true);
+    expect(ok('icons/netflix.png')).toBe(true);
+    // Rejected: other schemes, absolute paths, traversal.
+    expect(ok('javascript:alert(1)')).toBe(false);
+    expect(ok('data:image/svg+xml,<svg/>')).toBe(false);
+    expect(ok('file:///etc/passwd')).toBe(false);
+    expect(ok('/etc/passwd')).toBe(false);
+    expect(ok('../../secret.yaml')).toBe(false);
+  });
+
   it('emits a JSON Schema', () => {
     expect(serviceJsonSchema).toBeTypeOf('object');
   });
