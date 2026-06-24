@@ -6,10 +6,11 @@ three volumes, exposes ports, and (optionally) passes through a GPU. This doc
 records those per-host differences and provides a **reusable test-matrix
 checklist** to verify parity on each host.
 
-> **Summary of differences:** path mapping (bind-mount syntax + performance),
-> nothing in networking/ports (both publish `8080`), and GPU transcoding (Linux
-> VAAPI/QSV/NVENC vs. Windows CPU-only in practice). Core behavior — UI, launcher,
-> Home/Back, library, direct-play, metadata, auth — is identical.
+> **Summary of differences:** two real ones — path mapping (bind-mount syntax +
+> performance) and GPU transcoding (Linux VAAPI/QSV/NVENC vs. Windows CPU-only in
+> practice). Networking/ports are the same on both (each publishes `8080`). Core
+> behavior — UI, launcher, Home/Back, library, direct-play, metadata, auth — is
+> identical.
 
 ## The three volumes (recap)
 
