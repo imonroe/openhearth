@@ -1,0 +1,17 @@
+[Desktop Entry]
+# OpenHearth kiosk — XDG autostart entry (Linux desktop environments).
+#
+# Install (as the kiosk user):
+#   mkdir -p ~/.config/autostart
+#   cp scripts/kiosk/openhearth-kiosk.desktop ~/.config/autostart/
+#   # edit Exec below to the absolute path of the launcher in your checkout
+#
+# Use this on a desktop environment that honors ~/.config/autostart (GNOME, KDE,
+# LXDE, …). For a minimal/headless box, prefer the systemd user service or a
+# .xinitrc launch — see docs/deployment/linux-kiosk.md.
+Type=Application
+Name=OpenHearth Kiosk
+Comment=Launch the OpenHearth 10-foot UI in Chromium kiosk mode
+Exec=/home/USER/openhearth/scripts/kiosk/openhearth-kiosk.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true
