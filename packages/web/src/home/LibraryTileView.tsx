@@ -7,6 +7,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import { useFocus } from '../focus/FocusProvider';
+import { useScrollIntoViewOnFocus } from './useScrollIntoViewOnFocus';
 import { entryArtworkUrl, isShow, type LibraryEntry } from '../library/libraryModel';
 
 export function LibraryTileView({
@@ -20,6 +21,7 @@ export function LibraryTileView({
 }): ReactNode {
   const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(row, col);
+  const ref = useScrollIntoViewOnFocus<HTMLDivElement>(focused);
   const [failed, setFailed] = useState(false);
   const className = ['tile', 'tile--library', focused ? 'is-focused' : '']
     .filter(Boolean)
@@ -34,6 +36,7 @@ export function LibraryTileView({
 
   return (
     <div
+      ref={ref}
       className={className}
       role="gridcell"
       aria-selected={focused}

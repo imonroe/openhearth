@@ -98,10 +98,33 @@
 .row__strip {
   display: flex;
   gap: 0.833rem; /* 16px */
-  /* Fade-hint that the strip continues off the right edge (it doesn't scroll
-     the DOM; focus moves the logical position). */
+  /* Rows that overflow the viewport scroll horizontally; focus drives the
+     scroll position (see useScrollIntoViewOnFocus) — no native scrollbar
+     (issue #113). overflow-x:auto forces overflow-y to a non-visible value, so
+     reserve vertical room for the focus-ring glow with padding and cancel it
+     again with a negative margin, keeping row spacing unchanged. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 1.5rem; /* room for the ~28px focus glow above/below a tile */
+  margin-block: -1.5rem; /* neutralise the padding so layout is unchanged */
+  scroll-padding-inline: 1.667rem; /* keep the focused tile clear of the edges */
+  scroll-behavior: smooth;
+  /* Hide the scrollbar across engines — focus-driven, 10-foot UI. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+  /* Fade-hint that the strip continues off the right edge. */
   -webkit-mask: linear-gradient(to right, black 88%, transparent 100%);
   mask: linear-gradient(to right, black 88%, transparent 100%);
+}
+.row__strip::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none; /* Chromium / WebKit */
+}
+@media (prefers-reduced-motion: reduce) {
+  .row__strip {
+    scroll-behavior: auto;
+  }
 }
 
 /* --- Tiles --- */
