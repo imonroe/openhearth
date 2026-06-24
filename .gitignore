@@ -21,7 +21,7 @@ npm-debug.log*
 
 # Runtime data (host-mapped volumes)
 /cache/
-/config/openhearth.local.yaml
+/config/
 
 # Editor / OS
 .DS_Store
