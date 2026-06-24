@@ -4,6 +4,9 @@ coverage/
 pnpm-lock.yaml
 *.tsbuildinfo
 
+# Test fixtures are intentionally malformed/edge-case — don't reformat them.
+**/__fixtures__/**
+
 # Long-form authored prose — formatting is intentional, not Prettier's job.
 CLAUDE.md
 docs/

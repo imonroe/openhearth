@@ -1,0 +1,10 @@
+# Deliberately broken config (schema-invalid) for the NFR-4 must-pass test.
+# - server.port is out of range (1–65535)
+# - ui.rows[0].type is not a valid enum value
+# - unknownKey is rejected by the strict schema
+server:
+  port: 70000
+ui:
+  rows:
+    - type: bogus
+unknownKey: true

@@ -26,6 +26,21 @@ describe('config', () => {
     }
   });
 
+  it('produces clear, path-scoped messages for multiple malformed fields', () => {
+    const result = validateConfig({
+      server: { port: 'nope' }, // wrong type
+      ui: { theme: 'neon' }, // invalid enum
+      unknownTop: 1, // unknown key (strict)
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // Each message is "<path>: <human-readable reason>".
+      expect(result.errors.every((e) => /^[\w.()]+: .+/.test(e))).toBe(true);
+      expect(result.errors.some((e) => e.startsWith('server.port'))).toBe(true);
+      expect(result.errors.some((e) => e.startsWith('ui.theme'))).toBe(true);
+    }
+  });
+
   it('rejects unknown top-level keys (strict)', () => {
     const result = validateConfig({ nope: true });
     expect(result.ok).toBe(false);
