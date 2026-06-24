@@ -84,8 +84,26 @@ body {
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
   font-family: var(--font-display);
-  /* Hide the OS cursor: this is a 10-foot, keyboard/remote-driven UI. */
+  /*
+   * Hide the OS cursor by default: this is a 10-foot, keyboard/remote-driven UI.
+   * When the user moves a mouse (e.g. testing on a desktop), `cursorVisibility.ts`
+   * adds `.cursor-visible` to the body so the cursor reappears and elements can be
+   * clicked. Keyboard input hides it again.
+   */
   cursor: none;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+body.cursor-visible,
+body.cursor-visible * {
+  cursor: auto;
+}
+
+body.cursor-visible .tile,
+body.cursor-visible button,
+body.cursor-visible a,
+body.cursor-visible [role='button'],
+body.cursor-visible [role='gridcell'] {
+  cursor: pointer;
 }
