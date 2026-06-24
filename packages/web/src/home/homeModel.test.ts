@@ -69,7 +69,17 @@ describe('buildHomeModel', () => {
       expect(lib.label).toBe('Movies');
       expect(lib.source).toBe('movies');
       expect(lib.entries.map((e) => e.title)).toEqual(['Alpha', 'Bravo', 'Charlie']);
-      expect(lib.itemCount).toBe(3);
+      // A leading "See all" tile (col 0) makes the count entries + 1 (#124).
+      expect(lib.seeAll).toBe(true);
+      expect(lib.itemCount).toBe(4);
+    }
+  });
+
+  it('library row without entries has no See All tile', () => {
+    const lib = buildHomeModel(config, catalog).rows[2]!;
+    if (lib.kind === 'library') {
+      expect(lib.seeAll).toBe(false);
+      expect(lib.itemCount).toBe(0);
     }
   });
 
@@ -83,8 +93,9 @@ describe('buildHomeModel', () => {
     expect(model.rows[1]!.itemCount).toBe(0);
   });
 
-  it('rowLengths includes the header count', () => {
-    expect(rowLengths(buildHomeModel(config, catalog, library))).toEqual([2, 2, 3]);
+  it('rowLengths includes the header count and the library See All tile', () => {
+    // header(2), services(2), library(3 entries + 1 See All) (#124).
+    expect(rowLengths(buildHomeModel(config, catalog, library))).toEqual([2, 2, 4]);
   });
 
   it('firstContentRow skips the header and empty rows', () => {

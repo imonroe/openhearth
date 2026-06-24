@@ -19,6 +19,13 @@ export type HomeRow =
       label: string;
       source?: string;
       entries: LibraryEntry[];
+      /**
+       * Whether the row leads with a "See all" tile (col 0) that opens the full
+       * library grid (#124). Present whenever the row has entries, so a large
+       * collection is always one select away from the grid instead of a long
+       * horizontal scroll.
+       */
+      seeAll: boolean;
       itemCount: number;
     };
 
@@ -45,12 +52,16 @@ export function buildHomeModel(
     const label = row.source ? (sourceLabels.get(row.source) ?? row.source) : 'Library';
     const items = row.source ? (libraryBySource?.get(row.source) ?? []) : [];
     const entries = buildLibraryEntries(items);
+    // The "See all" tile leads the row (col 0) whenever there's anything to
+    // browse; an empty row has no grid to open, so it stays at zero focusables.
+    const seeAll = entries.length > 0;
     return {
       kind: 'library',
       label,
       ...(row.source ? { source: row.source } : {}),
       entries,
-      itemCount: entries.length,
+      seeAll,
+      itemCount: entries.length + (seeAll ? 1 : 0),
     };
   });
 
