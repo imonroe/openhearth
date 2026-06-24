@@ -12,7 +12,7 @@
  * spec so posters can drop in without layout change.
  */
 import { useCallback, useState, type ReactNode } from 'react';
-import type { ActionName } from '@openhearth/shared';
+import type { ActionName, LibraryItem } from '@openhearth/shared';
 import { FocusProvider, useFocus } from '../focus/FocusProvider';
 import type { FocusPosition } from '../focus/focusEngine';
 import type { KeyMap } from '../keybindings';
@@ -24,19 +24,27 @@ import {
 } from '../library/libraryModel';
 
 type Dispatch = (action: ActionName, params?: Record<string, unknown>) => void;
+type OnPlay = (item: LibraryItem) => void;
 
 interface DetailProps {
   entry: LibraryEntry;
   keyMap: KeyMap;
   dispatch: Dispatch;
   onBack: () => void;
+  onPlay: OnPlay;
 }
 
-export function LibraryDetail({ entry, keyMap, dispatch, onBack }: DetailProps): ReactNode {
+export function LibraryDetail({ entry, keyMap, dispatch, onBack, onPlay }: DetailProps): ReactNode {
   return isShow(entry) ? (
-    <ShowDetail show={entry} keyMap={keyMap} dispatch={dispatch} onBack={onBack} />
+    <ShowDetail show={entry} keyMap={keyMap} dispatch={dispatch} onBack={onBack} onPlay={onPlay} />
   ) : (
-    <MovieDetail entry={entry} keyMap={keyMap} dispatch={dispatch} onBack={onBack} />
+    <MovieDetail
+      entry={entry}
+      keyMap={keyMap}
+      dispatch={dispatch}
+      onBack={onBack}
+      onPlay={onPlay}
+    />
   );
 }
 
@@ -56,15 +64,18 @@ function MovieDetail({
   keyMap,
   dispatch,
   onBack,
+  onPlay,
 }: {
   entry: Exclude<LibraryEntry, ShowGroup>;
   keyMap: KeyMap;
   dispatch: Dispatch;
   onBack: () => void;
+  onPlay: OnPlay;
 }): ReactNode {
   const onSelect = useCallback(() => {
     dispatch('play_item', { id: entry.id });
-  }, [dispatch, entry.id]);
+    onPlay(entry);
+  }, [dispatch, entry, onPlay]);
 
   return (
     <FocusProvider
@@ -99,11 +110,13 @@ function ShowDetail({
   keyMap,
   dispatch,
   onBack,
+  onPlay,
 }: {
   show: ShowGroup;
   keyMap: KeyMap;
   dispatch: Dispatch;
   onBack: () => void;
+  onPlay: OnPlay;
 }): ReactNode {
   // The focused season tab drives which season's episodes are shown. Holding the
   // index above the FocusProvider lets us recompute the grid's row lengths; the
@@ -125,10 +138,13 @@ function ShowDetail({
     (pos: FocusPosition) => {
       if (pos.row === 1) {
         const ep = episodes[pos.col];
-        if (ep) dispatch('play_item', { id: ep.id });
+        if (ep) {
+          dispatch('play_item', { id: ep.id });
+          onPlay(ep);
+        }
       }
     },
-    [episodes, dispatch],
+    [episodes, dispatch, onPlay],
   );
 
   return (

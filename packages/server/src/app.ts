@@ -21,6 +21,7 @@ import {
   LIBRARY_ITEM_KINDS,
   LIBRARY_PAGE_DEFAULT,
   LIBRARY_PAGE_MAX,
+  resumeUpdateSchema,
   type EventMessage,
   type LibraryItemKind,
 } from '@openhearth/shared';
@@ -315,6 +316,32 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         .send(stream);
     },
   );
+
+  // Resume position for an item (FR-C5). GET returns the saved position (or
+  // null), PUT saves it, DELETE forgets it. Keyed by item id in the cache.
+  app.get<{ Params: { id: string } }>('/api/v1/library/:id/resume', async (request) => {
+    return libraryService?.getResume(request.params.id) ?? null;
+  });
+
+  app.put<{ Params: { id: string } }>('/api/v1/library/:id/resume', async (request, reply) => {
+    const parsed = resumeUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        status: 'bad_request',
+        errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+      });
+    }
+    if (!libraryService?.get(request.params.id)) {
+      return reply.code(404).send({ status: 'not_found' });
+    }
+    libraryService.setResume(request.params.id, parsed.data.position_sec);
+    return { status: 'ok' };
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/v1/library/:id/resume', async (request) => {
+    libraryService?.clearResume(request.params.id);
+    return { status: 'ok' };
+  });
 
   // --- Control protocol (PRD §11) ----------------------------------------
   // Shape an envelope validation error into a uniform 400/event payload.

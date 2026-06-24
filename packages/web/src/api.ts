@@ -7,6 +7,7 @@ import {
   type ActionName,
   type Config,
   type LibraryListResponse,
+  type ResumePosition,
   type ServiceCatalog,
 } from '@openhearth/shared';
 
@@ -45,6 +46,38 @@ export async function fetchLibrary(
     throw new Error(`GET /api/v1/library failed: ${res.status}`);
   }
   return (await res.json()) as LibraryListResponse;
+}
+
+/** URL for an item's playable stream; `startSec` offsets a transcode (?t=). */
+export function libraryStreamUrl(id: string, startSec = 0): string {
+  const base = `/api/v1/library/${encodeURIComponent(id)}/stream`;
+  return startSec > 0 ? `${base}?t=${Math.floor(startSec)}` : base;
+}
+
+/** Fetch the saved resume position for an item, or null if none. */
+export async function fetchResume(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ResumePosition | null> {
+  const res = await fetch(`/api/v1/library/${encodeURIComponent(id)}/resume`, { signal });
+  if (!res.ok) return null;
+  return (await res.json()) as ResumePosition | null;
+}
+
+/** Persist the current playback position (fire-and-forget). */
+export function saveResume(id: string, positionSec: number): void {
+  void fetch(`/api/v1/library/${encodeURIComponent(id)}/resume`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ position_sec: Math.floor(positionSec) }),
+  }).catch((err: unknown) => console.error('OpenHearth: save resume failed', err));
+}
+
+/** Forget an item's resume position (fire-and-forget). */
+export function clearResume(id: string): void {
+  void fetch(`/api/v1/library/${encodeURIComponent(id)}/resume`, { method: 'DELETE' }).catch(
+    (err: unknown) => console.error('OpenHearth: clear resume failed', err),
+  );
 }
 
 /** Resolve the artwork URL for a tile: remote URL as-is, bare filename via the
