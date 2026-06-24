@@ -22,9 +22,12 @@ import {
   LIBRARY_PAGE_DEFAULT,
   LIBRARY_PAGE_MAX,
   resumeUpdateSchema,
+  mediaItemFromLibraryItem,
   type EventMessage,
   type LibraryItem,
   type LibraryItemKind,
+  type MediaItem,
+  type SearchSection,
 } from '@openhearth/shared';
 import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
@@ -162,6 +165,21 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const poster = media?.artwork?.poster_url;
     if (!poster) return item;
     return { ...item, artwork_url: `/api/v1/library/${encodeURIComponent(item.id)}/artwork` };
+  };
+
+  /**
+   * Project a library item into the normalized {@link MediaItem} for search (#43),
+   * overlaying the cached poster (served by-id) when one is available.
+   */
+  const searchMediaItem = (item: LibraryItem): MediaItem => {
+    const media = mediaItemFromLibraryItem(item);
+    if (!metadataService?.enabled) return media;
+    const cached = metadataService.cachedMedia(metadataQueryForLibraryItem(item));
+    if (!cached?.artwork?.poster_url) return media;
+    return {
+      ...media,
+      artwork: { poster_url: `/api/v1/library/${encodeURIComponent(item.id)}/artwork` },
+    };
   };
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
@@ -321,6 +339,24 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     reply.type(cached.contentType);
     return reply.send(createReadStream(cached.path));
   });
+
+  // Search (#43, FR-B3). v1 returns local-library matches only, grouped into
+  // `source`-keyed sections so cross-service results can slot in later without a
+  // breaking change. No cross-service search ships in v1 (PRD §22/§23).
+  app.get<{ Querystring: { q?: string | string[]; limit?: string | string[] } }>(
+    '/api/v1/search',
+    async (request) => {
+      const q = (oneValue(request.query.q) ?? '').trim();
+      const limit = clampInt(oneValue(request.query.limit), 50, 1, 100);
+      const sections: SearchSection[] = [];
+      if (libraryService && q) {
+        const items = libraryService.search(q, limit).map(searchMediaItem);
+        if (items.length > 0) sections.push({ source: 'library', label: 'Your Library', items });
+      }
+      const total = sections.reduce((n, s) => n + s.items.length, 0);
+      return { query: q, sections, total };
+    },
+  );
 
   // Stream an item: direct-play with HTTP range when the browser can play it,
   // else transcode via ffmpeg to fragmented MP4 (FR-C3/FR-C4; PRD §12.1).
