@@ -101,6 +101,25 @@ export class LibraryService {
     return this.store.getLibraryItem(id);
   }
 
+  /** Saved resume position for an item (FR-C5), or undefined. */
+  getResume(id: string): { position_sec: number; updated_at: number } | undefined {
+    return this.store.getResumePosition(id);
+  }
+
+  /** Save a resume position; positions at/near the start are cleared instead. */
+  setResume(id: string, positionSec: number): void {
+    if (positionSec < 1) {
+      this.store.clearResumePosition(id);
+      return;
+    }
+    this.store.setResumePosition(id, positionSec, this.now());
+  }
+
+  /** Forget an item's resume position (finished / restart from 0). */
+  clearResume(id: string): void {
+    this.store.clearResumePosition(id);
+  }
+
   private scanSource(source: LibrarySource): SourceScanResult {
     const result: SourceScanResult = {
       source_id: source.id,

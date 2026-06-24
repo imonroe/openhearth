@@ -166,3 +166,57 @@ describe('GET /api/v1/library/:id', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('resume position (FR-C5)', () => {
+  it('round-trips save → read → clear', async () => {
+    await makeApp(seed);
+    // Nothing saved yet.
+    expect((await app.inject({ url: '/api/v1/library/m1/resume' })).json()).toBeNull();
+
+    // Save a position.
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/library/m1/resume',
+      payload: { position_sec: 123 },
+    });
+    expect(put.statusCode).toBe(200);
+    expect((await app.inject({ url: '/api/v1/library/m1/resume' })).json()).toMatchObject({
+      position_sec: 123,
+    });
+
+    // DELETE forgets it.
+    await app.inject({ method: 'DELETE', url: '/api/v1/library/m1/resume' });
+    expect((await app.inject({ url: '/api/v1/library/m1/resume' })).json()).toBeNull();
+  });
+
+  it('a position below 1s clears rather than saving (treat as start)', async () => {
+    await makeApp(seed);
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/library/m1/resume',
+      payload: { position_sec: 200 },
+    });
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/library/m1/resume',
+      payload: { position_sec: 0 },
+    });
+    expect((await app.inject({ url: '/api/v1/library/m1/resume' })).json()).toBeNull();
+  });
+
+  it('rejects a malformed body (400) and an unknown item (404)', async () => {
+    await makeApp(seed);
+    const bad = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/library/m1/resume',
+      payload: { position_sec: -5 },
+    });
+    expect(bad.statusCode).toBe(400);
+    const missing = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/library/nope/resume',
+      payload: { position_sec: 10 },
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+});

@@ -75,3 +75,20 @@ export type LibraryListResponse = z.infer<typeof libraryListResponseSchema>;
 /** Default and max page sizes for the library listing. */
 export const LIBRARY_PAGE_DEFAULT = 100;
 export const LIBRARY_PAGE_MAX = 500;
+
+/** A saved playback position for resume (FR-C5). */
+export const resumePositionSchema = z
+  .object({
+    /** Seconds into the item. */
+    position_sec: z.number().int().nonnegative(),
+    /** When it was saved (epoch seconds). */
+    updated_at: z.number().int(),
+  })
+  .strict();
+
+export type ResumePosition = z.infer<typeof resumePositionSchema>;
+
+/** Body of `PUT /api/v1/library/:id/resume`. */
+export const resumeUpdateSchema = z.object({ position_sec: z.number().nonnegative() }).strict();
+
+export type ResumeUpdate = z.infer<typeof resumeUpdateSchema>;

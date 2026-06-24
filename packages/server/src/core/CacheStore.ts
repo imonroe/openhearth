@@ -76,6 +76,12 @@ export class CacheStore {
       );
       CREATE INDEX IF NOT EXISTS idx_library_source ON library_items (source_id);
       CREATE INDEX IF NOT EXISTS idx_library_kind ON library_items (kind);
+
+      CREATE TABLE IF NOT EXISTS resume_positions (
+        item_id TEXT PRIMARY KEY,
+        position_sec INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
     `);
     this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
   }
@@ -165,6 +171,32 @@ export class CacheStore {
       for (const id of toDelete) stmt.run(id);
     });
     tx(ids);
+  }
+
+  /** Save (or clear) the resume position for an item (FR-C5). */
+  setResumePosition(itemId: string, positionSec: number, updatedAt: number): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO resume_positions (item_id, position_sec, updated_at)
+         VALUES (@item_id, @position_sec, @updated_at)`,
+      )
+      .run({
+        item_id: itemId,
+        position_sec: Math.max(0, Math.round(positionSec)),
+        updated_at: updatedAt,
+      });
+  }
+
+  /** Get the saved resume position (seconds) for an item, or undefined. */
+  getResumePosition(itemId: string): { position_sec: number; updated_at: number } | undefined {
+    return this.db
+      .prepare('SELECT position_sec, updated_at FROM resume_positions WHERE item_id = ?')
+      .get(itemId) as { position_sec: number; updated_at: number } | undefined;
+  }
+
+  /** Forget an item's resume position (e.g. on finish/stop-at-start). */
+  clearResumePosition(itemId: string): void {
+    this.db.prepare('DELETE FROM resume_positions WHERE item_id = ?').run(itemId);
   }
 
   close(): void {

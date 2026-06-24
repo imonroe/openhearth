@@ -11,6 +11,7 @@ import { buildKeyMap } from './keybindings';
 import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
 import { Home } from './home/Home';
 import { LibraryDetail } from './detail/LibraryDetail';
+import { Player } from './player/Player';
 import type { LibraryEntry } from './library/libraryModel';
 import { launchService, defaultNavigate, type Navigate } from './launch';
 
@@ -176,8 +177,10 @@ function ReadyApp({
   // Rebuild the key→action map whenever the configured bindings change (FR-R4).
   const keyMap = useMemo(() => buildKeyMap(keybindings), [keybindings]);
 
-  // Which screen is showing: the home grid, or a library item's detail.
+  // Which screen is showing: the home grid, a library item's detail, or the
+  // player (which sits on top of the detail it was launched from).
   const [detail, setDetail] = useState<LibraryEntry | null>(null);
+  const [player, setPlayer] = useState<LibraryItem | null>(null);
 
   // select on home: launch a service tile (FR-A2) or open a library item's
   // detail screen.
@@ -195,6 +198,23 @@ function ReadyApp({
     [model, navigate],
   );
 
+  // The player sits on top of the detail it launched from: Back returns to the
+  // detail, Home returns all the way to the home grid.
+  if (player) {
+    return (
+      <Player
+        item={player}
+        keyMap={keyMap}
+        dispatch={dispatch}
+        onExit={() => setPlayer(null)}
+        onHome={() => {
+          setPlayer(null);
+          setDetail(null);
+        }}
+      />
+    );
+  }
+
   // A library detail screen owns its own focus grid; Back returns to home.
   if (detail) {
     return (
@@ -203,6 +223,7 @@ function ReadyApp({
         keyMap={keyMap}
         dispatch={dispatch}
         onBack={() => setDetail(null)}
+        onPlay={(item) => setPlayer(item)}
       />
     );
   }
