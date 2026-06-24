@@ -12,17 +12,9 @@
  *     script intercepts the same keys on the service page and navigates back to
  *     OpenHearth. That is the cross-service guarantee.
  *
- * The default key sets here are the canonical list the kiosk extension mirrors.
- * #28 makes the per-action bindings fully configurable; the Home reservation
- * stays special.
+ * The default key sets here are the canonical list the kiosk extension mirrors
+ * and the default `home`/`back` keys `keybindings.ts` uses. Per-action bindings
+ * are configurable (keybindings.ts); the Home reservation stays special.
  */
 export const DEFAULT_HOME_KEYS: readonly string[] = ['Home', 'BrowserHome'];
 export const DEFAULT_BACK_KEYS: readonly string[] = ['Backspace', 'Escape', 'BrowserBack'];
-
-export function isHomeKey(key: string, keys: readonly string[] = DEFAULT_HOME_KEYS): boolean {
-  return keys.includes(key);
-}
-
-export function isBackKey(key: string, keys: readonly string[] = DEFAULT_BACK_KEYS): boolean {
-  return keys.includes(key);
-}

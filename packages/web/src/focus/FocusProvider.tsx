@@ -1,14 +1,14 @@
 /**
  * React binding for the focus engine.
  *
- * Holds the single focus position, installs a capture-phase window keydown
- * listener that maps arrow keys to directional moves and `Enter` to select, and
- * exposes `isFocused(row, col)` to tiles. The reserved `home`/`back` keys
- * (FR-A3) are handled here too, at the capture phase with
- * stopImmediatePropagation, so no *later-registered* in-app handler can shadow
- * them (OpenHearth owns its own page and registers no earlier key listener). The
- * cross-service guarantee is the kiosk home-guard extension
- * (scripts/kiosk/home-guard).
+ * Holds the single focus position and installs a capture-phase window keydown
+ * listener driven by the configured key→action map (keybindings.ts): navigate
+ * moves focus, select fires onSelect, and any other action is routed to onAction
+ * (the control path). The reserved `home`/`back` actions (FR-A3) are stopped at
+ * the capture phase with stopImmediatePropagation, so no *later-registered*
+ * in-app handler can shadow them (OpenHearth owns its own page and registers no
+ * earlier key listener). The cross-service guarantee is the kiosk home-guard
+ * extension (scripts/kiosk/home-guard).
  */
 import {
   createContext,
@@ -20,8 +20,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { move, firstFocusable, keyToDirection, type FocusPosition } from './focusEngine';
-import { isHomeKey, isBackKey } from '../reserved';
+import { move, firstFocusable, type FocusPosition } from './focusEngine';
+import { buildKeyMap, type KeyMap } from '../keybindings';
+import type { ActionName } from '@openhearth/shared';
 
 interface FocusContextValue {
   focused: FocusPosition;
@@ -35,21 +36,30 @@ export interface FocusProviderProps {
   rowLengths: number[];
   /** Where focus enters (design-system §9). Defaults to the first focusable. */
   initialPosition?: FocusPosition;
-  /** Invoked when `select` (Enter) is pressed, with the focused position. */
+  /** physical-key → action map (from config). Defaults when omitted. */
+  keyMap?: KeyMap;
+  /** Invoked when the `select` action fires, with the focused position. */
   onSelect?: (position: FocusPosition) => void;
-  /** Invoked on the reserved `home` key, after focus is reset to entry. */
+  /** Invoked on the reserved `home` action, after focus is reset to entry. */
   onHome?: () => void;
-  /** Invoked on the reserved `back` key (navigate one level within OpenHearth). */
+  /** Invoked on the reserved `back` action (one level within OpenHearth). */
   onBack?: () => void;
+  /** Invoked for any non-focus action (play_pause, stop, …) — routed to the
+   *  control path, exactly like a phone remote would. */
+  onAction?: (action: ActionName, params?: Record<string, unknown>) => void;
   children: ReactNode;
 }
+
+const DEFAULT_KEY_MAP = buildKeyMap();
 
 export function FocusProvider({
   rowLengths,
   initialPosition,
+  keyMap,
   onSelect,
   onHome,
   onBack,
+  onAction,
   children,
 }: FocusProviderProps): ReactNode {
   // The `{ 0, 0 }` last-resort fallback is only reached if the grid has no
@@ -75,6 +85,10 @@ export function FocusProvider({
   onHomeRef.current = onHome;
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
+  const onActionRef = useRef(onAction);
+  onActionRef.current = onAction;
+  const keyMapRef = useRef(keyMap ?? DEFAULT_KEY_MAP);
+  keyMapRef.current = keyMap ?? DEFAULT_KEY_MAP;
   const initialPositionRef = useRef(initialPosition);
   initialPositionRef.current = initialPosition;
 
@@ -90,32 +104,41 @@ export function FocusProvider({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      // Reserved Home/Back first (FR-A3): handled at the capture phase and
-      // stopped so no later-registered in-app handler can shadow them.
-      if (isHomeKey(event.key)) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        setFocused(
-          initialPositionRef.current ?? firstFocusable(rowLengthsRef.current) ?? { row: 0, col: 0 },
-        );
-        onHomeRef.current?.();
-        return;
-      }
-      if (isBackKey(event.key)) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        onBackRef.current?.();
-        return;
-      }
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        onSelectRef.current?.(focusedRef.current);
-        return;
-      }
-      const dir = keyToDirection(event.key);
-      if (!dir) return;
+      const bound = keyMapRef.current.get(event.key);
+      if (!bound) return;
       event.preventDefault();
-      setFocused((prev) => move(rowLengthsRef.current, prev, dir));
+
+      switch (bound.action) {
+        case 'home':
+          // Reserved (FR-A3): stop so no later-registered in-app handler can
+          // shadow it; reset focus to entry.
+          event.stopImmediatePropagation();
+          setFocused(
+            initialPositionRef.current ??
+              firstFocusable(rowLengthsRef.current) ?? { row: 0, col: 0 },
+          );
+          onHomeRef.current?.();
+          return;
+        case 'back':
+          event.stopImmediatePropagation();
+          onBackRef.current?.();
+          return;
+        case 'select':
+          onSelectRef.current?.(focusedRef.current);
+          return;
+        case 'navigate': {
+          const dir = bound.params?.direction;
+          if (dir === 'up' || dir === 'down' || dir === 'left' || dir === 'right') {
+            setFocused((prev) => move(rowLengthsRef.current, prev, dir));
+          }
+          return;
+        }
+        default:
+          // Any other action (play_pause, stop, seek, …) is routed to the
+          // control path — no keyboard-specific handling here.
+          onActionRef.current?.(bound.action, bound.params);
+          return;
+      }
     };
     // Capture phase so the reserved keys can't be shadowed by any other handler.
     window.addEventListener('keydown', onKeyDown, true);

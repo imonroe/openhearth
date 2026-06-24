@@ -3,10 +3,11 @@
  * shell under the focus engine.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Config, ServiceCatalog } from '@openhearth/shared';
-import { fetchConfig, fetchServices } from './api';
+import type { ActionName, Config, ServiceCatalog } from '@openhearth/shared';
+import { fetchConfig, fetchServices, sendCommand } from './api';
 import { FocusProvider } from './focus/FocusProvider';
 import type { FocusPosition } from './focus/focusEngine';
+import { buildKeyMap } from './keybindings';
 import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
 import { Home } from './home/Home';
 import { launchService, defaultNavigate, type Navigate } from './launch';
@@ -18,28 +19,56 @@ type State =
 
 const EMPTY_CATALOG: ServiceCatalog = { groups: [], errors: [] };
 
-/** Navigation is injectable so tests can assert the launch target. */
-export function App({ navigate = defaultNavigate }: { navigate?: Navigate } = {}): ReactNode {
+/** How often the kiosk re-fetches config to pick up a server hot-reload (FR-R4). */
+const CONFIG_POLL_MS = 30_000;
+
+/** `navigate` and `dispatch` are injectable so tests can assert behavior. */
+export function App({
+  navigate = defaultNavigate,
+  dispatch = sendCommand,
+}: {
+  navigate?: Navigate;
+  dispatch?: (action: ActionName, params?: Record<string, unknown>) => void;
+} = {}): ReactNode {
   const [state, setState] = useState<State>({ status: 'loading' });
 
   useEffect(() => {
     const controller = new AbortController();
-    const load = async (): Promise<void> => {
-      const config = await fetchConfig(controller.signal);
-      // The catalog is non-essential to boot — fall back to empty on failure so
-      // the shell still renders (NFR-4 spirit).
-      const catalog = await fetchServices(controller.signal).catch((err: unknown) => {
-        console.error('OpenHearth: failed to load services', err);
-        return EMPTY_CATALOG;
-      });
-      setState({ status: 'ready', config: config.config, catalog });
+    const load = async (initial: boolean): Promise<void> => {
+      try {
+        const config = await fetchConfig(controller.signal);
+        // The catalog is non-essential to boot — fall back to empty on failure so
+        // the shell still renders (NFR-4 spirit).
+        const catalog = await fetchServices(controller.signal).catch((err: unknown) => {
+          console.error('OpenHearth: failed to load services', err);
+          return EMPTY_CATALOG;
+        });
+        setState({ status: 'ready', config: config.config, catalog });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.error('OpenHearth: failed to load config', err);
+        // Only surface a fatal error on the first load; a failed background
+        // refresh keeps the last-good UI.
+        if (initial) setState({ status: 'error', message: String(err) });
+      }
     };
-    load().catch((err: unknown) => {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
-      console.error('OpenHearth: failed to load config', err);
-      setState({ status: 'error', message: String(err) });
-    });
-    return () => controller.abort();
+    void load(true);
+
+    // Pick up a server hot-reload (e.g. a re-mapped keybinding) without a restart
+    // (FR-R4) via two triggers: a low-frequency poll (a dedicated kiosk is always
+    // foregrounded, so we can't rely on visibility alone), plus a re-fetch when
+    // the page regains visibility. Returning from a launched service is a full
+    // page reload, which also re-fetches.
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') void load(false);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const poll = setInterval(() => void load(false), CONFIG_POLL_MS);
+    return () => {
+      controller.abort();
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(poll);
+    };
   }, []);
 
   // Theme is configurable via ui.theme; default dark.
@@ -84,7 +113,14 @@ export function App({ navigate = defaultNavigate }: { navigate?: Navigate } = {}
   const title = config.ui?.title ?? 'OpenHearth';
 
   return (
-    <ReadyApp title={title} model={model} initialPosition={initialPosition} navigate={navigate} />
+    <ReadyApp
+      title={title}
+      model={model}
+      initialPosition={initialPosition}
+      navigate={navigate}
+      keybindings={config.keybindings}
+      dispatch={dispatch}
+    />
   );
 }
 
@@ -94,15 +130,21 @@ function ReadyApp({
   model,
   initialPosition,
   navigate,
+  keybindings,
+  dispatch,
 }: {
   title: string;
   model: HomeModel;
   initialPosition: FocusPosition | undefined;
   navigate: Navigate;
+  keybindings: Config['keybindings'];
+  dispatch: (action: ActionName, params?: Record<string, unknown>) => void;
 }): ReactNode {
   const lengths = useMemo(() => rowLengths(model), [model]);
+  // Rebuild the key→action map whenever the configured bindings change (FR-R4).
+  const keyMap = useMemo(() => buildKeyMap(keybindings), [keybindings]);
 
-  // select (Enter) on a focused service tile launches that service (FR-A2).
+  // select on a focused service tile launches that service (FR-A2).
   const onSelect = useCallback(
     (pos: FocusPosition) => {
       const row = model.rows[pos.row];
@@ -116,7 +158,13 @@ function ReadyApp({
   );
 
   return (
-    <FocusProvider rowLengths={lengths} initialPosition={initialPosition} onSelect={onSelect}>
+    <FocusProvider
+      rowLengths={lengths}
+      initialPosition={initialPosition}
+      keyMap={keyMap}
+      onSelect={onSelect}
+      onAction={dispatch}
+    >
       <Home title={title} model={model} />
     </FocusProvider>
   );

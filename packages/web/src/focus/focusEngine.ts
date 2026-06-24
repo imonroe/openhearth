@@ -8,7 +8,8 @@
  * where possible, clamped to the destination row's length.
  *
  * This is intentionally framework-free so it can be unit-tested without a DOM.
- * The React layer (useFocusGrid) wraps it and maps keys to directions.
+ * The React layer (FocusProvider) wraps it; key→direction mapping lives in
+ * keybindings.ts.
  */
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
@@ -60,20 +61,4 @@ export function firstFocusable(rowLengths: number[]): FocusPosition | null {
     if (rowLen(rowLengths, row) > 0) return { row, col: 0 };
   }
   return null;
-}
-
-/** Map a KeyboardEvent.key to a direction, or null if it isn't a nav key. */
-export function keyToDirection(key: string): Direction | null {
-  switch (key) {
-    case 'ArrowUp':
-      return 'up';
-    case 'ArrowDown':
-      return 'down';
-    case 'ArrowLeft':
-      return 'left';
-    case 'ArrowRight':
-      return 'right';
-    default:
-      return null;
-  }
 }
