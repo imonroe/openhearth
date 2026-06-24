@@ -44,6 +44,16 @@ function isLibraryKind(value: string): value is LibraryItemKind {
   return (LIBRARY_ITEM_KINDS as readonly string[]).includes(value);
 }
 
+/**
+ * Normalize a query value to a single string. Fastify parses a repeated param
+ * (`?source=a&source=b`) into an array; a bare array would otherwise reach the
+ * SQL layer and 500. Last value wins, matching duplicate-key intuition.
+ */
+function oneValue(raw: string | string[] | undefined): string | undefined {
+  if (Array.isArray(raw)) return raw[raw.length - 1];
+  return raw;
+}
+
 /** Parse a query int with a default and inclusive [min,max] clamp. */
 function clampInt(raw: string | undefined, fallback: number, min: number, max: number): number {
   if (raw === undefined) return fallback;
@@ -156,9 +166,19 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   // Paginated listing, optionally filtered by source and/or kind. Degrades to
   // an empty page when the library is disabled (cold/unwritable cache).
   app.get<{
-    Querystring: { source?: string; kind?: string; limit?: string; offset?: string };
+    Querystring: {
+      source?: string | string[];
+      kind?: string | string[];
+      limit?: string | string[];
+      offset?: string | string[];
+    };
   }>('/api/v1/library', async (request, reply) => {
-    const { source, kind, limit, offset } = request.query;
+    // Coerce each param to a single string first: Fastify turns a repeated key
+    // into an array, which must not reach the SQL layer (would 500).
+    const source = oneValue(request.query.source);
+    const kind = oneValue(request.query.kind);
+    const limit = oneValue(request.query.limit);
+    const offset = oneValue(request.query.offset);
 
     if (kind !== undefined && !isLibraryKind(kind)) {
       return reply.code(400).send({

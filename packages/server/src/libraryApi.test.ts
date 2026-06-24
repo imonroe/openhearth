@@ -106,6 +106,35 @@ describe('GET /api/v1/library', () => {
     expect(res.json().status).toBe('bad_request');
   });
 
+  it('does not 500 on a repeated query param (array coercion)', async () => {
+    await makeApp(seed);
+    // A repeated key is parsed by Fastify as an array; it must be coerced to a
+    // single value (last wins) rather than reaching the SQL layer and crashing.
+    const res = await app.inject({ url: '/api/v1/library?source=tv&source=movies' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBe(3); // last value ("movies") wins
+    expect(body.items.every((i: LibraryItem) => i.source_id === 'movies')).toBe(true);
+
+    // Repeated kind likewise resolves to the last value, not a 500.
+    const k = await app.inject({ url: '/api/v1/library?kind=movie&kind=episode' });
+    expect(k.statusCode).toBe(200);
+    expect(k.json().total).toBe(1);
+  });
+
+  it('clamps out-of-range and garbage limit/offset', async () => {
+    await makeApp(seed);
+    const huge = (await app.inject({ url: '/api/v1/library?limit=99999' })).json();
+    expect(huge.limit).toBe(500); // clamped to LIBRARY_PAGE_MAX
+
+    const zero = (await app.inject({ url: '/api/v1/library?limit=0' })).json();
+    expect(zero.limit).toBe(1); // clamped to min
+
+    const garbage = (await app.inject({ url: '/api/v1/library?limit=abc&offset=-5' })).json();
+    expect(garbage.limit).toBe(100); // fallback default
+    expect(garbage.offset).toBe(0); // clamped to min
+  });
+
   it('degrades to an empty page when the library is disabled', async () => {
     await makeApp(seed, /* withLibrary */ false);
     const res = await app.inject({ url: '/api/v1/library' });
