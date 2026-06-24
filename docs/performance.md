@@ -77,9 +77,11 @@ logic cost is ~0 (above), so this measures React render + paint.
 DevTools → **Network**, press Play, and time from the `/stream` request to the
 `<video>` firing `playing`. Test both a browser-direct-playable file (e.g. H.264
 MP4 → ~2 s budget) and one that must transcode (e.g. an MKV → ffmpeg `libx264`,
-~5 s budget). The two stream paths themselves are exercised every CI run by
-`streamIntegration.test.ts` (direct-play + transcode), so this run measures
-*start latency* on real hardware, not correctness.
+~5 s budget). The two stream paths themselves are exercised by
+`streamIntegration.test.ts` (direct-play + transcode) — which is gated on
+ffmpeg/ffprobe being present and runs in CI (where ffmpeg is installed), skipping
+on a dev box without them — so this manual run measures *start latency* on real
+hardware, not correctness.
 
 | NFR | Target | Reference device | Measured | Met? |
 | --- | --- | --- | --- | --- |
