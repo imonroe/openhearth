@@ -27,7 +27,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['@openhearth/web', '@openhearth/web/*', '**/packages/web/*'],
+              group: ['@openhearth/web', '@openhearth/web/*', '**/web/**'],
               message:
                 'Seam violation: server (brain) must not import from web (face). Communicate via the shared protocol only.',
             },
@@ -45,7 +45,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['@openhearth/server', '@openhearth/server/*', '**/packages/server/*'],
+              group: ['@openhearth/server', '@openhearth/server/*', '**/server/**'],
               message:
                 'Seam violation: web (face) must not import from server (brain). It is a pure client of the HTTP/WS API.',
             },
