@@ -24,6 +24,7 @@ const STUB_PORT = 8090;
 
 export default defineConfig({
   testDir: here,
+  globalSetup: path.join(here, 'global-setup.ts'),
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
@@ -49,6 +50,9 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         OPENHEARTH_CONFIG_DIR: path.join(here, 'fixtures/config'),
+        // Writable cache so the library index (and resume positions) work for
+        // the player spec; isolated from any real /cache.
+        OPENHEARTH_CACHE_DIR: path.join(here, '.cache'),
         WEB_ROOT: path.join(repoRoot, 'packages/web/dist'),
         PORT: '8080',
         HOST: '127.0.0.1',

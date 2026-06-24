@@ -12,6 +12,8 @@ coverage/
 test-results/
 playwright-report/
 blob-report/
+e2e/.cache/
+e2e/fixtures/media/
 
 # Logs
 *.log
