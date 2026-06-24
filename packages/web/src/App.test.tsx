@@ -160,4 +160,37 @@ describe('App shell', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it('dispatches a non-focus action (play_pause) through the control path', async () => {
+    const dispatch = vi.fn();
+    render(<App dispatch={dispatch} />);
+    await screen.findByText('Netflix');
+    fireEvent.keyDown(window, { key: ' ' }); // default play_pause binding
+    expect(dispatch).toHaveBeenCalledWith('play_pause', undefined);
+  });
+
+  it('honors a remapped navigation key from config (FR-R4)', async () => {
+    // Re-stub fetch with a config that remaps "right" to the "d" key.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/v1/services')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockCatalog()) });
+        }
+        const config = mockConfig();
+        config.config.keybindings = { right: ['d'] };
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(config) });
+      }),
+    );
+    const { container } = render(<App />);
+    await screen.findByText('Netflix');
+
+    const services = Array.from(container.querySelectorAll('.row')[0]!.querySelectorAll('.tile'));
+    expect(services[0]!.classList.contains('is-focused')).toBe(true);
+    // ArrowRight no longer moves (remapped away); "d" does.
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(services[0]!.classList.contains('is-focused')).toBe(true);
+    fireEvent.keyDown(window, { key: 'd' });
+    await waitFor(() => expect(services[1]!.classList.contains('is-focused')).toBe(true));
+  });
 });

@@ -2,7 +2,12 @@
  * Thin client for the server API (the seam). The web app is a pure client — it
  * imports types from `@openhearth/shared`, never from the server package.
  */
-import type { Config, ServiceCatalog } from '@openhearth/shared';
+import {
+  PROTOCOL_VERSION,
+  type ActionName,
+  type Config,
+  type ServiceCatalog,
+} from '@openhearth/shared';
 
 export interface ConfigResponse {
   config: Config;
@@ -32,4 +37,22 @@ export function serviceIconUrl(id: string, icon: string | undefined): string | n
   if (!icon) return null;
   if (/^https?:\/\//i.test(icon)) return icon;
   return `/api/v1/services/${encodeURIComponent(id)}/icon`;
+}
+
+/**
+ * Dispatch a control command through the same path any client uses (the REST
+ * mirror). The server applies it and broadcasts `state_changed`. Fire-and-forget
+ * with a logged failure — a dropped command must not break the UI.
+ */
+export function sendCommand(action: ActionName, params?: Record<string, unknown>): void {
+  void fetch('/api/v1/control/command', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      type: 'command',
+      protocol_version: PROTOCOL_VERSION,
+      action,
+      ...(params ? { params } : {}),
+    }),
+  }).catch((err: unknown) => console.error('OpenHearth: control command failed', err));
 }
