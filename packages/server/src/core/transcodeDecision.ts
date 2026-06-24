@@ -142,10 +142,13 @@ export function buildFfmpegArgs(
     args.push('-ss', String(opts.seekSec));
   }
 
-  // Hardware-accelerated decode/encode setup (opt-in).
+  // Hardware-accelerated decode/encode setup (opt-in). Both VAAPI and QSV can
+  // target a specific render node via `transcode.device`.
   if (hw === 'vaapi') {
     const device = opts.transcode?.device ?? '/dev/dri/renderD128';
     args.push('-hwaccel', 'vaapi', '-vaapi_device', device);
+  } else if (hw === 'qsv' && opts.transcode?.device) {
+    args.push('-qsv_device', opts.transcode.device);
   }
 
   args.push('-i', inputPath);

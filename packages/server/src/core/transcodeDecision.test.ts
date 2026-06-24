@@ -117,6 +117,13 @@ describe('buildFfmpegArgs', () => {
     expect(args.join(' ')).toContain('frag_keyframe+empty_moov+default_base_moof');
     expect(args[args.length - 1]).toBe('pipe:1');
   });
+  it('uses the CPU encoder when hwaccel is explicitly "none" (guaranteed fallback)', () => {
+    const args = buildFfmpegArgs('/m/x.mkv', { transcode: { hwaccel: 'none' } });
+    expect(args).toContain('libx264');
+    expect(args).not.toContain('h264_vaapi');
+    expect(args).not.toContain('h264_nvenc');
+    expect(args).not.toContain('h264_qsv');
+  });
   it('adds a fast input seek before -i', () => {
     const args = buildFfmpegArgs('/m/x.mkv', { seekSec: 90 });
     expect(args.indexOf('-ss')).toBeLessThan(args.indexOf('-i'));
@@ -137,5 +144,13 @@ describe('buildFfmpegArgs', () => {
     expect(buildFfmpegArgs('/m/x.mkv', { transcode: { hwaccel: 'nvenc' } })).toContain(
       'h264_nvenc',
     );
+  });
+  it('uses QSV and honors its render device', () => {
+    const args = buildFfmpegArgs('/m/x.mkv', {
+      transcode: { hwaccel: 'qsv', device: '/dev/dri/renderD129' },
+    });
+    expect(args).toContain('h264_qsv');
+    expect(args.indexOf('-qsv_device')).toBeLessThan(args.indexOf('-i')); // before input
+    expect(args[args.indexOf('-qsv_device') + 1]).toBe('/dev/dri/renderD129');
   });
 });
