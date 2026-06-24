@@ -19,6 +19,21 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // Kiosk browser-extension scripts are plain browser JS (not part of the TS
+  // build) — give them browser globals so no-undef doesn't flag window/location.
+  {
+    files: ['scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        location: 'readonly',
+        URL: 'readonly',
+        console: 'readonly',
+        chrome: 'readonly',
+      },
+    },
+  },
   // Allow Vitest globals in test files.
   {
     files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],

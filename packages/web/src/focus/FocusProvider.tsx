@@ -1,10 +1,12 @@
 /**
  * React binding for the focus engine.
  *
- * Holds the single focus position, installs a window keydown listener that maps
- * arrow keys to directional moves, and exposes `isFocused(row, col)` to tiles.
- * `home`/`Enter`/`back` are reserved for later phases (#27/#28) — this scaffold
- * handles directional movement and the visible highlight only.
+ * Holds the single focus position, installs a capture-phase window keydown
+ * listener that maps arrow keys to directional moves and `Enter` to select, and
+ * exposes `isFocused(row, col)` to tiles. The reserved `home`/`back` keys
+ * (FR-A3) are handled here too, at the capture phase with
+ * stopImmediatePropagation, so nothing in-app can shadow them; the cross-service
+ * guarantee is the kiosk home-guard extension (scripts/kiosk/home-guard).
  */
 import {
   createContext,
@@ -17,6 +19,7 @@ import {
   type ReactNode,
 } from 'react';
 import { move, firstFocusable, keyToDirection, type FocusPosition } from './focusEngine';
+import { isHomeKey, isBackKey } from '../reserved';
 
 interface FocusContextValue {
   focused: FocusPosition;
@@ -32,6 +35,10 @@ export interface FocusProviderProps {
   initialPosition?: FocusPosition;
   /** Invoked when `select` (Enter) is pressed, with the focused position. */
   onSelect?: (position: FocusPosition) => void;
+  /** Invoked on the reserved `home` key, after focus is reset to entry. */
+  onHome?: () => void;
+  /** Invoked on the reserved `back` key (navigate one level within OpenHearth). */
+  onBack?: () => void;
   children: ReactNode;
 }
 
@@ -39,6 +46,8 @@ export function FocusProvider({
   rowLengths,
   initialPosition,
   onSelect,
+  onHome,
+  onBack,
   children,
 }: FocusProviderProps): ReactNode {
   // The `{ 0, 0 }` last-resort fallback is only reached if the grid has no
@@ -60,6 +69,12 @@ export function FocusProvider({
   focusedRef.current = focused;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onHomeRef = useRef(onHome);
+  onHomeRef.current = onHome;
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+  const initialPositionRef = useRef(initialPosition);
+  initialPositionRef.current = initialPosition;
 
   // When the grid shape changes (config loaded), re-seat focus if it now points
   // at an empty/out-of-range cell.
@@ -73,6 +88,23 @@ export function FocusProvider({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      // Reserved Home/Back first (FR-A3): handled at the capture phase and
+      // stopped so no other in-app handler can shadow them.
+      if (isHomeKey(event.key)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setFocused(
+          initialPositionRef.current ?? firstFocusable(rowLengthsRef.current) ?? { row: 0, col: 0 },
+        );
+        onHomeRef.current?.();
+        return;
+      }
+      if (isBackKey(event.key)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onBackRef.current?.();
+        return;
+      }
       if (event.key === 'Enter') {
         event.preventDefault();
         onSelectRef.current?.(focusedRef.current);
@@ -83,8 +115,9 @@ export function FocusProvider({
       event.preventDefault();
       setFocused((prev) => move(rowLengthsRef.current, prev, dir));
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    // Capture phase so the reserved keys can't be shadowed by any other handler.
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   const isFocused = useCallback(
