@@ -44,6 +44,11 @@ xvfb-run -a pnpm exec playwright test -c e2e/playwright.config.ts
 The extension's return URL is hard-coded to `http://localhost:8080/` (see
 `scripts/kiosk/home-guard/content.js`), which matches the server above.
 
+> **Caveat:** locally, `reuseExistingServer` is on, so if you already have an
+> OpenHearth server on `:8080` (or anything on `:8090`) the suite reuses it —
+> with _that_ config, not the fixtures. Stop any local server first, or expect
+> the catalog assertions to run against the wrong tiles. CI always starts fresh.
+
 ## Browser version
 
 Pinned to `@playwright/test@1.56.0` (Chromium build 1194). `pnpm exec playwright

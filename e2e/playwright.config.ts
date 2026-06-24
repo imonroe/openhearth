@@ -42,6 +42,9 @@ export default defineConfig({
       command: 'node packages/server/dist/main.js',
       cwd: repoRoot,
       url: `${HOME_URL}/api/v1/health`,
+      // Locally we reuse an already-running :8080 to speed iteration; see the
+      // README caveat — a dev server on :8080 with a *different* config would be
+      // used instead of the fixtures. CI always starts fresh (false).
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
       env: {
@@ -49,6 +52,9 @@ export default defineConfig({
         WEB_ROOT: path.join(repoRoot, 'packages/web/dist'),
         PORT: '8080',
         HOST: '127.0.0.1',
+        // OPENHEARTH_SEED_DIR is intentionally left unset: the fixture config dir
+        // is non-empty, so seedConfigDir() returns 'config-not-empty' and never
+        // copies the (absent) default seed over our deterministic catalog.
       },
     },
     {
