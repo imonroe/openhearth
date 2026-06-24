@@ -22,7 +22,23 @@ services:
       - ./cache:/cache # derived index/artwork/transcode cache (disposable)
     environment:
       - TMDB_API_KEY=${TMDB_API_KEY:-} # optional; app is fully usable without it
-    # GPU transcoding is opt-in and host-specific; documented separately.
+    # GPU transcoding is opt-in and host-specific — CPU (libx264) is the default
+    # and guaranteed path. To enable a backend, map the device here AND set
+    # `transcode.hwaccel` in config/openhearth.yaml. Full per-host setup
+    # (VAAPI / NVENC / QSV, verification, Windows/WSL2 caveats) is in
+    # docs/deployment/gpu-transcoding.md.
+    #
+    # Linux VAAPI / QSV (Intel/AMD) example:
     # devices:
-    #   - /dev/dri:/dev/dri        # Linux VAAPI example
+    #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - '44'   # host "video" gid
+    #   - '105'  # host "render" gid (varies by distro)
+    #
+    # NVIDIA NVENC (requires the NVIDIA Container Toolkit) example:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - { driver: nvidia, count: 1, capabilities: [gpu, video] }
     restart: unless-stopped

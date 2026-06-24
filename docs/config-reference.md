@@ -145,7 +145,8 @@ Local-media transcoding options (Strategy C). When a file's container/codecs are
 browser-playable it streams directly with HTTP range support; otherwise the
 server transcodes it to H.264/AAC fragmented MP4 with ffmpeg. **CPU is the
 default and the guaranteed path** — GPU acceleration is opt-in and per-host
-(full setup in the GPU deployment docs, issue #37).
+(full setup, verification, and Windows/WSL2 caveats in
+[deployment/gpu-transcoding.md](deployment/gpu-transcoding.md)).
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
