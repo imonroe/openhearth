@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { LibraryItem } from '@openhearth/shared';
-import { buildLibraryEntries, isShow, episodesInSeason, type ShowGroup } from './libraryModel';
+import {
+  buildLibraryEntries,
+  entryArtworkUrl,
+  isShow,
+  episodesInSeason,
+  type ShowGroup,
+} from './libraryModel';
 
 function item(over: Partial<LibraryItem>): LibraryItem {
   return {
@@ -61,5 +67,22 @@ describe('buildLibraryEntries', () => {
       item({ kind: 'episode', title: 'Show', season: 1, episode: 1, year: 2010 }),
     ]);
     expect((entries[0] as ShowGroup).year).toBe(2010);
+  });
+
+  it('takes the show poster from the first enriched episode (#42)', () => {
+    const entries = buildLibraryEntries([
+      item({ kind: 'episode', title: 'Show', season: 1, episode: 1 }),
+      item({ kind: 'episode', title: 'Show', season: 1, episode: 2, artwork_url: '/a/2/artwork' }),
+    ]);
+    const show = entries[0] as ShowGroup;
+    expect(show.artwork_url).toBe('/a/2/artwork');
+    expect(entryArtworkUrl(show)).toBe('/a/2/artwork');
+  });
+});
+
+describe('entryArtworkUrl', () => {
+  it('returns a movie item poster or undefined', () => {
+    expect(entryArtworkUrl(item({ artwork_url: '/a/m/artwork' }))).toBe('/a/m/artwork');
+    expect(entryArtworkUrl(item({}))).toBeUndefined();
   });
 });

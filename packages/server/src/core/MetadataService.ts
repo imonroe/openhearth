@@ -14,7 +14,7 @@
  * model in `shared/models` and the cache layer land in #40/#41; this issue is
  * the provider seam and the TMDB client (#39).
  */
-import type { MetadataConfig, MediaItem, MediaKind } from '@openhearth/shared';
+import type { MetadataConfig, MediaItem, MediaKind, LibraryItem } from '@openhearth/shared';
 import { TmdbProvider } from './TmdbProvider.js';
 import type { MetadataCacheEntry } from './CacheStore.js';
 
@@ -38,6 +38,20 @@ export function metadataCacheKey(query: MetadataQuery): string {
     query.title.trim().toLowerCase(),
     query.year ?? null,
   ]);
+}
+
+/**
+ * Build the metadata lookup for a scanned library item (#42). The library item's
+ * `kind` maps onto the provider hint (`movie`/`episode → tv`); `other` searches
+ * both. Episodes carry the show title, so a whole series resolves to one poster.
+ */
+export function metadataQueryForLibraryItem(item: LibraryItem): MetadataQuery {
+  const kind = item.kind === 'movie' ? 'movie' : item.kind === 'episode' ? 'tv' : undefined;
+  return {
+    title: item.title,
+    ...(item.year != null ? { year: item.year } : {}),
+    ...(kind ? { kind } : {}),
+  };
 }
 
 /** Caching + TTL options for {@link MetadataService} (#41). */
@@ -194,6 +208,19 @@ export class MetadataService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Read an already-cached, fresh {@link MediaItem} for a query without ever
+   * touching the network (#42). Returns null on a cold/expired/missing entry.
+   * The library API uses this on the request path so listing never blocks on a
+   * provider call — artwork appears once the background prime has populated the
+   * cache (a cold cache simply yields a placeholder, no jank).
+   */
+  cachedMedia(query: MetadataQuery): MediaItem | null {
+    const cached = this.cache?.getMetadata(metadataCacheKey(query));
+    if (cached && cached.expires_at > this.now()) return cached.item;
+    return null;
   }
 
   /**

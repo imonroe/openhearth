@@ -13,6 +13,9 @@ import { seedConfigDir } from './core/seedConfig.js';
 import { CacheStore } from './core/CacheStore.js';
 import { LibraryService } from './core/LibraryService.js';
 import { TranscodeService } from './core/TranscodeService.js';
+import { createMetadataProvider, MetadataService } from './core/MetadataService.js';
+import { ArtworkCache } from './core/ArtworkCache.js';
+import { primeLibraryMetadata } from './core/enrichLibrary.js';
 
 const CONFIG_DIR = process.env.OPENHEARTH_CONFIG_DIR ?? '/config';
 const SEED_DIR = process.env.OPENHEARTH_SEED_DIR ?? '/app/config.example';
@@ -51,12 +54,37 @@ async function main(): Promise<void> {
     ...(configService.config.transcode ? { transcode: configService.config.transcode } : {}),
   });
 
+  // Metadata + artwork (#42). Backed by the same disposable cache; degrades to a
+  // no-op when no provider key is configured. Both are skipped if the cache DB
+  // couldn't be opened (no place to cache, no library to enrich).
+  let metadataService: MetadataService | null = null;
+  let artworkCache: ArtworkCache | null = null;
+  if (cacheStore) {
+    const provider = createMetadataProvider(configService.config.metadata);
+    metadataService = new MetadataService(provider, { cache: cacheStore });
+    artworkCache = new ArtworkCache({ dir: path.join(CACHE_DIR, 'artwork') });
+  }
+
   const app = buildApp({
     configService,
     webRoot: WEB_ROOT,
     streamer,
     ...(libraryService ? { libraryService } : {}),
+    ...(metadataService ? { metadataService } : {}),
+    ...(artworkCache ? { artworkCache } : {}),
   });
+
+  /** Prime the metadata cache for the current library, in the background. */
+  const primeMetadata = (): void => {
+    if (!metadataService?.enabled || !libraryService) return;
+    void primeLibraryMetadata(libraryService.list({}), {
+      metadataService,
+      ...(artworkCache ? { artworkCache } : {}),
+      onError: (err) => app.log.debug({ err }, 'metadata prime: item failed'),
+    })
+      .then((resolved) => app.log.info({ resolved }, 'metadata prime complete'))
+      .catch((err) => app.log.warn({ err }, 'metadata prime failed'));
+  };
 
   // Keep the active log level in sync with hot-reloaded config, and surface
   // changes the running process can't apply live.
@@ -90,6 +118,7 @@ async function main(): Promise<void> {
             { totalIndexed: summary.totalIndexed },
             'library re-indexed after config change',
           );
+          primeMetadata();
         } catch (err) {
           app.log.warn({ err }, 'library re-scan failed');
         }
@@ -151,6 +180,7 @@ async function main(): Promise<void> {
           { totalIndexed: summary.totalIndexed, sources: summary.sources },
           'library scan complete',
         );
+        primeMetadata();
       } catch (err) {
         app.log.warn({ err }, 'library scan failed');
       }

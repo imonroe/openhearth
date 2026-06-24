@@ -52,6 +52,12 @@ export const libraryItemSchema = z
     mtime: z.number().int(),
     /** When this row was (re)indexed (epoch seconds). */
     indexed_at: z.number().int(),
+    /**
+     * Poster artwork URL for the UI (#42, FR-C2). Not part of the index — the
+     * API overlays it from the metadata cache when one is available, so a cold
+     * cache or no provider simply omits it and the tile shows a placeholder.
+     */
+    artwork_url: z.string().nullable().optional(),
   })
   .strict();
 
