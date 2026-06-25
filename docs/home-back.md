@@ -28,7 +28,17 @@ situations:
    handlers and in a separate world — the most robust mechanism short of an
    OS-level key grabber. (The isolated-world vs. a maximally adversarial
    `document_start` page ordering is not a hard spec guarantee, but the content
-   script wins in practice.)
+   script wins in practice.) The home origin and the return keys are set in
+   [`home-guard/config.js`](../scripts/kiosk/home-guard/config.js).
+
+> **The extension must actually load.** Branded Google Chrome 137+ (and Edge)
+> silently ignore the `--load-extension` flag the kiosk launchers use, which
+> disables this whole layer — run the kiosk on un-branded Chromium / Chrome For
+> Testing, or load the unpacked extension into the persistent profile by hand.
+> And the guarantee is only as good as the keys your input device sends: a
+> compact Bluetooth keyboard with no Home/Back button needs its key added to
+> `returnKeys` in `config.js` (use `debug: true` to discover it). See the
+> deployment guides' Troubleshooting sections.
 
 ## Why not an iframe?
 

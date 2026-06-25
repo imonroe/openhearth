@@ -40,21 +40,24 @@ test.describe('Home/Back guarantee (must-pass)', () => {
     await expect(page.locator('.is-focused')).toHaveCount(1);
   });
 
-  test('the remote browser keys (BrowserHome/BrowserBack) also return home', async ({ page }) => {
-    await launchFakeFlix(page);
+  for (const key of ['BrowserBack', 'BrowserHome'] as const) {
+    test(`the remote browser key (${key}) also returns home`, async ({ page }) => {
+      await launchFakeFlix(page);
 
-    // A real TV remote sends BrowserHome/BrowserBack, which the extension also
-    // reserves — but Playwright can't synthesize those media keys physically, so
-    // dispatch a faithful keydown the extension's window listener will receive.
-    await page.evaluate(() => {
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'BrowserBack', bubbles: true, cancelable: true }),
-      );
+      // A real TV remote sends BrowserHome/BrowserBack, which the extension also
+      // reserves (config.js `returnKeys`) — but Playwright can't synthesize those
+      // media keys physically, so dispatch a faithful keydown the extension's
+      // window listener will receive.
+      await page.evaluate((k) => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }),
+        );
+      }, key);
+
+      await page.waitForURL(`${HOME_ORIGIN}/`);
+      await expect(page.getByText('FakeFlix', { exact: true })).toBeVisible();
     });
-
-    await page.waitForURL(`${HOME_ORIGIN}/`);
-    await expect(page.getByText('FakeFlix', { exact: true })).toBeVisible();
-  });
+  }
 
   test('does not hijack Escape/Backspace — those stay with the service', async ({ page }) => {
     // The home-guard deliberately reserves only Home/BrowserHome/BrowserBack;

@@ -12,7 +12,12 @@ mode pointed at it, launched automatically when the kiosk user logs in.
 
 - The OpenHearth server running and reachable at `http://localhost:8080` (or your
   host/port) — e.g. via Docker Desktop.
-- Google Chrome (or Microsoft Edge — both are Chromium and take the same flags).
+- A Chromium-family browser. **Prefer un-branded [Chromium](https://www.chromium.org/)
+  or [Chrome For Testing](https://googlechromelabs.github.io/chrome-for-testing/).**
+  Branded **Google Chrome 137+** (and current Edge) silently ignore the
+  `--load-extension` flag the launcher uses to load the Home-guard, so the
+  Home/Back guarantee won't work out of the box — see
+  [Troubleshooting](#troubleshooting) for the branded-Chrome workarounds.
 - This repo's `scripts\kiosk\` folder available on the machine.
 
 ## 1. The launcher
@@ -27,9 +32,10 @@ persistent profile. Edit the paths at the top of the file:
 - `HOME_GUARD_DIR` — defaults to the `home-guard` folder next to the script.
 
 > **If you change `OPENHEARTH_URL`** away from `http://localhost:8080`, you must
-> also set `HOME_URL` in [`home-guard\content.js`](../../scripts/kiosk/home-guard/content.js)
-> to the same origin, or the Home/Back guarantee breaks (the extension is
-> hardcoded to the home origin). See the
+> also set `homeUrl` in [`home-guard\config.js`](../../scripts/kiosk/home-guard/config.js)
+> to the same origin, or the Home/Back guarantee breaks (the guard can't tell
+> OpenHearth's own pages from a service). `config.js` is also where you add a
+> return key if your remote/keyboard's Home/Back button isn't recognized. See the
 > [home-guard README](../../scripts/kiosk/home-guard/README.md) step 1.
 
 Double-click the `.bat` to test: the browser should fill the screen with the
@@ -79,12 +85,31 @@ key returns to OpenHearth — that proves the Home-guard extension loaded.
 
 - **A console window flashes:** set the Startup shortcut to *Run: Minimized*
   (Option A), or run via Task Scheduler (Option B).
-- **Home doesn't return from a service:** the extension didn't load — verify
-  `HOME_GUARD_DIR` resolves to `scripts\kiosk\home-guard`, and that `HOME_URL` in
-  `content.js` matches your `OPENHEARTH_URL`. On a managed/enterprise machine,
-  check that extension-install policy isn't blocking the unpacked load (you may
-  need to pair with `--disable-extensions-except=<home-guard dir>`). See the
+- **Home doesn't return from a service:** the extension didn't load. The most
+  common cause on Windows is **branded Google Chrome 137+ (or Edge) ignoring
+  `--load-extension`** as a security measure. Fix it one of these ways:
+  1. Use un-branded **Chromium** or **Chrome For Testing** for the kiosk (set
+     `BROWSER` to its `chrome.exe`) — they still honour `--load-extension`.
+  2. Keep branded Chrome but load the extension once by hand into the kiosk's
+     persistent profile: open `chrome://extensions`, enable **Developer mode**,
+     click **Load unpacked**, and pick the `scripts\kiosk\home-guard` folder. It
+     persists in the `--user-data-dir` profile across launches.
+  3. As a stopgap while it still works, the launcher already passes
+     `--disable-features=DisableLoadExtensionCommandLineSwitch` to re-enable the
+     flag on branded builds; Google is removing that toggle, so don't rely on it.
+
+  Also verify `HOME_GUARD_DIR` resolves to `scripts\kiosk\home-guard` and that
+  `homeUrl` in `home-guard\config.js` matches your `OPENHEARTH_URL`. On a
+  managed/enterprise machine, check that extension-install policy isn't blocking
+  the unpacked load. See the
   [home-guard README](../../scripts/kiosk/home-guard/README.md).
+- **Your remote/keyboard has no Home key:** many compact Bluetooth keyboard +
+  trackpad combos don't send `Home`/`BrowserHome`/`BrowserBack`. Set
+  `debug: true` in [`home-guard\config.js`](../../scripts/kiosk/home-guard/config.js),
+  reload the kiosk, launch a service, press the button you want to use, and read
+  the key name it logs to the browser console (`F12`). Add that string to
+  `returnKeys` in `config.js` and set `debug` back to `false`. (A remote with a
+  dedicated Home or Back button is the smoothest 10-foot experience.)
 - **Can't reach the server:** confirm Docker Desktop is running and the port is
   published; `http://localhost:8080/api/v1/health` should return JSON.
 - **Auth enabled?** If you set `server.auth.token`, the bundled UI doesn't yet

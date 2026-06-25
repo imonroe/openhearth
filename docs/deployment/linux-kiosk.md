@@ -17,6 +17,10 @@ automatically on power-on.
   minimal `Xorg` + a window manager. A full desktop is **not** required.
 - Chromium (`sudo apt install chromium` or `chromium-browser`), and optionally
   `unclutter` to hide the mouse pointer (`sudo apt install unclutter`).
+  **Use un-branded Chromium, not branded Google Chrome:** Chrome 137+ silently
+  ignores the `--load-extension` flag that loads the Home-guard, which would break
+  the Home/Back guarantee. Chromium still honours it. (The script prefers
+  `chromium`/`chromium-browser` and only falls back to `google-chrome`.)
 - This repo checked out on the box (for `scripts/kiosk/`), or just copy the
   `scripts/kiosk/` folder over.
 
@@ -37,10 +41,11 @@ Environment overrides: `OPENHEARTH_URL`, `CHROMIUM_BIN`, `OPENHEARTH_PROFILE_DIR
 `OPENHEARTH_HOME_GUARD_DIR`.
 
 > **If you change `OPENHEARTH_URL`** away from `http://localhost:8080`, you must
-> also set `HOME_URL` in [`home-guard/content.js`](../../scripts/kiosk/home-guard/content.js)
-> to the same origin. The extension is hardcoded to the home origin; if it
-> doesn't match, the Home/Back guarantee breaks (Home wouldn't return, and the
-> guard would treat the OpenHearth page itself as a service). See the
+> also set `homeUrl` in [`home-guard/config.js`](../../scripts/kiosk/home-guard/config.js)
+> to the same origin. If it doesn't match, the Home/Back guarantee breaks (Home
+> wouldn't return, and the guard would treat the OpenHearth page itself as a
+> service). `config.js` is also where you add a return key if your
+> remote/keyboard's Home/Back button isn't recognized. See the
 > [home-guard README](../../scripts/kiosk/home-guard/README.md) step 1.
 
 **Cursor hiding.** Chromium's kiosk mode removes all browser chrome but does not
@@ -107,10 +112,19 @@ proves the Home-guard extension loaded.
   (Option A) — usually a wrong `ExecStart` path or `DISPLAY` not `:0`.
 - **Home doesn't return from a service:** the extension didn't load — verify the
   `--load-extension` path resolves to `scripts/kiosk/home-guard`, and that
-  `HOME_URL` in `content.js` matches your `OPENHEARTH_URL`. On a managed/enterprise
-  machine, check that extension-install policy isn't blocking the unpacked load
-  (you may need to pair with `--disable-extensions-except=<home-guard dir>`). See
-  the [home-guard README](../../scripts/kiosk/home-guard/README.md).
+  `homeUrl` in `home-guard/config.js` matches your `OPENHEARTH_URL`. If you're
+  running **branded Google Chrome** (not Chromium), Chrome 137+ ignores
+  `--load-extension` — switch the kiosk to Chromium / Chrome For Testing, or load
+  the extension once via `chrome://extensions` (Developer mode → Load unpacked)
+  into the persistent profile. On a managed/enterprise machine, check that
+  extension-install policy isn't blocking the unpacked load. See the
+  [home-guard README](../../scripts/kiosk/home-guard/README.md).
+- **Your remote/keyboard has no Home key:** many compact Bluetooth keyboard +
+  trackpad combos don't send `Home`/`BrowserHome`/`BrowserBack`. Set
+  `debug: true` in [`home-guard/config.js`](../../scripts/kiosk/home-guard/config.js),
+  reload the kiosk, launch a service, press the button you want to use, and read
+  the key name it logs to the browser console. Add that string to `returnKeys`
+  in `config.js` and set `debug` back to `false`.
 - **GPU/transcoding:** see [gpu-transcoding.md](gpu-transcoding.md) for VAAPI/QSV.
 - **Auth enabled?** If you set `server.auth.token`, the bundled UI doesn't yet
   attach it to its own requests; bind the server to `127.0.0.1` for a single-box
