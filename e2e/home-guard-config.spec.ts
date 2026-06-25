@@ -10,8 +10,9 @@
  * (`Home`) no longer does. If the config-reading mechanism ever regresses to the
  * hardcoded fallback, this fails.
  *
- * It builds a throwaway copy of the extension (manifest.json + content.js, both
- * unchanged) plus a patched config.js, so the committed extension is untouched.
+ * It builds a throwaway copy of the extension (manifest.json + content.js +
+ * background.js, all unchanged) plus a patched config.js, so the committed
+ * extension is untouched.
  */
 import { test as base, chromium, expect, type BrowserContext } from '@playwright/test';
 import * as fs from 'node:fs/promises';
@@ -32,6 +33,7 @@ async function buildExtensionWithConfig(returnKeys: string[]): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'home-guard-cfg-'));
   await fs.copyFile(path.join(sourceExtDir, 'manifest.json'), path.join(dir, 'manifest.json'));
   await fs.copyFile(path.join(sourceExtDir, 'content.js'), path.join(dir, 'content.js'));
+  await fs.copyFile(path.join(sourceExtDir, 'background.js'), path.join(dir, 'background.js'));
   await fs.writeFile(
     path.join(dir, 'config.js'),
     `globalThis.OPENHEARTH_HOME_GUARD = ${JSON.stringify({

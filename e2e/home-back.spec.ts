@@ -59,6 +59,26 @@ test.describe('Home/Back guarantee (must-pass)', () => {
     });
   }
 
+  test('Home returns home when pressed inside a service cross-origin iframe', async ({ page }) => {
+    // Some service players host the video in a foreign-origin <iframe>. When Home
+    // is pressed with focus inside that frame, the content script there cannot
+    // reach window.top to navigate it, so it asks the extension's background
+    // worker to move the whole tab. This proves that path (the Sling failure mode).
+    // We load the embedded variant directly: the parent is on localhost:8090, the
+    // iframe on 127.0.0.1:8090 — same server, different origin.
+    await page.goto(`${STUB_ORIGIN}/?embed=1`);
+    await expect(page.locator('#service-name')).toHaveText('FakeFlix');
+
+    // Move focus INTO the cross-origin iframe, then press Home from there.
+    const frame = page.frameLocator('#player-frame');
+    await frame.locator('#inner-focus').click();
+    await page.keyboard.press('Home');
+
+    // The background worker navigates the entire tab back to OpenHearth.
+    await page.waitForURL(`${HOME_ORIGIN}/`);
+    await expect(page.getByText('FakeFlix', { exact: true })).toBeVisible();
+  });
+
   test('does not hijack Escape/Backspace — those stay with the service', async ({ page }) => {
     // The home-guard deliberately reserves only Home/BrowserHome/BrowserBack;
     // Escape and Backspace belong to the service (fullscreen/overlays/back). They

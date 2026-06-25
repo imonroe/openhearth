@@ -34,6 +34,19 @@ maximally adversarial page that registers its own `document_start` capture
 listener is not a hard spec guarantee — but in practice the content script wins,
 and this is the most robust mechanism available short of an OS-level key grabber.)
 
+### Returning home (background worker)
+
+When a reserved key fires, `content.js` doesn't navigate the page itself — it
+messages the background service worker (`background.js`), which calls
+`chrome.tabs.update` on the **whole tab**. This matters when the key is pressed
+inside a service's **cross-origin `<iframe>`** (some players host the video in a
+foreign-origin frame): from that frame the content script can't reach
+`window.top` to navigate it, but the worker can move the entire tab. If the
+messaging channel is ever unavailable, `content.js` falls back to navigating the
+top frame directly. The worker needs no extra permissions, and only this
+extension's own content scripts can message it — a launched service's page
+scripts cannot forge a "return home" message.
+
 ### Back keys
 
 Only `Home`/`BrowserHome` (and `BrowserBack` as a convenience) return to
