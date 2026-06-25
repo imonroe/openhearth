@@ -5,6 +5,17 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { ConfigService, interpolateEnv } from './ConfigService.js';
 
+// Hot-reload tests assert the watcher EVENTUALLY fires; correctness never
+// depends on how *fast* it does. Under a loaded parallel CI run the poll/inotify
+// callback can lag for seconds (a failing run logged 12s+ just to import the
+// module), so the budgets below are deliberately generous: they cost nothing on
+// the happy path (the change is detected in ~200ms) and only widen the failure
+// deadline. RELOAD_WAIT_MS is each helper's internal reject timeout; it must stay
+// below RELOAD_TEST_TIMEOUT_MS (the Vitest per-test timeout) so a genuine miss
+// surfaces as the helper's clear message instead of an opaque Vitest timeout.
+const RELOAD_WAIT_MS = 15_000;
+const RELOAD_TEST_TIMEOUT_MS = 20_000;
+
 let dir: string;
 let svc: ConfigService | undefined;
 
@@ -26,7 +37,7 @@ function write(file: string, contents: string): void {
 function waitForChange(
   service: ConfigService,
   pred: (snap: { errors: string[]; config: unknown }) => boolean,
-  timeoutMs = 2000,
+  timeoutMs = RELOAD_WAIT_MS,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -120,71 +131,91 @@ describe('ConfigService hot-reload (NFR-4)', () => {
   // These behavioral tests use native fs events (fast, reliable on the local
   // test fs). Polling — the container default for bind mounts — is covered
   // separately below.
-  it('applies a valid edit without restart', async () => {
-    write('openhearth.yaml', 'server:\n  port: 8080\n');
-    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
-    await svc.start();
-    expect(svc.config.server?.port).toBe(8080);
+  it(
+    'applies a valid edit without restart',
+    async () => {
+      write('openhearth.yaml', 'server:\n  port: 8080\n');
+      svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
+      await svc.start();
+      expect(svc.config.server?.port).toBe(8080);
 
-    const changed = waitForChange(
-      svc,
-      (s) => (s.config as { server?: { port?: number } }).server?.port === 9090,
-    );
-    write('openhearth.yaml', 'server:\n  port: 9090\n');
-    await changed;
-    expect(svc.config.server?.port).toBe(9090);
-    expect(svc.errors).toEqual([]);
-  });
+      const changed = waitForChange(
+        svc,
+        (s) => (s.config as { server?: { port?: number } }).server?.port === 9090,
+      );
+      write('openhearth.yaml', 'server:\n  port: 9090\n');
+      await changed;
+      expect(svc.config.server?.port).toBe(9090);
+      expect(svc.errors).toEqual([]);
+    },
+    RELOAD_TEST_TIMEOUT_MS,
+  );
 
-  it('retains last-good services when a services file becomes malformed', async () => {
-    write('openhearth.yaml', 'server:\n  port: 8080\n');
-    write('services.yaml', 'rows:\n  - id: streaming\n');
-    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
-    await svc.start();
-    expect(svc.services.base).toEqual({ rows: [{ id: 'streaming' }] });
+  it(
+    'retains last-good services when a services file becomes malformed',
+    async () => {
+      write('openhearth.yaml', 'server:\n  port: 8080\n');
+      write('services.yaml', 'rows:\n  - id: streaming\n');
+      svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
+      await svc.start();
+      expect(svc.services.base).toEqual({ rows: [{ id: 'streaming' }] });
 
-    const changed = waitForChange(svc, (s) => s.errors.length > 0);
-    write('services.yaml', 'rows:\n  - id: [unclosed\n'); // malformed YAML
-    await changed;
+      const changed = waitForChange(svc, (s) => s.errors.length > 0);
+      write('services.yaml', 'rows:\n  - id: [unclosed\n'); // malformed YAML
+      await changed;
 
-    // The good services data survives; only the error is reported.
-    expect(svc.services.base).toEqual({ rows: [{ id: 'streaming' }] });
-    expect(svc.errors.some((e) => e.includes('services.yaml'))).toBe(true);
-  });
+      // The good services data survives; only the error is reported.
+      expect(svc.services.base).toEqual({ rows: [{ id: 'streaming' }] });
+      expect(svc.errors.some((e) => e.includes('services.yaml'))).toBe(true);
+    },
+    RELOAD_TEST_TIMEOUT_MS,
+  );
 
   // The container default: polling detects host edits across a bind mount where
   // native fs events don't fire. Generous timeout — polling is slower than
   // native events, especially under a loaded parallel test run.
-  it('hot-reloads by polling (container default for bind mounts)', async () => {
-    write('openhearth.yaml', 'server:\n  port: 8080\n');
-    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: true, pollInterval: 60 });
-    await svc.start();
-    expect(svc.config.server?.port).toBe(8080);
+  it(
+    'hot-reloads by polling (container default for bind mounts)',
+    async () => {
+      write('openhearth.yaml', 'server:\n  port: 8080\n');
+      svc = new ConfigService({
+        configDir: dir,
+        debounceMs: 20,
+        usePolling: true,
+        pollInterval: 60,
+      });
+      await svc.start();
+      expect(svc.config.server?.port).toBe(8080);
 
-    const changed = waitForChange(
-      svc,
-      (s) => (s.config as { server?: { port?: number } }).server?.port === 9090,
-      8000,
-    );
-    write('openhearth.yaml', 'server:\n  port: 9090\n');
-    await changed;
-    expect(svc.config.server?.port).toBe(9090);
-    // Vitest's default 5s test timeout is shorter than this test's own 8s
-    // waitForChange budget, so a slow poll under CI load tripped Vitest first.
-    // Give the test as long as its internal wait actually allows.
-  }, 10000);
+      const changed = waitForChange(
+        svc,
+        (s) => (s.config as { server?: { port?: number } }).server?.port === 9090,
+      );
+      write('openhearth.yaml', 'server:\n  port: 9090\n');
+      await changed;
+      expect(svc.config.server?.port).toBe(9090);
+      // The per-test timeout must exceed waitForChange's internal budget so a slow
+      // poll under CI load surfaces the helper's clear message, not an opaque
+      // Vitest timeout. See the RELOAD_* constants at the top of the file.
+    },
+    RELOAD_TEST_TIMEOUT_MS,
+  );
 
-  it('retains last-good config on an invalid edit and reports the error', async () => {
-    write('openhearth.yaml', 'server:\n  port: 8080\n');
-    svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
-    await svc.start();
+  it(
+    'retains last-good config on an invalid edit and reports the error',
+    async () => {
+      write('openhearth.yaml', 'server:\n  port: 8080\n');
+      svc = new ConfigService({ configDir: dir, debounceMs: 20, usePolling: false });
+      await svc.start();
 
-    const changed = waitForChange(svc, (s) => s.errors.length > 0);
-    write('openhearth.yaml', 'server:\n  port: not-a-number\n'); // invalid
-    await changed;
+      const changed = waitForChange(svc, (s) => s.errors.length > 0);
+      write('openhearth.yaml', 'server:\n  port: not-a-number\n'); // invalid
+      await changed;
 
-    // Server stays up on last-good config; the bad value is NOT applied.
-    expect(svc.config.server?.port).toBe(8080);
-    expect(svc.errors.some((e) => e.includes('server.port'))).toBe(true);
-  });
+      // Server stays up on last-good config; the bad value is NOT applied.
+      expect(svc.config.server?.port).toBe(8080);
+      expect(svc.errors.some((e) => e.includes('server.port'))).toBe(true);
+    },
+    RELOAD_TEST_TIMEOUT_MS,
+  );
 });

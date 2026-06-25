@@ -19,8 +19,18 @@ import { ConfigService } from './core/ConfigService.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtures = path.join(here, 'core', '__fixtures__');
 
+// Hot-reload tests assert the watcher EVENTUALLY fires; correctness never depends
+// on how fast it does. Under a loaded parallel CI run the poll callback can lag
+// for seconds (a failing run logged 12s+ just to import the module), so the
+// budgets are deliberately generous — they cost nothing on the happy path
+// (~200ms) and only widen the failure deadline. RELOAD_WAIT_MS (the helper's
+// internal reject) must stay below RELOAD_TEST_TIMEOUT_MS (the Vitest per-test
+// timeout) so a genuine miss surfaces as the helper's clear message.
+const RELOAD_WAIT_MS = 15_000;
+const RELOAD_TEST_TIMEOUT_MS = 20_000;
+
 /** Resolve on the next config `change` that carries errors; reject if none in time. */
-function waitForErrors(svc: ConfigService, timeoutMs = 8000): Promise<void> {
+function waitForErrors(svc: ConfigService, timeoutMs = RELOAD_WAIT_MS): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       svc.off('change', onChange);
@@ -80,55 +90,73 @@ describe('NFR-4: a deliberately broken config never crashes the server (must-pas
   // container default (bind mounts) and deterministic, where native events can
   // lag well past the wait under a loaded parallel CI run. Vitest's per-test
   // timeout is raised to comfortably exceed waitForErrors' own budget.
-  it('keeps serving last-good after a valid->invalid hot-reload edit', async () => {
-    tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-nfr4-'));
-    fs.writeFileSync(
-      path.join(tmp, 'openhearth.yaml'),
-      'server:\n  port: 8080\n  logLevel: warn\n',
-    );
-    cfg = new ConfigService({ configDir: tmp, debounceMs: 20, usePolling: true, pollInterval: 60 });
-    await cfg.start();
+  it(
+    'keeps serving last-good after a valid->invalid hot-reload edit',
+    async () => {
+      tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-nfr4-'));
+      fs.writeFileSync(
+        path.join(tmp, 'openhearth.yaml'),
+        'server:\n  port: 8080\n  logLevel: warn\n',
+      );
+      cfg = new ConfigService({
+        configDir: tmp,
+        debounceMs: 20,
+        usePolling: true,
+        pollInterval: 60,
+      });
+      await cfg.start();
 
-    app = buildApp({ configService: cfg, logLevel: 'silent' });
-    await app.ready();
+      app = buildApp({ configService: cfg, logLevel: 'silent' });
+      await app.ready();
 
-    // Good config is served.
-    let res = await app.inject({ method: 'GET', url: '/api/v1/config' });
-    expect(res.json().config.server.port).toBe(8080);
+      // Good config is served.
+      let res = await app.inject({ method: 'GET', url: '/api/v1/config' });
+      expect(res.json().config.server.port).toBe(8080);
 
-    // Break it on disk and wait for the watcher to reload (bounded, so a
-    // failure surfaces as a clear message rather than an opaque timeout).
-    const changed = waitForErrors(cfg);
-    fs.writeFileSync(path.join(tmp, 'openhearth.yaml'), 'server:\n  port: 70000\n');
-    await changed;
+      // Break it on disk and wait for the watcher to reload (bounded, so a
+      // failure surfaces as a clear message rather than an opaque timeout).
+      const changed = waitForErrors(cfg);
+      fs.writeFileSync(path.join(tmp, 'openhearth.yaml'), 'server:\n  port: 70000\n');
+      await changed;
 
-    // Server still up; /config reports the error but keeps the last-good port.
-    const health = await app.inject({ method: 'GET', url: '/api/v1/health' });
-    expect(health.statusCode).toBe(200);
+      // Server still up; /config reports the error but keeps the last-good port.
+      const health = await app.inject({ method: 'GET', url: '/api/v1/health' });
+      expect(health.statusCode).toBe(200);
 
-    res = await app.inject({ method: 'GET', url: '/api/v1/config' });
-    const body = res.json();
-    expect(body.valid).toBe(false);
-    expect(body.errors.some((e: string) => e.includes('server.port'))).toBe(true);
-    expect(body.config.server.port).toBe(8080); // last-good retained
-  }, 10000);
+      res = await app.inject({ method: 'GET', url: '/api/v1/config' });
+      const body = res.json();
+      expect(body.valid).toBe(false);
+      expect(body.errors.some((e: string) => e.includes('server.port'))).toBe(true);
+      expect(body.config.server.port).toBe(8080); // last-good retained
+    },
+    RELOAD_TEST_TIMEOUT_MS,
+  );
 
-  it('retains last-good services when an overlay becomes malformed (NFR-4)', async () => {
-    tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-nfr4-svc-'));
-    fs.writeFileSync(path.join(tmp, 'openhearth.yaml'), 'server:\n  port: 8080\n');
-    await fsp.mkdir(path.join(tmp, 'services.d'));
-    fs.writeFileSync(path.join(tmp, 'services.d', 'netflix.yaml'), 'id: netflix\n');
-    cfg = new ConfigService({ configDir: tmp, debounceMs: 20, usePolling: true, pollInterval: 60 });
-    await cfg.start();
-    expect(cfg.services.overlays['netflix.yaml']).toEqual({ id: 'netflix' });
+  it(
+    'retains last-good services when an overlay becomes malformed (NFR-4)',
+    async () => {
+      tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-nfr4-svc-'));
+      fs.writeFileSync(path.join(tmp, 'openhearth.yaml'), 'server:\n  port: 8080\n');
+      await fsp.mkdir(path.join(tmp, 'services.d'));
+      fs.writeFileSync(path.join(tmp, 'services.d', 'netflix.yaml'), 'id: netflix\n');
+      cfg = new ConfigService({
+        configDir: tmp,
+        debounceMs: 20,
+        usePolling: true,
+        pollInterval: 60,
+      });
+      await cfg.start();
+      expect(cfg.services.overlays['netflix.yaml']).toEqual({ id: 'netflix' });
 
-    // Corrupt the overlay; the watcher reloads and reports a non-fatal error.
-    const changed = waitForErrors(cfg);
-    fs.writeFileSync(path.join(tmp, 'services.d', 'netflix.yaml'), 'id: [unclosed\n');
-    await changed;
+      // Corrupt the overlay; the watcher reloads and reports a non-fatal error.
+      const changed = waitForErrors(cfg);
+      fs.writeFileSync(path.join(tmp, 'services.d', 'netflix.yaml'), 'id: [unclosed\n');
+      await changed;
 
-    // The good overlay data survives; openhearth.yaml is still valid.
-    expect(cfg.services.overlays['netflix.yaml']).toEqual({ id: 'netflix' });
-    expect(cfg.config.server?.port).toBe(8080);
-  }, 10000);
+      // The good overlay data survives; openhearth.yaml is still valid.
+      expect(cfg.services.overlays['netflix.yaml']).toEqual({ id: 'netflix' });
+      expect(cfg.config.server?.port).toBe(8080);
+    },
+    RELOAD_TEST_TIMEOUT_MS,
+  );
 });
