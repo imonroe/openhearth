@@ -12,12 +12,19 @@ mode pointed at it, launched automatically when the kiosk user logs in.
 
 - The OpenHearth server running and reachable at `http://localhost:8080` (or your
   host/port) — e.g. via Docker Desktop.
-- A Chromium-family browser. **Prefer un-branded [Chromium](https://www.chromium.org/)
-  or [Chrome For Testing](https://googlechromelabs.github.io/chrome-for-testing/).**
-  Branded **Google Chrome 137+** (and current Edge) silently ignore the
-  `--load-extension` flag the launcher uses to load the Home-guard, so the
-  Home/Back guarantee won't work out of the box — see
-  [Troubleshooting](#troubleshooting) for the branded-Chrome workarounds.
+- A Chromium-family browser. **Which one depends on whether you stream
+  DRM-protected services** (Netflix, Sling, YouTube TV, Max…):
+  - **You do** → use **branded [Google Chrome](https://www.google.com/chrome/)**
+    and load the Home-guard by hand. Only branded Chrome ships Google's Widevine
+    CDM; un-branded Chromium and Chrome For Testing can't decrypt those streams.
+    See [Streaming DRM-protected services](#streaming-drm-protected-services) —
+    the recommended setup for most users.
+  - **You don't** (free/self-hosted content only) → un-branded
+    [Chromium](https://www.chromium.org/) or
+    [Chrome For Testing](https://googlechromelabs.github.io/chrome-for-testing/)
+    works with the `--load-extension` launcher as-is. Branded Chrome 137+ (and
+    current Edge) silently ignore that flag, so the Home-guard won't load on them
+    without the manual step below.
 - This repo's `scripts\kiosk\` folder available on the machine.
 
 ## 1. The launcher
@@ -45,6 +52,42 @@ OpenHearth home and no address bar.
 mouse pointer. With a D-pad/keyboard remote and no mouse it never appears; if you
 need it hidden with a mouse attached, use a small utility such as *AutoHideMouseCursor*
 or *NoMouse*. (Windows has no built-in idle-hide.)
+
+## Streaming DRM-protected services
+
+Netflix, Sling, YouTube TV, Max and friends are **DRM-protected** and need
+Google's **Widevine** CDM to decrypt. Widevine ships **only in branded Google
+Chrome** (and Edge) — **not** in un-branded Chromium or Chrome For Testing. But
+branded Chrome 137+ ignores the `--load-extension` flag the launcher uses for the
+Home-guard. So to get **both** DRM playback **and** the Home/Back guarantee, run
+branded Chrome and load the Home-guard **once, by hand**, into the kiosk's
+persistent profile:
+
+1. If your server isn't at `http://localhost:8080`, set `homeUrl` in
+   [`home-guard\config.js`](../../scripts/kiosk/home-guard/config.js) first.
+2. Start branded Chrome on the kiosk profile (the launcher's `--user-data-dir`),
+   e.g. from a Command Prompt:
+   ```bat
+   "C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir="%LOCALAPPDATA%\openhearth-kiosk"
+   ```
+3. Open `chrome://extensions`, enable **Developer mode** (top-right), click **Load
+   unpacked**, and select the `scripts\kiosk\home-guard` folder.
+4. The extension now **persists in that profile across reboots** — the kiosk picks
+   it up on every launch as long as you keep the same `--user-data-dir`. You do
+   **not** need `--load-extension`, so the `.bat` works unchanged (the ignored flag
+   is harmless); point `BROWSER` at branded `chrome.exe`.
+
+Verify: launch a service tile, confirm DRM playback works, and press **Home** to
+confirm you return to OpenHearth (that proves the unpacked Home-guard is active).
+
+> **Caveat — this is a stopgap.** Chrome shows a "Disable developer-mode
+> extensions" bubble on startup and may auto-disable the extension after some
+> updates. If Home ever stops returning, re-open `chrome://extensions` and confirm
+> **OpenHearth Home Guard** is still enabled. For a fully silent, update-proof
+> install, package the extension as a `.crx` and force-install it via an
+> enterprise policy (`ExtensionSettings` / `ExtensionInstallForcelist`); the
+> durable fix is tracked in
+> [ADR 0001](../adr/0001-kiosk-home-back-cdp-daemon.md).
 
 ## 2. Auto-start on log on
 

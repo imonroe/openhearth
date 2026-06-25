@@ -69,11 +69,19 @@ it no longer dictates the browser choice.
 
 ## Why not the alternatives
 
-- **A — Force-install the extension via managed enterprise policy** (branded
-  Chrome + `ExtensionInstallForcelist`/`ExtensionSettings` + a packed `.crx`).
-  Smallest change and keeps the extension, but adds per-OS policy + `.crx`
-  hosting friction and **does not** solve per-service UA. Kept as a documented
-  stopgap for users who want to stream immediately without the daemon.
+- **A — Install the existing extension into branded Chrome by hand** (or, for a
+  silent/update-proof variant, force-install a packed `.crx` via managed policy:
+  `ExtensionInstallForcelist`/`ExtensionSettings`). Branded Chrome ships Widevine,
+  so DRM works, and it still honours a manually **Load unpacked**ed extension even
+  though it ignores `--load-extension`. Smallest change and keeps the extension we
+  already have, but **does not** solve per-service UA, and the load-unpacked
+  variant carries Chrome's "disable developer-mode extensions" auto-disable risk.
+  **Adopted as the documented near-term stopgap** so users can stream DRM today —
+  see the "Streaming DRM-protected services" recipe in
+  [`linux-kiosk.md`](deployment/linux-kiosk.md) /
+  [`windows-kiosk.md`](deployment/windows-kiosk.md). The CDP daemon (this ADR)
+  remains the durable fix because it also addresses per-service UA and removes the
+  extension-loading dependency entirely.
 - **C — Embed our own Widevine-enabled Chromium (castlabs Electron / ECS).**
   Most robust (DRM, Home/Back, and per-service UA all in-process, no external
   browser lottery), but it makes the kiosk a first-class, per-platform,
