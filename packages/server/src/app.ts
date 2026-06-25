@@ -416,7 +416,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
 
   // Serve the current wallpaper image with the same defense-in-depth as config/
   // icons: raster-only, two-stage path containment, nosniff. Gated by the same
-  // auth as other /api routes (see the token caveat in the deployment docs).
+  // auth as other /api routes — so, like service icons/artwork, the browser can't
+  // attach the token to this CSS/img fetch; with `server.auth.token` set, bind to
+  // 127.0.0.1 for a single-box kiosk (config-reference.md § Security).
   app.get('/api/v1/ui/wallpaper', async (_request, reply) => {
     const image = configService.config.ui?.wallpaper?.image;
     if (!image) return reply.code(404).send({ status: 'not_found' });
@@ -481,6 +483,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         const snap = await configService.applyUiSettings({ wallpaper: { image, enabled: true } });
         return { status: 'ok', image, config: redactConfig(snap.config) };
       } catch (err) {
+        // The config pointer couldn't be persisted — roll back the orphaned file
+        // so we don't leave an image on disk that nothing references.
+        await fsp.rm(dest, { force: true }).catch(() => undefined);
         request.log.error({ err }, 'settings write failed after wallpaper upload');
         return reply
           .code(409)
@@ -489,27 +494,29 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     },
   );
 
-  // Remove the wallpaper: delete the stored file(s) and clear the config.
+  // Remove the wallpaper. Clear the config pointer FIRST: if that write fails the
+  // stored file is left intact, so the wallpaper keeps working rather than the
+  // config pointing at a file we already deleted.
   app.delete('/api/v1/ui/wallpaper', async (request, reply) => {
-    const dir = join(configService.configDir, WALLPAPER_DIR);
+    let snap;
     try {
-      for (const f of await fsp.readdir(dir)) {
-        if (f.startsWith('background-')) await fsp.rm(join(dir, f), { force: true });
-      }
-    } catch {
-      // Directory may not exist yet — nothing to remove.
-    }
-    try {
-      const snap = await configService.applyUiSettings({
-        wallpaper: { image: null, enabled: false },
-      });
-      return { status: 'ok', config: redactConfig(snap.config) };
+      snap = await configService.applyUiSettings({ wallpaper: { image: null, enabled: false } });
     } catch (err) {
       request.log.error({ err }, 'settings write failed on wallpaper delete');
       return reply
         .code(409)
         .send({ status: 'config_write_failed', errors: [(err as Error).message] });
     }
+    // Pointer is cleared; now best-effort delete the stored file(s).
+    const dir = join(configService.configDir, WALLPAPER_DIR);
+    try {
+      for (const f of await fsp.readdir(dir)) {
+        if (f.startsWith('background-')) await fsp.rm(join(dir, f), { force: true });
+      }
+    } catch {
+      // Directory may not exist — nothing to remove.
+    }
+    return { status: 'ok', config: redactConfig(snap.config) };
   });
 
   // --- API: service tile catalog (ordered + grouped) ---------------------

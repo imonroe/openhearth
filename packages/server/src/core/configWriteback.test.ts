@@ -118,6 +118,16 @@ describe('ConfigService.applyUiSettings (#118)', () => {
     await expect(svc.applyUiSettings({ theme: 'light' })).rejects.toThrow(/syntax/i);
   });
 
+  it('refuses to write when the file root is not a mapping', async () => {
+    write('openhearth.yaml', '- a\n- b\n'); // a sequence, not a map
+    svc = new ConfigService({ configDir: dir });
+    // load() reports a validation error (not a map) but doesn't throw.
+    await svc.load();
+    await expect(svc.applyUiSettings({ theme: 'light' })).rejects.toThrow(/mapping/i);
+    // The bad file is left untouched.
+    expect(read('openhearth.yaml')).toBe('- a\n- b\n');
+  });
+
   it('serializes concurrent writes (last-applied wins, no interleave)', async () => {
     write('openhearth.yaml', 'server:\n  port: 8080\n');
     svc = new ConfigService({ configDir: dir });
