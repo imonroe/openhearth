@@ -191,9 +191,18 @@ describe('ConfigService hot-reload (NFR-4)', () => {
         svc,
         (s) => (s.config as { server?: { port?: number } }).server?.port === 9090,
       );
-      write('openhearth.yaml', 'server:\n  port: 9090\n');
+      // The polling watcher detects a change by comparing (mtime, size). On a
+      // filesystem with coarse mtime resolution (seen on some CI runners' temp
+      // dirs), an edit that keeps the file the SAME byte length within one mtime
+      // tick is invisible to the poller and never fires — a real flake we hit in
+      // CI, where this test ran the full timeout and still saw no change. So the
+      // edit must change the file's size: add a line rather than swapping `8080`
+      // for the same-width `9090`. (The native-fs-event tests above don't need
+      // this — inotify fires on the write regardless of size.)
+      write('openhearth.yaml', 'server:\n  port: 9090\n  logLevel: warn\n');
       await changed;
       expect(svc.config.server?.port).toBe(9090);
+      expect(svc.config.server?.logLevel).toBe('warn');
       // The per-test timeout must exceed waitForChange's internal budget so a slow
       // poll under CI load surfaces the helper's clear message, not an opaque
       // Vitest timeout. See the RELOAD_* constants at the top of the file.
