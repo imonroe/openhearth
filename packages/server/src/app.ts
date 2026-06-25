@@ -9,6 +9,7 @@
  * configurable level. There is no telemetry and no outbound calls (NFR-9).
  */
 import { existsSync, createReadStream, realpathSync, statSync } from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import { join, resolve, sep, extname } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
@@ -22,6 +23,9 @@ import {
   PROTOCOL_VERSION,
   bundledIconName,
   redactConfig,
+  uiSettingsPatchSchema,
+  wallpaperUploadSchema,
+  WALLPAPER_CONTENT_TYPES,
   commandMessageSchema,
   makeStateEvent,
   LIBRARY_ITEM_KINDS,
@@ -66,6 +70,35 @@ const BUNDLED_ICON_TYPES: Record<string, string> = {
   ...ICON_TYPES,
   '.svg': 'image/svg+xml',
 };
+
+// Wallpaper upload (#118): cap the raw image at 20 MiB. The base64 request body
+// is ~33% larger, so the upload route raises its own bodyLimit to suit.
+const MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
+const WALLPAPER_DIR = 'wallpaper';
+
+/**
+ * Cheap magic-byte check that decoded bytes actually match the declared image
+ * type. Stops a client storing a mislabeled/non-image file under an image
+ * extension — the served file uses `nosniff`, so the bytes must be the real type.
+ */
+function imageBytesMatch(ext: string, buf: Buffer): boolean {
+  if (ext === 'png') {
+    return (
+      buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
+    );
+  }
+  if (ext === 'jpg') {
+    return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  }
+  if (ext === 'webp') {
+    return (
+      buf.length >= 12 &&
+      buf.toString('ascii', 0, 4) === 'RIFF' &&
+      buf.toString('ascii', 8, 12) === 'WEBP'
+    );
+  }
+  return false;
+}
 
 /**
  * Stream an image file from a trusted base directory as an icon, with the same
@@ -352,6 +385,138 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       errors: configService.errors,
       valid: configService.errors.length === 0,
     };
+  });
+
+  // --- API: UI settings & wallpaper (#118) -------------------------------
+  // Persist the UI-editable subset of `ui.*` back into openhearth.yaml
+  // (comment-preserving). Returns the reloaded, redacted snapshot.
+  app.put('/api/v1/ui/settings', async (request, reply) => {
+    const parsed = uiSettingsPatchSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        status: 'bad_request',
+        errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+      });
+    }
+    try {
+      const snap = await configService.applyUiSettings(parsed.data);
+      return {
+        status: 'ok',
+        config: redactConfig(snap.config),
+        errors: snap.errors,
+        valid: snap.errors.length === 0,
+      };
+    } catch (err) {
+      request.log.error({ err }, 'settings write failed');
+      return reply
+        .code(409)
+        .send({ status: 'config_write_failed', errors: [(err as Error).message] });
+    }
+  });
+
+  // Serve the current wallpaper image with the same defense-in-depth as config/
+  // icons: raster-only, two-stage path containment, nosniff. Gated by the same
+  // auth as other /api routes — so, like service icons/artwork, the browser can't
+  // attach the token to this CSS/img fetch; with `server.auth.token` set, bind to
+  // 127.0.0.1 for a single-box kiosk (config-reference.md § Security).
+  app.get('/api/v1/ui/wallpaper', async (_request, reply) => {
+    const image = configService.config.ui?.wallpaper?.image;
+    if (!image) return reply.code(404).send({ status: 'not_found' });
+    return sendIconFile(reply, configService.configDir, image, ICON_TYPES);
+  });
+
+  // Upload a wallpaper (base64 JSON). Stored under config/wallpaper/ with a
+  // unique name (so the served URL changes on each upload, busting caches), then
+  // ui.wallpaper.{image,enabled} is persisted to openhearth.yaml.
+  app.post(
+    '/api/v1/ui/wallpaper',
+    // Base64 inflates the raw bytes ~33%; allow headroom over MAX_WALLPAPER_BYTES.
+    { bodyLimit: Math.ceil(MAX_WALLPAPER_BYTES * 1.4) + 1024 },
+    async (request, reply) => {
+      const parsed = wallpaperUploadSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          status: 'bad_request',
+          errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+        });
+      }
+      const ext = WALLPAPER_CONTENT_TYPES[parsed.data.content_type];
+      const buf = Buffer.from(parsed.data.data_base64, 'base64');
+      if (buf.length === 0) {
+        return reply.code(400).send({ status: 'bad_request', errors: ['empty image'] });
+      }
+      if (buf.length > MAX_WALLPAPER_BYTES) {
+        return reply.code(413).send({
+          status: 'payload_too_large',
+          errors: [`image exceeds ${Math.round(MAX_WALLPAPER_BYTES / (1024 * 1024))} MB`],
+        });
+      }
+      if (!imageBytesMatch(ext, buf)) {
+        return reply.code(415).send({
+          status: 'unsupported_media_type',
+          errors: ['image bytes do not match the declared content type'],
+        });
+      }
+
+      const dir = join(configService.configDir, WALLPAPER_DIR);
+      const name = `background-${Date.now()}.${ext}`;
+      const dest = join(dir, name);
+      const tmp = `${dest}.tmp`;
+      try {
+        await fsp.mkdir(dir, { recursive: true });
+        await fsp.writeFile(tmp, buf);
+        await fsp.rename(tmp, dest);
+        // Drop any prior wallpaper file(s) so the dir holds just the current one.
+        for (const f of await fsp.readdir(dir)) {
+          if (f.startsWith('background-') && f !== name) {
+            await fsp.rm(join(dir, f), { force: true });
+          }
+        }
+      } catch (err) {
+        await fsp.rm(tmp, { force: true }).catch(() => undefined);
+        request.log.error({ err }, 'wallpaper write failed');
+        return reply.code(500).send({ status: 'write_failed' });
+      }
+
+      const image = `${WALLPAPER_DIR}/${name}`;
+      try {
+        const snap = await configService.applyUiSettings({ wallpaper: { image, enabled: true } });
+        return { status: 'ok', image, config: redactConfig(snap.config) };
+      } catch (err) {
+        // The config pointer couldn't be persisted — roll back the orphaned file
+        // so we don't leave an image on disk that nothing references.
+        await fsp.rm(dest, { force: true }).catch(() => undefined);
+        request.log.error({ err }, 'settings write failed after wallpaper upload');
+        return reply
+          .code(409)
+          .send({ status: 'config_write_failed', errors: [(err as Error).message] });
+      }
+    },
+  );
+
+  // Remove the wallpaper. Clear the config pointer FIRST: if that write fails the
+  // stored file is left intact, so the wallpaper keeps working rather than the
+  // config pointing at a file we already deleted.
+  app.delete('/api/v1/ui/wallpaper', async (request, reply) => {
+    let snap;
+    try {
+      snap = await configService.applyUiSettings({ wallpaper: { image: null, enabled: false } });
+    } catch (err) {
+      request.log.error({ err }, 'settings write failed on wallpaper delete');
+      return reply
+        .code(409)
+        .send({ status: 'config_write_failed', errors: [(err as Error).message] });
+    }
+    // Pointer is cleared; now best-effort delete the stored file(s).
+    const dir = join(configService.configDir, WALLPAPER_DIR);
+    try {
+      for (const f of await fsp.readdir(dir)) {
+        if (f.startsWith('background-')) await fsp.rm(join(dir, f), { force: true });
+      }
+    } catch {
+      // Directory may not exist — nothing to remove.
+    }
+    return { status: 'ok', config: redactConfig(snap.config) };
   });
 
   // --- API: service tile catalog (ordered + grouped) ---------------------

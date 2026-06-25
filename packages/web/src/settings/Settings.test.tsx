@@ -1,0 +1,115 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { Config } from '@openhearth/shared';
+import { Settings } from './Settings';
+import { buildKeyMap } from '../keybindings';
+import * as api from '../api';
+
+vi.mock('../api', () => ({
+  updateUiSettings: vi.fn(async () => ({
+    config: { ui: { theme: 'light' } } as Config,
+    errors: [],
+    valid: true,
+  })),
+  uploadWallpaper: vi.fn(async () => ({
+    image: 'wallpaper/background-1.png',
+    config: { ui: { wallpaper: { enabled: true, image: 'wallpaper/background-1.png' } } } as Config,
+  })),
+  deleteWallpaper: vi.fn(async () => ({ config: { ui: {} } as Config, errors: [], valid: true })),
+}));
+
+const keyMap = buildKeyMap();
+const baseConfig: Config = { ui: { theme: 'dark' } };
+
+function renderSettings(config: Config = baseConfig) {
+  const onBack = vi.fn();
+  const onConfigChange = vi.fn();
+  render(
+    <Settings
+      config={config}
+      wallpaper={null}
+      keyMap={keyMap}
+      onConfigChange={onConfigChange}
+      onBack={onBack}
+    />,
+  );
+  return { onBack, onConfigChange };
+}
+
+beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.restoreAllMocks());
+
+describe('Settings modal (#118)', () => {
+  it('renders the Appearance panel with focus on the first control', () => {
+    renderSettings();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Appearance' })).toBeTruthy();
+    // The theme row (row 0) is focused on entry.
+    expect(
+      screen.getByText('Light theme').closest('.settings__row')?.classList.contains('is-focused'),
+    ).toBe(true);
+  });
+
+  it('toggles the theme and lifts the returned config', async () => {
+    const { onConfigChange } = renderSettings();
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(api.updateUiSettings).toHaveBeenCalledWith({ theme: 'light' });
+    await waitFor(() => expect(onConfigChange).toHaveBeenCalled());
+  });
+
+  it('enables the wallpaper from the second row', async () => {
+    renderSettings();
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // row 1: Show wallpaper
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({ wallpaper: { enabled: true } }),
+    );
+  });
+
+  it('sets an opacity preset', async () => {
+    renderSettings();
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // row 1
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // row 2
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // row 3 (presets), col 0 = 100%
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // col 1 = 80%
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({ wallpaper: { opacity: 0.8 } }),
+    );
+  });
+
+  it('removes the wallpaper when an image is set', async () => {
+    renderSettings({ ui: { wallpaper: { enabled: true, image: 'wallpaper/x.png' } } });
+    fireEvent.click(screen.getByText('Remove'));
+    await waitFor(() => expect(api.deleteWallpaper).toHaveBeenCalled());
+  });
+
+  it('uploads a chosen image as base64', async () => {
+    renderSettings();
+    const input = document.querySelector('.settings__file-input') as HTMLInputElement;
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'bg.png', {
+      type: 'image/png',
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(api.uploadWallpaper).toHaveBeenCalled());
+    const call = (api.uploadWallpaper as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call?.[0]).toBe('image/png');
+  });
+
+  it('rejects a non-image file client-side without calling the API', () => {
+    renderSettings();
+    const input = document.querySelector('.settings__file-input') as HTMLInputElement;
+    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(api.uploadWallpaper).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toMatch(/PNG, JPEG, or WebP/i);
+  });
+
+  it('closes on the reserved Back key and the Done button', () => {
+    const { onBack } = renderSettings();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onBack).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Done'));
+    expect(onBack).toHaveBeenCalledTimes(2);
+  });
+});

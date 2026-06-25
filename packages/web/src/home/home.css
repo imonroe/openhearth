@@ -4,6 +4,7 @@
  */
 
 .app-shell {
+  position: relative;
   height: 100vh;
   width: 100vw;
   background: var(--color-bg-primary);
@@ -16,6 +17,26 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Custom wallpaper (#118): a full-bleed layer behind the UI. Opacity is set
+   inline from ui.wallpaper.opacity so a lower value fades it toward the ambient
+   background. pointer-events:none so it never intercepts focus/clicks. */
+.app-shell__wallpaper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+/* Keep all UI (header + rows) above the wallpaper layer. */
+.app-shell > .header,
+.app-shell > .home {
+  position: relative;
+  z-index: 1;
 }
 
 /* --- Header (§12.02) --- */

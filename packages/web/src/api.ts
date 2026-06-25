@@ -11,6 +11,8 @@ import {
   type ResumePosition,
   type ServiceCatalog,
   type SubtitleTrack,
+  type UiSettingsPatchBody,
+  type WallpaperContentType,
 } from '@openhearth/shared';
 
 export interface ConfigResponse {
@@ -114,6 +116,60 @@ export function clearResume(id: string): void {
   void fetch(`/api/v1/library/${encodeURIComponent(id)}/resume`, { method: 'DELETE' }).catch(
     (err: unknown) => console.error('OpenHearth: clear resume failed', err),
   );
+}
+
+/**
+ * Persist a UI settings patch (theme, wallpaper enabled/opacity) back to the
+ * config volume (#118). Returns the reloaded config so the caller can apply it
+ * immediately without waiting for the next poll.
+ */
+export async function updateUiSettings(patch: UiSettingsPatchBody): Promise<ConfigResponse> {
+  const res = await fetch('/api/v1/ui/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`PUT /api/v1/ui/settings failed: ${res.status}`);
+  return (await res.json()) as ConfigResponse;
+}
+
+/** Upload a wallpaper image (base64). Returns the new config snapshot (#118). */
+export async function uploadWallpaper(
+  contentType: WallpaperContentType,
+  dataBase64: string,
+): Promise<{ image: string; config: Config }> {
+  const res = await fetch('/api/v1/ui/wallpaper', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content_type: contentType, data_base64: dataBase64 }),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = (await res.json()) as { errors?: string[] };
+      detail = body.errors?.join('; ') ?? '';
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail || `POST /api/v1/ui/wallpaper failed: ${res.status}`);
+  }
+  return (await res.json()) as { image: string; config: Config };
+}
+
+/** Remove the current wallpaper and clear the config (#118). */
+export async function deleteWallpaper(): Promise<ConfigResponse> {
+  const res = await fetch('/api/v1/ui/wallpaper', { method: 'DELETE' });
+  if (!res.ok) throw new Error(`DELETE /api/v1/ui/wallpaper failed: ${res.status}`);
+  return (await res.json()) as ConfigResponse;
+}
+
+/**
+ * URL for the current wallpaper image. The `v` param is the stored image path
+ * (which carries a per-upload timestamp), so the URL changes whenever a new
+ * image is uploaded — busting any cached copy.
+ */
+export function wallpaperUrl(image: string): string {
+  return `/api/v1/ui/wallpaper?v=${encodeURIComponent(image)}`;
 }
 
 /** Resolve the artwork URL for a tile: remote URL as-is, bare filename via the

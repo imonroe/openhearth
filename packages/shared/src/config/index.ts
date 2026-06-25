@@ -60,6 +60,28 @@ export const uiRowSchema = z
   })
   .strict();
 
+/**
+ * Custom home-screen wallpaper (#118). The image is stored under the config
+ * volume (set via the Settings upload, or hand-dropped and referenced here).
+ */
+export const wallpaperConfigSchema = z
+  .object({
+    /** Render the wallpaper behind the UI. Defaults to off. */
+    enabled: z.boolean().optional(),
+    /**
+     * Image path relative to the config dir (e.g. `wallpaper/background.jpg`).
+     * Written by the Settings upload; may also be hand-edited to point at any
+     * image dropped into the config volume. `..` and absolute paths are rejected
+     * by the server when serving the file.
+     */
+    image: z.string().optional(),
+    /** Wallpaper opacity, 0 (invisible) – 1 (opaque). Defaults to 1. */
+    opacity: z.number().min(0).max(1).optional(),
+  })
+  .strict();
+
+export type WallpaperConfig = z.infer<typeof wallpaperConfigSchema>;
+
 /** UI / home-screen options. */
 export const uiConfigSchema = z
   .object({
@@ -67,8 +89,52 @@ export const uiConfigSchema = z
     theme: z.enum(['dark', 'light']).optional(),
     /** Ordered layout of the home screen. */
     rows: z.array(uiRowSchema).optional(),
+    /** Custom background wallpaper (#118). */
+    wallpaper: wallpaperConfigSchema.optional(),
   })
   .strict();
+
+export type UiConfig = z.infer<typeof uiConfigSchema>;
+
+/**
+ * Body for `PUT /api/v1/ui/settings` (#118): the UI-editable subset of `ui.*`
+ * the Settings modal can persist. `wallpaper.image` is intentionally NOT here —
+ * it's set only by the upload/delete endpoints, never as a free-form path.
+ */
+export const uiSettingsPatchSchema = z
+  .object({
+    theme: z.enum(['dark', 'light']).optional(),
+    wallpaper: z
+      .object({
+        enabled: z.boolean().optional(),
+        opacity: z.number().min(0).max(1).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export type UiSettingsPatchBody = z.infer<typeof uiSettingsPatchSchema>;
+
+/** Accepted wallpaper image content types → file extension (#118). */
+export const WALLPAPER_CONTENT_TYPES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+} as const;
+
+export type WallpaperContentType = keyof typeof WALLPAPER_CONTENT_TYPES;
+
+/** Body for `POST /api/v1/ui/wallpaper` (#118): a base64-encoded image upload. */
+export const wallpaperUploadSchema = z
+  .object({
+    content_type: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    /** Base64 (no data-URL prefix) of the raw image bytes. */
+    data_base64: z.string().min(1),
+  })
+  .strict();
+
+export type WallpaperUploadBody = z.infer<typeof wallpaperUploadSchema>;
 
 /** A local-media library source (plain folder scan is the v1 default). */
 export const librarySourceSchema = z

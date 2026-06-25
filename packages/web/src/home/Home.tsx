@@ -4,6 +4,7 @@
  */
 import type { ReactNode } from 'react';
 import type { HomeModel } from './homeModel';
+import type { WallpaperView } from '../settings/Settings';
 import { Header } from './Header';
 import { ServiceTileView } from './ServiceTileView';
 import { LibraryTileView } from './LibraryTileView';
@@ -11,12 +12,27 @@ import { SeeAllTileView } from './SeeAllTileView';
 import { RowStrip } from './RowStrip';
 import { entryId } from '../library/libraryModel';
 
-export function Home({ title, model }: { title: string; model: HomeModel }): ReactNode {
+export function Home({
+  title,
+  model,
+  wallpaper,
+}: {
+  title: string;
+  model: HomeModel;
+  wallpaper?: WallpaperView | null;
+}): ReactNode {
   // Row 0 is the header; content rows follow.
   const contentRows = model.rows.slice(1);
 
   return (
     <div className="app-shell">
+      {wallpaper ? (
+        <div
+          className="app-shell__wallpaper"
+          aria-hidden="true"
+          style={{ backgroundImage: `url("${wallpaper.url}")`, opacity: wallpaper.opacity }}
+        />
+      ) : null}
       <Header title={title} />
       <main className="home" role="grid" aria-label="Home">
         {contentRows.length === 0 ? (

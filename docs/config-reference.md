@@ -56,6 +56,33 @@ located error.
 | `ui.title` | string | `OpenHearth` | `My Living Room` |
 | `ui.theme` | `dark` \| `light` | `dark` | `dark` |
 | `ui.rows` | list of [row](#ui-row) | _(none)_ | see below |
+| `ui.wallpaper` | [wallpaper](#ui-wallpaper) | _(none)_ | Custom home-screen background. |
+
+#### `ui` wallpaper
+
+A custom image rendered full-bleed behind the home screen, with the tiles and
+header in front (#118). Editable here by hand, or from the in-app **Settings**
+modal (gear icon in the header), which uploads an image into the config volume
+and writes these keys for you (comments in this file are preserved).
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Show the wallpaper. |
+| `image` | string | _(none)_ | Path **relative to the config dir** (e.g. `wallpaper/background-1.png`). Raster only (PNG/JPEG/WebP); `..` and absolute paths are rejected. Usually set by the Settings upload. |
+| `opacity` | number `0`–`1` | `1` | Wallpaper opacity. Lower values fade it toward the background (the "transparency level"). |
+
+```yaml
+ui:
+  wallpaper:
+    enabled: true
+    image: wallpaper/background-1.png
+    opacity: 0.8
+```
+
+> Uploaded wallpapers are stored under `config/wallpaper/`. Settings changes made
+> in the app are written back to this file in place — your comments and layout
+> survive. If `openhearth.yaml` has a YAML syntax error, the app won't overwrite
+> it; fix the error first.
 
 #### `ui` row
 
