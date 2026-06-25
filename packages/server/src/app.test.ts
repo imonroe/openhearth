@@ -311,3 +311,118 @@ describe('unknown routes', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+// A real 1×1 transparent PNG (valid signature) for upload tests (#118).
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+describe('UI settings & wallpaper (#118)', () => {
+  beforeEach(() => makeApp('server:\n  port: 8080\n'));
+
+  it('PUT /api/v1/ui/settings persists theme + wallpaper opacity', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/ui/settings',
+      payload: { theme: 'light', wallpaper: { enabled: true, opacity: 0.5 } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.status).toBe('ok');
+    expect(body.config.ui.theme).toBe('light');
+    expect(body.config.ui.wallpaper).toEqual({ enabled: true, opacity: 0.5 });
+    // It actually hit the config service (subsequent GET reflects it).
+    const cfgRes = await app.inject({ method: 'GET', url: '/api/v1/config' });
+    expect(cfgRes.json().config.ui.theme).toBe('light');
+  });
+
+  it('PUT /api/v1/ui/settings rejects an out-of-range opacity', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/ui/settings',
+      payload: { wallpaper: { opacity: 2 } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('PUT /api/v1/ui/settings rejects a free-form image path', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/ui/settings',
+      payload: { wallpaper: { image: '../../etc/passwd' } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('uploads a wallpaper, then serves it; config points at the stored file', async () => {
+    const up = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ui/wallpaper',
+      payload: { content_type: 'image/png', data_base64: TINY_PNG_BASE64 },
+    });
+    expect(up.statusCode).toBe(200);
+    const image = up.json().image as string;
+    expect(image).toMatch(/^wallpaper\/background-\d+\.png$/);
+    expect(up.json().config.ui.wallpaper.enabled).toBe(true);
+    // The file is on disk under config/wallpaper/.
+    expect(fs.existsSync(path.join(dir, image))).toBe(true);
+
+    const get = await app.inject({ method: 'GET', url: '/api/v1/ui/wallpaper' });
+    expect(get.statusCode).toBe(200);
+    expect(get.headers['content-type']).toContain('image/png');
+    expect(get.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('rejects an image whose bytes do not match the declared type', async () => {
+    // PNG bytes declared as WebP → magic-byte check fails.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ui/wallpaper',
+      payload: { content_type: 'image/webp', data_base64: TINY_PNG_BASE64 },
+    });
+    expect(res.statusCode).toBe(415);
+  });
+
+  it('rejects a non-image payload (bad magic bytes)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ui/wallpaper',
+      // "hello" base64 — not a PNG.
+      payload: { content_type: 'image/png', data_base64: 'aGVsbG8=' },
+    });
+    expect(res.statusCode).toBe(415);
+  });
+
+  it('rejects a disallowed content type at the schema', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ui/wallpaper',
+      payload: { content_type: 'image/svg+xml', data_base64: TINY_PNG_BASE64 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('GET /api/v1/ui/wallpaper is 404 when none is set', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ui/wallpaper' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('DELETE removes the wallpaper file and clears the config', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/ui/wallpaper',
+      payload: { content_type: 'image/png', data_base64: TINY_PNG_BASE64 },
+    });
+    const del = await app.inject({ method: 'DELETE', url: '/api/v1/ui/wallpaper' });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().config.ui.wallpaper.enabled).toBe(false);
+    const get = await app.inject({ method: 'GET', url: '/api/v1/ui/wallpaper' });
+    expect(get.statusCode).toBe(404);
+  });
+
+  it('blocks a hand-edited traversal path when serving the image', async () => {
+    // A malicious/typo'd ui.wallpaper.image must not escape the config dir.
+    await makeApp('ui:\n  wallpaper:\n    enabled: true\n    image: "../escape.png"\n');
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ui/wallpaper' });
+    expect([400, 404]).toContain(res.statusCode);
+  });
+});

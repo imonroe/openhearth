@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { validateConfig, configJsonSchema, redactConfig, REDACTED, type Config } from './index';
+import {
+  validateConfig,
+  configJsonSchema,
+  redactConfig,
+  REDACTED,
+  uiSettingsPatchSchema,
+  wallpaperUploadSchema,
+  type Config,
+} from './index';
 
 describe('config', () => {
   it('accepts an empty config (app usable with nothing configured)', () => {
@@ -68,6 +76,70 @@ describe('config', () => {
 
   it('emits a JSON Schema for docs/tooling', () => {
     expect(configJsonSchema).toBeTypeOf('object');
+  });
+});
+
+describe('ui.wallpaper (#118)', () => {
+  it('accepts a full wallpaper block', () => {
+    const result = validateConfig({
+      ui: { wallpaper: { enabled: true, image: 'wallpaper/background-1.png', opacity: 0.8 } },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts a partial wallpaper block (every field optional)', () => {
+    expect(validateConfig({ ui: { wallpaper: { enabled: false } } }).ok).toBe(true);
+    expect(validateConfig({ ui: { wallpaper: {} } }).ok).toBe(true);
+  });
+
+  it('rejects opacity outside 0..1', () => {
+    expect(validateConfig({ ui: { wallpaper: { opacity: 1.5 } } }).ok).toBe(false);
+    expect(validateConfig({ ui: { wallpaper: { opacity: -0.1 } } }).ok).toBe(false);
+  });
+
+  it('rejects unknown wallpaper keys (strict)', () => {
+    expect(validateConfig({ ui: { wallpaper: { url: 'http://x/y.png' } } }).ok).toBe(false);
+  });
+});
+
+describe('uiSettingsPatchSchema (PUT /api/v1/ui/settings)', () => {
+  it('accepts theme and wallpaper enabled/opacity', () => {
+    expect(uiSettingsPatchSchema.safeParse({ theme: 'light' }).success).toBe(true);
+    expect(
+      uiSettingsPatchSchema.safeParse({ wallpaper: { enabled: true, opacity: 0.5 } }).success,
+    ).toBe(true);
+    expect(uiSettingsPatchSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('does NOT accept a free-form wallpaper image path (set only by upload)', () => {
+    expect(
+      uiSettingsPatchSchema.safeParse({ wallpaper: { image: '../../etc/passwd' } }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an invalid theme and out-of-range opacity', () => {
+    expect(uiSettingsPatchSchema.safeParse({ theme: 'neon' }).success).toBe(false);
+    expect(uiSettingsPatchSchema.safeParse({ wallpaper: { opacity: 2 } }).success).toBe(false);
+  });
+});
+
+describe('wallpaperUploadSchema (POST /api/v1/ui/wallpaper)', () => {
+  it('accepts an allowed content type with base64 data', () => {
+    expect(
+      wallpaperUploadSchema.safeParse({ content_type: 'image/png', data_base64: 'iVBOR' }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a disallowed content type', () => {
+    expect(
+      wallpaperUploadSchema.safeParse({ content_type: 'image/svg+xml', data_base64: 'x' }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an empty payload', () => {
+    expect(
+      wallpaperUploadSchema.safeParse({ content_type: 'image/png', data_base64: '' }).success,
+    ).toBe(false);
   });
 });
 

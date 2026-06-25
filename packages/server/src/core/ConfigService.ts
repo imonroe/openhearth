@@ -19,7 +19,7 @@ import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, parseDocument, isMap } from 'yaml';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { validateConfig, type Config } from '@openhearth/shared';
 
@@ -55,6 +55,21 @@ export interface ConfigSnapshot {
   services: RawServiceCatalog;
   /** Non-fatal validation/parse errors from the most recent (re)load. */
   errors: string[];
+}
+
+/**
+ * A patch the UI can persist back to `openhearth.yaml` (#118). Only the keys
+ * present are written; everything else in the file (including comments and
+ * `${VAR}` secrets) is preserved verbatim.
+ */
+export interface UiSettingsPatch {
+  theme?: 'dark' | 'light';
+  wallpaper?: {
+    enabled?: boolean;
+    /** Relative path under the config dir, or `null` to clear it. */
+    image?: string | null;
+    opacity?: number;
+  };
 }
 
 const OPENHEARTH_FILE = 'openhearth.yaml';
@@ -112,6 +127,8 @@ export class ConfigService extends EventEmitter {
   private watcher: FSWatcher | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
   private loadToken = 0;
+  /** Serializes settings write-backs so concurrent saves don't interleave. */
+  private writeQueue: Promise<unknown> = Promise.resolve();
 
   constructor(options: ConfigServiceOptions) {
     super();
@@ -164,11 +181,63 @@ export class ConfigService extends EventEmitter {
     return this.current;
   }
 
+  /**
+   * Persist a UI settings patch into `openhearth.yaml` (#118), preserving the
+   * file's comments and unrelated content — only the touched `ui.*` keys change.
+   * Writes are serialized and atomic (temp file + rename). Returns the reloaded
+   * snapshot. Rejects if the file has YAML syntax errors or a non-mapping root,
+   * rather than clobbering a file it can't safely round-trip.
+   */
+  async applyUiSettings(patch: UiSettingsPatch): Promise<ConfigSnapshot> {
+    const run = this.writeQueue.then(() => this.writeUiSettings(patch));
+    // Keep the chain alive for the next caller even if this write rejects.
+    this.writeQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async writeUiSettings(patch: UiSettingsPatch): Promise<ConfigSnapshot> {
+    const primaryPath = path.join(this.configDir, OPENHEARTH_FILE);
+    const raw = fs.existsSync(primaryPath) ? await fsp.readFile(primaryPath, 'utf8') : '';
+
+    // parseDocument keeps comments/structure for a round-trip. An empty file
+    // yields a null-contents doc; the first setIn below builds the map.
+    const doc = parseDocument(raw);
+    if (doc.errors.length > 0) {
+      throw new Error(`${OPENHEARTH_FILE} has YAML syntax errors; fix it before changing settings`);
+    }
+    if (doc.contents != null && !isMap(doc.contents)) {
+      throw new Error(`${OPENHEARTH_FILE} root is not a mapping`);
+    }
+
+    if (patch.theme !== undefined) doc.setIn(['ui', 'theme'], patch.theme);
+    if (patch.wallpaper) {
+      const w = patch.wallpaper;
+      if (w.enabled !== undefined) doc.setIn(['ui', 'wallpaper', 'enabled'], w.enabled);
+      if (w.opacity !== undefined) doc.setIn(['ui', 'wallpaper', 'opacity'], w.opacity);
+      if (w.image !== undefined) {
+        if (w.image === null) doc.deleteIn(['ui', 'wallpaper', 'image']);
+        else doc.setIn(['ui', 'wallpaper', 'image'], w.image);
+      }
+    }
+
+    // Atomic replace so a reader (or the watcher) never sees a half-written file.
+    // The `.tmp` suffix is ignored by the watcher above.
+    const tmp = `${primaryPath}.${process.pid}.tmp`;
+    await fsp.writeFile(tmp, doc.toString(), 'utf8');
+    await fsp.rename(tmp, primaryPath);
+
+    // Reload now so the returned snapshot reflects the write immediately; the
+    // watcher will also fire, but reloads are idempotent (latest read wins).
+    return this.load();
+  }
+
   /** Load once, then watch `/config` for changes and hot-reload. */
   async start(): Promise<ConfigSnapshot> {
     const snapshot = await this.load();
     const watcher = chokidar.watch(this.configDir, {
       ignoreInitial: true,
+      // Don't react to our own atomic-write temp files (settings write-back).
+      ignored: (p: string) => p.endsWith('.tmp'),
       // Poll by default: native fs events don't cross Docker bind mounts when
       // the host edits the file (see ConfigServiceOptions.usePolling).
       usePolling: this.usePolling,

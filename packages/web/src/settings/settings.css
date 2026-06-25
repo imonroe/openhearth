@@ -1,0 +1,272 @@
+/*
+ * Settings modal (#118). Follows design-system.md: rem for sizing (scales with
+ * viewport), px for border widths / radii / shadow blur / focus rings. Colors
+ * come from the CSS custom properties on :root (index.css).
+ */
+
+.settings {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Live wallpaper preview behind the scrim: the user sees opacity/image edits
+   apply in real time around the card. */
+.settings__wallpaper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+/* Dim scrim + blur so the card reads, while the wallpaper stays partly visible
+   for preview (design-system §11 Modal backdrop, softened for this screen). */
+.settings__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.settings__card {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 64rem;
+  max-width: calc(100vw - 2 * var(--safe-h));
+  max-height: calc(100vh - 2 * var(--safe-v));
+  border-radius: 20px;
+  background: var(--color-bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.078);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.667);
+  overflow: hidden;
+}
+
+/* --- Sidebar (category nav) --- */
+.settings__sidebar {
+  flex: 0 0 16rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.833rem;
+  padding: 2.083rem 1.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-right: 1px solid var(--color-separator);
+}
+.settings__sidebar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  padding: 0 0.625rem 0.833rem 0.625rem;
+}
+.settings__nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.833rem;
+  padding: 0.833rem 1.042rem;
+  border-radius: 10px;
+  font-size: 0.885rem;
+  color: var(--color-text-secondary);
+}
+.settings__nav-item--active {
+  background: rgba(255, 255, 255, 0.059);
+  border: 1px solid rgba(255, 255, 255, 0.078);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.settings__nav-item--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.729rem;
+  width: 3px;
+  height: 1.042rem;
+  border-radius: 2px;
+  background: var(--color-text-accent);
+}
+.settings__nav-icon {
+  color: var(--color-text-accent);
+}
+
+/* --- Content panel --- */
+.settings__panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 2.083rem 2.5rem;
+  overflow-y: auto;
+}
+.settings__panel-title {
+  margin: 0;
+  font-size: 1.563rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.settings__section-label {
+  margin-top: 0.833rem;
+  font-size: 0.729rem;
+  font-weight: 600;
+  letter-spacing: 0.104rem;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* A setting row: label/hint on the left, control on the right. The whole row is
+   the focusable cell. */
+.settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 0.938rem 1.25rem;
+  border-radius: 12px;
+  border: var(--focus-ring-width) solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+}
+.settings__row.is-focused {
+  border-color: var(--color-focus-ring);
+  box-shadow: var(--focus-ring-glow);
+}
+.settings__row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.26rem;
+}
+.settings__row-label {
+  font-size: 0.938rem;
+  color: var(--color-text-primary);
+}
+.settings__row.is-focused .settings__row-label {
+  color: var(--color-text-accent);
+}
+.settings__row-hint {
+  font-size: 0.729rem;
+  color: var(--color-text-muted);
+}
+
+/* Toggle switch (design-system §11). 52×28 / 22 knob at the 1080p baseline. */
+.settings__toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.708rem;
+  height: 1.458rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 150ms ease-out;
+}
+.settings__toggle.is-on {
+  background: var(--color-text-accent);
+}
+.settings__toggle-knob {
+  position: absolute;
+  top: 0.156rem;
+  left: 0.156rem;
+  width: 1.146rem;
+  height: 1.146rem;
+  border-radius: 50%;
+  background: #08080e;
+  transition: left 150ms ease-out;
+}
+.settings__toggle.is-on .settings__toggle-knob {
+  left: 1.406rem;
+}
+
+/* Buttons row (choose/replace + remove). */
+.settings__controls {
+  display: flex;
+  gap: 0.833rem;
+}
+.settings__btn {
+  padding: 0.781rem 1.458rem;
+  border-radius: 10px;
+  font-size: 0.885rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.06);
+  border: var(--focus-ring-width) solid transparent;
+  font-family: inherit;
+}
+.settings__btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-secondary);
+}
+.settings__btn.is-muted {
+  color: var(--color-text-muted);
+}
+.settings__btn--primary {
+  background: var(--brand-gradient);
+  color: #08080e;
+}
+.settings__btn.is-focused {
+  border-color: var(--color-focus-ring);
+  box-shadow: var(--focus-ring-glow);
+  color: var(--color-text-accent);
+}
+.settings__btn--primary.is-focused {
+  color: #08080e;
+}
+
+/* Opacity presets. */
+.settings__opacity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.settings__opacity-label {
+  font-size: 0.833rem;
+  color: var(--color-text-secondary);
+}
+.settings__presets {
+  display: flex;
+  gap: 0.625rem;
+}
+.settings__preset {
+  flex: 1 1 0;
+  padding: 0.625rem 0;
+  border-radius: 10px;
+  font-size: 0.833rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: var(--focus-ring-width) solid transparent;
+  font-family: inherit;
+}
+.settings__preset.is-selected {
+  color: var(--color-text-primary);
+  background: rgba(245, 166, 35, 0.18);
+}
+.settings__preset.is-focused {
+  border-color: var(--color-focus-ring);
+  box-shadow: var(--focus-ring-glow);
+  color: var(--color-text-accent);
+}
+
+.settings__error {
+  font-size: 0.833rem;
+  color: var(--color-error);
+}
+
+.settings__footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.833rem;
+}
+
+/* The hidden native file input the "Choose image…" button triggers. */
+.settings__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}

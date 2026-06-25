@@ -4,8 +4,9 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ActionName, Config, LibraryItem, ServiceCatalog } from '@openhearth/shared';
-import { fetchConfig, fetchServices, fetchLibrary, sendCommand } from './api';
+import { fetchConfig, fetchServices, fetchLibrary, sendCommand, wallpaperUrl } from './api';
 import { FocusProvider } from './focus/FocusProvider';
+import { Settings, type WallpaperView } from './settings/Settings';
 import type { FocusPosition } from './focus/focusEngine';
 import { resolveKeyBindings } from './keybindings';
 import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
@@ -128,6 +129,20 @@ export function App({
     return row !== null ? { row, col: 0 } : undefined;
   }, [model]);
 
+  // The wallpaper layer behind the home UI (#118): only when enabled and an
+  // image is set. The URL carries the stored path so it changes on re-upload.
+  const wallpaper = useMemo<WallpaperView | null>(() => {
+    const wp = config?.ui?.wallpaper;
+    if (!wp?.enabled || !wp.image) return null;
+    return { url: wallpaperUrl(wp.image), opacity: wp.opacity ?? 1 };
+  }, [config]);
+
+  // Apply a config returned by a settings write so the change shows immediately,
+  // without waiting for the next background poll (which would also pick it up).
+  const applyConfig = useCallback((next: Config) => {
+    setState((prev) => (prev.status === 'ready' ? { ...prev, config: next } : prev));
+  }, []);
+
   if (state.status === 'loading') {
     return (
       <div className="app-shell">
@@ -152,7 +167,9 @@ export function App({
       model={model}
       initialPosition={initialPosition}
       navigate={navigate}
-      keybindings={config.keybindings}
+      config={config}
+      wallpaper={wallpaper}
+      onConfigChange={applyConfig}
       dispatch={dispatch}
     />
   );
@@ -164,19 +181,26 @@ function ReadyApp({
   model,
   initialPosition,
   navigate,
-  keybindings,
+  config,
+  wallpaper,
+  onConfigChange,
   dispatch,
 }: {
   title: string;
   model: HomeModel;
   initialPosition: FocusPosition | undefined;
   navigate: Navigate;
-  keybindings: Config['keybindings'];
+  config: Config;
+  wallpaper: WallpaperView | null;
+  onConfigChange: (config: Config) => void;
   dispatch: (action: ActionName, params?: Record<string, unknown>) => void;
 }): ReactNode {
   const lengths = useMemo(() => rowLengths(model), [model]);
   // Rebuild the key→action map whenever the configured bindings change (FR-R4).
-  const { keyMap, warnings } = useMemo(() => resolveKeyBindings(keybindings), [keybindings]);
+  const { keyMap, warnings } = useMemo(
+    () => resolveKeyBindings(config.keybindings),
+    [config.keybindings],
+  );
   // Surface keybinding problems (conflicts, unknown names, reserved overrides) as
   // non-fatal warnings — a bad binding never breaks the UI (#46).
   useEffect(() => {
@@ -189,12 +213,19 @@ function ReadyApp({
   const [grid, setGrid] = useState<{ label: string; entries: LibraryEntry[] } | null>(null);
   const [detail, setDetail] = useState<LibraryEntry | null>(null);
   const [player, setPlayer] = useState<LibraryItem | null>(null);
+  const [settings, setSettings] = useState(false);
 
-  // select on home: launch a service tile (FR-A2), open the full-library grid
-  // (the leading "See all" tile, col 0), or open a library item's detail.
+  // select on home: open Settings from the header (FR; #118), launch a service
+  // tile (FR-A2), open the full-library grid (the leading "See all" tile, col 0),
+  // or open a library item's detail.
   const onSelect = useCallback(
     (pos: FocusPosition) => {
       const row = model.rows[pos.row];
+      if (row?.kind === 'header') {
+        // col 0 is Search (not yet implemented); col 1 is Settings.
+        if (pos.col === 1) setSettings(true);
+        return;
+      }
       if (row?.kind === 'services') {
         const tile = row.tiles[pos.col];
         if (tile) launchService(tile, navigate);
@@ -257,6 +288,20 @@ function ReadyApp({
     );
   }
 
+  // Settings floats over the home as a focus-trapped modal (#118). It renders the
+  // wallpaper behind its scrim for a live preview as the user edits it.
+  if (settings) {
+    return (
+      <Settings
+        config={config}
+        wallpaper={wallpaper}
+        keyMap={keyMap}
+        onConfigChange={onConfigChange}
+        onBack={() => setSettings(false)}
+      />
+    );
+  }
+
   return (
     <FocusProvider
       rowLengths={lengths}
@@ -265,7 +310,7 @@ function ReadyApp({
       onSelect={onSelect}
       onAction={dispatch}
     >
-      <Home title={title} model={model} />
+      <Home title={title} model={model} wallpaper={wallpaper} />
     </FocusProvider>
   );
 }
