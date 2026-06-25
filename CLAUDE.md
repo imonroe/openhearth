@@ -173,3 +173,13 @@ The focus system is the most critical part of this UI. Every interactive element
 - **Integration** (Vitest + supertest): API routes, streaming, WS round-trips
 - **E2E** (Playwright): focus navigation, tile launch, **Home/Back return** (must-pass), player controls, resume
 - The Home/Back guarantee and graceful config failure get dedicated, must-pass tests — they are the behaviors most likely to silently regress
+
+## Standard development process
+
+- Pull the latest version of the `dev` branch, and then create a feature branch.
+- Do the work on your feature branch.
+- When it's ready, push it to the Github repo and open a PR.
+- Spawn a subagent to do an adversarial review of the PR.
+- Respond to the subagent's feedback, and ask for a re-review
+- Continue this loop until the PR is clean, passes tests, and has no more issues.
+- Notify me when the PR is ready.  Unless I indicate that it's OK for you to merge it, wait for me to merge it.
