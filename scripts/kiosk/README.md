@@ -21,3 +21,9 @@ and the server URL must be edited for your machine.
 > `--load-extension`. That extension is the browser-level half of the Home/Back
 > guarantee — without it, the Home key won't return from a launched service.
 > Keep the flag.
+>
+> **Use un-branded Chromium / Chrome For Testing**, not branded Google Chrome (or
+> Edge): Chrome 137+ ignores `--load-extension`, so the Home-guard never loads.
+> See each deployment guide's Troubleshooting for branded-Chrome workarounds.
+> Deployment settings (home URL, return keys, debug) live in
+> [`home-guard/config.js`](home-guard/config.js).

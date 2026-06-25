@@ -41,15 +41,43 @@ OpenHearth from a service page. `Escape` and `Backspace` are **deliberately not*
 hijacked here — services use them for fullscreen/overlays — so they remain
 in-app navigation only.
 
+## Configure
+
+All deployment settings live in [`config.js`](config.js) — you never edit
+`content.js`. It exposes three values:
+
+- `homeUrl` — the origin OpenHearth is served from. Must match `OPENHEARTH_URL`
+  in the launch script. (Default `http://localhost:8080/`.)
+- `returnKeys` — the `KeyboardEvent.key` values that return to OpenHearth from a
+  service page. Default `['Home', 'BrowserHome', 'BrowserBack']`. Add your
+  device's key here if its Home/Back button isn't recognized (see below). Avoid
+  `Escape`/`Backspace` — services use them.
+- `debug` — set `true` to log every key you press on a service page to the
+  console, so you can discover what your remote/keyboard emits. Leave `false` in
+  production.
+
+**No Home key on your keyboard?** Many compact Bluetooth keyboard/trackpad combos
+have none of the default keys. Set `debug: true`, reload the extension, open a
+service, press the button you want to use, read the logged key name from the
+browser console, add it to `returnKeys`, and set `debug` back to `false`.
+
 ## Install (kiosk)
 
-1. Edit `content.js` if OpenHearth is not at `http://localhost:8080`.
+1. Edit [`config.js`](config.js) if OpenHearth is not at `http://localhost:8080`.
 2. Load the extension into the kiosk Chromium profile, either:
    - **Unpacked (dev/manual):** `chrome://extensions` → enable Developer mode →
      "Load unpacked" → select this `home-guard/` folder; or
    - **Kiosk launch flag:** start Chromium with
      `--load-extension=/path/to/scripts/kiosk/home-guard` (wired into the
-     auto-launch scripts in #49).
+     auto-launch scripts).
+
+   > **Branded Chrome 137+ ignores `--load-extension`.** Google disabled that
+   > switch in branded Google Chrome (and Edge) for security. Use un-branded
+   > **Chromium** / **Chrome For Testing** (which still honour it), or load the
+   > extension by hand (the "Unpacked" path above) into the kiosk's persistent
+   > profile. The launch scripts also pass
+   > `--disable-features=DisableLoadExtensionCommandLineSwitch` as a best-effort
+   > re-enable, but Google is removing that toggle.
 
 ## Per-service quirks
 
@@ -65,6 +93,9 @@ here so it can feed back into the catalog (`notes:` field) and these docs:
 
 ## Reserved keys
 
-`RETURN_KEYS` in `content.js` mirrors the canonical list in
-`packages/web/src/reserved.ts`. Keep them in sync. The physical "Home" button on
-a typical remote/keyboard emits `Home`; some emit `BrowserHome`/`BrowserBack`.
+The default `returnKeys` in `config.js` mirror the canonical list in
+`packages/web/src/reserved.ts` (minus `Escape`/`Backspace`, which the guard
+deliberately leaves to the service). Keep the defaults in sync. The physical
+"Home" button on a typical remote/keyboard emits `Home`; some emit
+`BrowserHome`/`BrowserBack`; compact Bluetooth keyboards may emit none of them
+(use `debug` to find out, then extend `returnKeys`).

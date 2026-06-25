@@ -17,7 +17,7 @@ set -euo pipefail
 # instead (see docs/config-reference.md § Security).
 #
 # IMPORTANT: if you change this away from http://localhost:8080, you MUST also set
-# HOME_URL in home-guard/content.js to the same origin — otherwise the Home/Back
+# `homeUrl` in home-guard/config.js to the same origin — otherwise the Home/Back
 # guarantee breaks (the guard would treat the OpenHearth page itself as a service
 # and try to "return" to the wrong origin). See home-guard/README.md step 1.
 OPENHEARTH_URL="${OPENHEARTH_URL:-http://localhost:8080}"
@@ -30,7 +30,11 @@ PROFILE_DIR="${OPENHEARTH_PROFILE_DIR:-$HOME/.config/openhearth-kiosk}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOME_GUARD_DIR="${OPENHEARTH_HOME_GUARD_DIR:-$SCRIPT_DIR/home-guard}"
 
-# Find a Chromium-family browser (override with CHROMIUM_BIN).
+# Find a Chromium-family browser (override with CHROMIUM_BIN). Prefer Chromium:
+# branded Google Chrome 137+ silently ignores --load-extension (a security
+# hardening), which would stop the Home-guard from loading. Chromium and Chrome
+# For Testing still honour the flag; we also pass a best-effort re-enable feature
+# below for branded builds while that toggle still exists.
 CHROMIUM_BIN="${CHROMIUM_BIN:-}"
 if [[ -z "$CHROMIUM_BIN" ]]; then
   for candidate in chromium chromium-browser google-chrome google-chrome-stable; do
@@ -65,7 +69,7 @@ exec "$CHROMIUM_BIN" \
   --no-first-run \
   --no-default-browser-check \
   --disable-session-crashed-bubble \
-  --disable-features=TranslateUI \
+  --disable-features=TranslateUI,DisableLoadExtensionCommandLineSwitch \
   --disable-pinch \
   --overscroll-history-navigation=0 \
   --password-store=basic \

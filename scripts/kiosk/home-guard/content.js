@@ -13,22 +13,46 @@
 // frame (all_frames), and always navigates the TOP window, so pressing Home while
 // focus is inside a service's iframe still returns the whole kiosk to OpenHearth.
 //
-// Edit HOME_URL below if your kiosk serves OpenHearth somewhere other than
-// http://localhost:8080. RETURN_KEYS mirrors packages/web/src/reserved.ts.
+// Configuration (home URL, return keys, debug logging) lives in config.js, which
+// runs in this same isolated world just before this file. Edit config.js for
+// your deployment — never edit this file.
 (() => {
-  const HOME_URL = 'http://localhost:8080/';
+  const cfg = globalThis.OPENHEARTH_HOME_GUARD ?? {};
+  const HOME_URL = typeof cfg.homeUrl === 'string' ? cfg.homeUrl : 'http://localhost:8080/';
   // `home` always returns to OpenHearth. `BrowserBack` is the cross-service back
   // (Escape/Backspace are intentionally NOT hijacked here — services use them for
-  // fullscreen/overlays; they are in-app navigation only).
-  const RETURN_KEYS = ['Home', 'BrowserHome', 'BrowserBack'];
+  // fullscreen/overlays; they are in-app navigation only). RETURN_KEYS mirrors
+  // packages/web/src/reserved.ts and is overridable in config.js for devices
+  // whose Home/Back button emits a different key.
+  const RETURN_KEYS =
+    Array.isArray(cfg.returnKeys) && cfg.returnKeys.length > 0
+      ? cfg.returnKeys
+      : ['Home', 'BrowserHome', 'BrowserBack'];
+  const DEBUG = cfg.debug === true;
 
-  const homeOrigin = new URL(HOME_URL).origin;
+  let homeOrigin;
+  try {
+    homeOrigin = new URL(HOME_URL).origin;
+  } catch {
+    // A malformed homeUrl shouldn't break the guard everywhere — fall back to the
+    // default origin so Home still works on the common single-box setup.
+    homeOrigin = 'http://localhost:8080';
+  }
   // On OpenHearth's own pages, let the SPA handle Home/Back in-app.
   if (location.origin === homeOrigin) return;
 
   window.addEventListener(
     'keydown',
     (event) => {
+      if (DEBUG) {
+        // Help users discover what their remote/keyboard emits so they can add it
+        // to returnKeys in config.js. Logged from a service page only.
+        console.log(
+          '[OpenHearth Home Guard] keydown key=%o%s',
+          event.key,
+          RETURN_KEYS.includes(event.key) ? ' (returns to OpenHearth)' : '',
+        );
+      }
       if (!RETURN_KEYS.includes(event.key)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
