@@ -1,0 +1,8 @@
+{
+  "homeUrl": "http://localhost:8080/",
+  "cdpHost": "127.0.0.1",
+  "cdpPort": 9222,
+  "device": "/dev/input/by-id/REPLACE-WITH-YOUR-KEYBOARD-OR-REMOTE-kbd",
+  "returnKeyCodes": [102, 158, 172],
+  "debug": false
+}

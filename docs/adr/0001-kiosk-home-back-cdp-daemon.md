@@ -1,6 +1,6 @@
 # ADR 0001 — Kiosk Home/Back via an OS key-daemon driving Chrome over CDP
 
-- **Status:** Proposed
+- **Status:** Proposed (prototype landed — see "Implementation status")
 - **Date:** 2026-06-25
 - **Deciders:** @imonroe
 - **Supersedes (partially):** the `--load-extension` half of the home-guard
@@ -137,3 +137,27 @@ scripts/kiosk/
     config.js                # homeUrl, returnKeys, debug, perServiceUserAgent map
   home-guard/                # RETAINED as in-frame defense-in-depth
 ```
+
+## Implementation status
+
+A first **prototype** of the daemon has landed at
+[`scripts/kiosk/home-daemon/`](../../scripts/kiosk/home-daemon/) — a zero-dependency
+Node ≥ 22 script that grabs reserved keys via Linux **evdev** and navigates the
+browser home over **CDP** (`Page.navigate`), plus an
+[`openhearth-kiosk-cdp.sh`](../../scripts/kiosk/home-daemon/openhearth-kiosk-cdp.sh)
+launcher that starts branded Chrome with `--remote-debugging-port` bound to
+`127.0.0.1`. This validates the core mechanism (the Sling failure mode in
+particular). Still open before this ADR moves to **Accepted**:
+
+- **Per-service user-agent** (`Network.setUserAgentOverride`) — needs a launch
+  handoff from the SPA; this is what fixes the YouTube `/tv` fallback. Open
+  question (3) above.
+- **Windows** key capture (open question 1).
+- **E2E** for the daemon path under xvfb (open question 4) — the prototype is
+  validated manually / on-device, not yet in CI.
+- Resilience hardening (reconnect, a systemd unit) and 32-bit evdev layout.
+
+In the meantime, the in-page [`home-guard`](../../scripts/kiosk/home-guard/) was
+hardened (background-worker tab navigation) so it survives a service hosting its
+player in a cross-origin iframe — but it remains defeatable by a page that wins
+the keydown race, which is exactly what the daemon eliminates.

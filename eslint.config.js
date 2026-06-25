@@ -34,6 +34,24 @@ export default tseslint.config(
       },
     },
   },
+  // The kiosk Home Daemon (scripts/kiosk/home-daemon) is a plain Node ESM script,
+  // not part of the TS build — give it Node + Web-platform globals (fetch and
+  // WebSocket are built into Node ≥ 22) so no-undef doesn't flag them.
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        fetch: 'readonly',
+        WebSocket: 'readonly',
+      },
+    },
+  },
   // Playwright E2E specs run in a browser context against the built app. They
   // are not part of the TS project build (Playwright type-checks them itself),
   // and use Playwright's fixture pattern `async ({}, use) => …`, whose empty
