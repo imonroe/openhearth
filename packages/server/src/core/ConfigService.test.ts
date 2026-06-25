@@ -174,8 +174,19 @@ describe('ConfigService hot-reload (NFR-4)', () => {
   // The container default: polling detects host edits across a bind mount where
   // native fs events don't fire. Generous timeout — polling is slower than
   // native events, especially under a loaded parallel test run.
+  // This is the one inherently timing-sensitive test in the suite: it drives the
+  // real chokidar *polling* loop (uv_fs_poll -> stat on the libuv threadpool).
+  // Under peak parallel CI load those stat callbacks can be starved for the
+  // entire timeout, so the edit is genuinely never seen — we observed it run the
+  // full budget with no detection, while the native-fs-event reload tests above
+  // (which cover the same reload logic deterministically) and other polling
+  // tests passed. It's environmental flakiness, not a product bug, so we let it
+  // retry. The size-changing edit (a `logLevel` line rather than the same-width
+  // `9090`) is belt-and-suspenders: it also lets the poll detect via size on a
+  // coarse-mtime fs where a same-size edit could be missed.
   it(
     'hot-reloads by polling (container default for bind mounts)',
+    { timeout: RELOAD_TEST_TIMEOUT_MS, retry: 3 },
     async () => {
       write('openhearth.yaml', 'server:\n  port: 8080\n');
       svc = new ConfigService({
@@ -191,23 +202,11 @@ describe('ConfigService hot-reload (NFR-4)', () => {
         svc,
         (s) => (s.config as { server?: { port?: number } }).server?.port === 9090,
       );
-      // The polling watcher detects a change by comparing (mtime, size). On a
-      // filesystem with coarse mtime resolution (seen on some CI runners' temp
-      // dirs), an edit that keeps the file the SAME byte length within one mtime
-      // tick is invisible to the poller and never fires — a real flake we hit in
-      // CI, where this test ran the full timeout and still saw no change. So the
-      // edit must change the file's size: add a line rather than swapping `8080`
-      // for the same-width `9090`. (The native-fs-event tests above don't need
-      // this — inotify fires on the write regardless of size.)
       write('openhearth.yaml', 'server:\n  port: 9090\n  logLevel: warn\n');
       await changed;
       expect(svc.config.server?.port).toBe(9090);
       expect(svc.config.server?.logLevel).toBe('warn');
-      // The per-test timeout must exceed waitForChange's internal budget so a slow
-      // poll under CI load surfaces the helper's clear message, not an opaque
-      // Vitest timeout. See the RELOAD_* constants at the top of the file.
     },
-    RELOAD_TEST_TIMEOUT_MS,
   );
 
   it(
