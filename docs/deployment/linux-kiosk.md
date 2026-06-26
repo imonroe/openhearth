@@ -15,12 +15,19 @@ automatically on power-on.
   serving at `http://localhost:8080` (or your host/port).
 - A graphical stack able to run Chromium: either a desktop environment, or a
   minimal `Xorg` + a window manager. A full desktop is **not** required.
-- Chromium (`sudo apt install chromium` or `chromium-browser`), and optionally
-  `unclutter` to hide the mouse pointer (`sudo apt install unclutter`).
-  **Use un-branded Chromium, not branded Google Chrome:** Chrome 137+ silently
-  ignores the `--load-extension` flag that loads the Home-guard, which would break
-  the Home/Back guarantee. Chromium still honours it. (The script prefers
-  `chromium`/`chromium-browser` and only falls back to `google-chrome`.)
+- A Chromium-family browser, and optionally `unclutter` to hide the mouse pointer
+  (`sudo apt install unclutter`). **Which browser depends on whether you stream
+  DRM-protected services** (Netflix, Sling, YouTube TV, Max…):
+  - **You do** → use **branded Google Chrome** and load the Home-guard by hand.
+    Only branded Chrome ships Google's Widevine CDM; un-branded Chromium and
+    Chrome For Testing can't decrypt those streams. See
+    [Streaming DRM-protected services](#streaming-drm-protected-services) — this
+    is the recommended setup for most users.
+  - **You don't** (free/self-hosted content only) → un-branded Chromium
+    (`sudo apt install chromium`) works with the `--load-extension` launcher as-is.
+    Chrome 137+ silently ignores `--load-extension`; Chromium still honours it, so
+    the script prefers `chromium`/`chromium-browser` and only falls back to
+    `google-chrome`.
 - This repo checked out on the box (for `scripts/kiosk/`), or just copy the
   `scripts/kiosk/` folder over.
 
@@ -52,6 +59,41 @@ Environment overrides: `OPENHEARTH_URL`, `CHROMIUM_BIN`, `OPENHEARTH_PROFILE_DIR
 hide the mouse pointer. The launch script starts `unclutter -idle 0.5` when it's
 installed, which hides the pointer after half a second of inactivity. (With a
 D-pad/keyboard remote and no mouse, the pointer never appears anyway.)
+
+## Streaming DRM-protected services
+
+Netflix, Sling, YouTube TV, Max and friends are **DRM-protected** and need
+Google's **Widevine** CDM to decrypt. Widevine ships **only in branded Google
+Chrome** (and Edge) — **not** in un-branded Chromium or Chrome For Testing. But
+branded Chrome 137+ ignores the `--load-extension` flag the launcher uses for the
+Home-guard. So to get **both** DRM playback **and** the Home/Back guarantee, run
+branded Chrome and load the Home-guard **once, by hand**, into the kiosk's
+persistent profile:
+
+1. If your server isn't at `http://localhost:8080`, set `homeUrl` in
+   [`home-guard/config.js`](../../scripts/kiosk/home-guard/config.js) first.
+2. Start branded Chrome on the kiosk profile (the launcher's `--user-data-dir`):
+   ```sh
+   google-chrome --user-data-dir="$HOME/.config/openhearth-kiosk"
+   ```
+3. Open `chrome://extensions`, enable **Developer mode** (top-right), click **Load
+   unpacked**, and select the `scripts/kiosk/home-guard/` folder.
+4. The extension now **persists in that profile across reboots** — the kiosk picks
+   it up on every launch as long as you keep the same `--user-data-dir`. You do
+   **not** need `--load-extension`, so the launcher works unchanged (the ignored
+   flag is harmless); set `CHROMIUM_BIN=google-chrome` when running it.
+
+Verify: launch a service tile, confirm DRM playback works, and press **Home** to
+confirm you return to OpenHearth (that proves the unpacked Home-guard is active).
+
+> **Caveat — this is a stopgap.** Chrome shows a "Disable developer-mode
+> extensions" bubble on startup and may auto-disable the extension after some
+> updates. If Home ever stops returning, re-open `chrome://extensions` and confirm
+> **OpenHearth Home Guard** is still enabled. For a fully silent, update-proof
+> install, package the extension as a `.crx` and force-install it via an
+> enterprise policy (`ExtensionSettings` / `ExtensionInstallForcelist`); the
+> durable fix is tracked in
+> [ADR 0001](../adr/0001-kiosk-home-back-cdp-daemon.md).
 
 ## 2. Auto-start on boot
 

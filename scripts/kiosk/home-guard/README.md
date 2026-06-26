@@ -34,6 +34,19 @@ maximally adversarial page that registers its own `document_start` capture
 listener is not a hard spec guarantee — but in practice the content script wins,
 and this is the most robust mechanism available short of an OS-level key grabber.)
 
+### Returning home (background worker)
+
+When a reserved key fires, `content.js` doesn't navigate the page itself — it
+messages the background service worker (`background.js`), which calls
+`chrome.tabs.update` on the **whole tab**. This matters when the key is pressed
+inside a service's **cross-origin `<iframe>`** (some players host the video in a
+foreign-origin frame): from that frame the content script can't reach
+`window.top` to navigate it, but the worker can move the entire tab. If the
+messaging channel is ever unavailable, `content.js` falls back to navigating the
+top frame directly. The worker needs no extra permissions, and only this
+extension's own content scripts can message it — a launched service's page
+scripts cannot forge a "return home" message.
+
 ### Back keys
 
 Only `Home`/`BrowserHome` (and `BrowserBack` as a convenience) return to
@@ -72,12 +85,23 @@ browser console, add it to `returnKeys`, and set `debug` back to `false`.
      auto-launch scripts).
 
    > **Branded Chrome 137+ ignores `--load-extension`.** Google disabled that
-   > switch in branded Google Chrome (and Edge) for security. Use un-branded
-   > **Chromium** / **Chrome For Testing** (which still honour it), or load the
-   > extension by hand (the "Unpacked" path above) into the kiosk's persistent
-   > profile. The launch scripts also pass
+   > switch in branded Google Chrome (and Edge) for security. Two paths:
+   >
+   > - **Streaming DRM services (Netflix, Sling, YouTube TV…)?** You must use
+   >   **branded Google Chrome** — only it ships the Widevine CDM; un-branded
+   >   Chromium and Chrome For Testing can't decrypt those streams. Load this
+   >   extension by hand (the "Unpacked" path above) into the kiosk's persistent
+   >   profile; it persists across reboots. See the "Streaming DRM-protected
+   >   services" recipe in
+   >   [`docs/deployment/linux-kiosk.md`](../../../docs/deployment/linux-kiosk.md)
+   >   / [`windows-kiosk.md`](../../../docs/deployment/windows-kiosk.md).
+   > - **Free / self-hosted content only?** Un-branded **Chromium** / **Chrome For
+   >   Testing** still honour `--load-extension`, so the launch scripts work as-is.
+   >
+   > The launch scripts also pass
    > `--disable-features=DisableLoadExtensionCommandLineSwitch` as a best-effort
-   > re-enable, but Google is removing that toggle.
+   > re-enable on branded builds, but Google is removing that toggle — don't rely
+   > on it.
 
 ## Per-service quirks
 
