@@ -11,11 +11,13 @@
  * The poster shows the metadata artwork (#42) when resolved, falling back to a
  * title-initial placeholder; both fill the same frame so there's no layout shift.
  */
-import { useCallback, useState, type ReactNode } from 'react';
-import type { ActionName, LibraryItem } from '@openhearth/shared';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import type { ActionName, LibraryItem, MediaItem } from '@openhearth/shared';
 import { FocusProvider, useFocus } from '../focus/FocusProvider';
 import type { FocusPosition } from '../focus/focusEngine';
 import type { KeyMap } from '../keybindings';
+import { fetchItemMetadata } from '../api';
+import { formatRuntime, formatRating } from './detailMeta';
 import {
   episodesInSeason,
   entryArtworkUrl,
@@ -98,6 +100,21 @@ function MovieDetail({
     onPlay(entry);
   }, [dispatch, entry, onPlay]);
 
+  // Fetch richer metadata (overview, runtime, genres, cast, …) when the screen
+  // opens (#123). Best-effort: a failure or no provider just leaves the basic
+  // view (title + year + Play). The server caches the result, so re-opening is
+  // instant and costs no provider call.
+  const meta = useItemMetadata(entry.id);
+
+  // Compose the submeta line from whatever resolved: year · runtime · ★ rating.
+  const runtime = formatRuntime(meta?.runtime_minutes);
+  const rating = formatRating(meta?.rating);
+  const submeta = [
+    entry.year != null ? String(entry.year) : '',
+    runtime,
+    rating ? `★ ${rating}` : '',
+  ].filter(Boolean);
+
   return (
     <FocusProvider
       rowLengths={[1]}
@@ -114,20 +131,70 @@ function MovieDetail({
         <div className="detail__body">
           <Poster
             title={entry.title}
-            artworkUrl={entryArtworkUrl(entry)}
+            artworkUrl={entryArtworkUrl(entry) ?? meta?.artwork?.poster_url}
             className="detail__poster"
           />
           <div className="detail__meta">
             <h1 className="detail__title">{entry.title}</h1>
-            {entry.year != null ? <div className="detail__submeta">{entry.year}</div> : null}
+            {submeta.length > 0 ? (
+              <div className="detail__submeta">{submeta.join(' · ')}</div>
+            ) : null}
+            {meta?.genres && meta.genres.length > 0 ? (
+              <div className="detail__genres" aria-label="Genres">
+                {meta.genres.map((g) => (
+                  <span key={g} className="detail__genre">
+                    {g}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {meta?.tagline ? <div className="detail__tagline">{meta.tagline}</div> : null}
             <div className="detail__cta-row">
               <PlayButton row={0} col={0} label="Play" />
             </div>
+            {meta?.overview ? <p className="detail__overview">{meta.overview}</p> : null}
+            {meta?.directors && meta.directors.length > 0 ? (
+              <div className="detail__credit">
+                <span className="detail__credit-label">
+                  {meta.directors.length === 1 ? 'Director' : 'Directors'}
+                </span>{' '}
+                {meta.directors.join(', ')}
+              </div>
+            ) : null}
+            {meta?.cast && meta.cast.length > 0 ? (
+              <div className="detail__cast">
+                <div className="detail__credit-label">Cast</div>
+                <ul className="detail__cast-list">
+                  {meta.cast.map((c) => (
+                    <li key={`${c.name}:${c.character ?? ''}`} className="detail__cast-member">
+                      <span className="detail__cast-name">{c.name}</span>
+                      {c.character ? (
+                        <span className="detail__cast-character"> as {c.character}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
     </FocusProvider>
   );
+}
+
+/** Fetch an item's rich metadata on open; null until/unless it resolves. */
+function useItemMetadata(id: string): MediaItem | null {
+  const [meta, setMeta] = useState<MediaItem | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    setMeta(null);
+    void fetchItemMetadata(id, controller.signal).then((m) => {
+      if (!controller.signal.aborted) setMeta(m);
+    });
+    return () => controller.abort();
+  }, [id]);
+  return meta;
 }
 
 function ShowDetail({

@@ -17,6 +17,7 @@ import type {
   MetadataQuery,
   MetadataResult,
   MetadataKind,
+  MetadataCastMember,
 } from './MetadataService.js';
 
 const API_BASE = 'https://api.themoviedb.org/3';
@@ -24,6 +25,9 @@ const API_BASE = 'https://api.themoviedb.org/3';
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
 const POSTER_SIZE = 'w500';
 const BACKDROP_SIZE = 'w1280';
+const PROFILE_SIZE = 'w185';
+/** Cap principal cast so a details payload stays small. */
+const CAST_LIMIT = 12;
 /** Minimum gap between outbound requests (~25 req/s; well under TMDB limits). */
 const DEFAULT_MIN_INTERVAL_MS = 40;
 
@@ -36,6 +40,16 @@ export interface TmdbProviderOptions {
   minIntervalMs?: number;
 }
 
+interface TmdbCastRecord {
+  name?: string;
+  character?: string;
+  profile_path?: string | null;
+}
+interface TmdbCrewRecord {
+  name?: string;
+  job?: string;
+}
+
 /** A single TMDB search/details record (only the fields we map). */
 interface TmdbRecord {
   id: number;
@@ -46,6 +60,13 @@ interface TmdbRecord {
   overview?: string;
   poster_path?: string | null;
   backdrop_path?: string | null;
+  // Details-only fields (present on /movie/{id} and /tv/{id}, not on search).
+  runtime?: number | null; // movie (minutes)
+  episode_run_time?: number[]; // tv (minutes per episode)
+  genres?: { id: number; name?: string }[];
+  tagline?: string | null;
+  vote_average?: number;
+  credits?: { cast?: TmdbCastRecord[]; crew?: TmdbCrewRecord[] };
 }
 
 interface TmdbSearchResponse {
@@ -87,7 +108,9 @@ export class TmdbProvider implements MetadataProvider {
     if (!parsed) return null;
     const { kind, id } = parsed;
     const path = kind === 'movie' ? `/movie/${id}` : `/tv/${id}`;
-    const record = await this.request<TmdbRecord>(path, {});
+    // append_to_response folds the credits call into one request (FR-B1 spirit:
+    // one round-trip per details lookup), so cast/crew arrive without a second hit.
+    const record = await this.request<TmdbRecord>(path, { append_to_response: 'credits' });
     if (!record || typeof record.id !== 'number') return null;
     return toResult(this.name, kind, record);
   }
@@ -178,6 +201,36 @@ function toResult(provider: string, kind: MetadataKind, r: TmdbRecord): Metadata
   const year = yearOf(date);
   const poster = r.poster_path ? `${IMAGE_BASE}/${POSTER_SIZE}${r.poster_path}` : undefined;
   const backdrop = r.backdrop_path ? `${IMAGE_BASE}/${BACKDROP_SIZE}${r.backdrop_path}` : undefined;
+
+  // Details-only fields (absent on search records → these all stay undefined).
+  const runtimeRaw = kind === 'movie' ? r.runtime : r.episode_run_time?.[0];
+  const runtime =
+    typeof runtimeRaw === 'number' && runtimeRaw > 0 ? Math.round(runtimeRaw) : undefined;
+  const genres = r.genres?.map((g) => g.name?.trim()).filter((n): n is string => !!n);
+  const cast = r.credits?.cast
+    ?.slice(0, CAST_LIMIT)
+    .map((c): MetadataCastMember | null => {
+      const name = c.name?.trim();
+      if (!name) return null;
+      const character = c.character?.trim();
+      const profile = c.profile_path ? `${IMAGE_BASE}/${PROFILE_SIZE}${c.profile_path}` : undefined;
+      return {
+        name,
+        ...(character ? { character } : {}),
+        ...(profile ? { profile_url: profile } : {}),
+      };
+    })
+    .filter((c): c is MetadataCastMember => c !== null);
+  const directors = r.credits?.crew
+    ?.filter((c) => c.job === 'Director')
+    .map((c) => c.name?.trim())
+    .filter((n): n is string => !!n);
+  const tagline = r.tagline?.trim() || undefined;
+  const rating =
+    typeof r.vote_average === 'number' && r.vote_average > 0
+      ? Math.round(r.vote_average * 10) / 10
+      : undefined;
+
   return {
     ref: `${provider}:${kind}:${r.id}`,
     kind,
@@ -188,6 +241,12 @@ function toResult(provider: string, kind: MetadataKind, r: TmdbRecord): Metadata
       ...(poster ? { poster_url: poster } : {}),
       ...(backdrop ? { backdrop_url: backdrop } : {}),
     },
+    ...(runtime != null ? { runtime_minutes: runtime } : {}),
+    ...(genres && genres.length > 0 ? { genres } : {}),
+    ...(cast && cast.length > 0 ? { cast } : {}),
+    ...(directors && directors.length > 0 ? { directors } : {}),
+    ...(tagline ? { tagline } : {}),
+    ...(rating != null ? { rating } : {}),
   };
 }
 
