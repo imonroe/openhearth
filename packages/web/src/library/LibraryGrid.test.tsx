@@ -111,6 +111,100 @@ describe('LibraryGrid', () => {
   });
 });
 
+// A–Z jump rail (#131). Buckets: A×4 (idx 0-3), B×2 (idx 4-5, B starts mid-row),
+// C×6 (idx 6-11), M×2 (idx 12-13). Letters D–L, N–Z are empty (disabled).
+describe('LibraryGrid A–Z rail (#131)', () => {
+  const railEntries = buildLibraryEntries(
+    [
+      ...['A1', 'A2', 'A3', 'A4'],
+      ...['B1', 'B2'],
+      ...['C1', 'C2', 'C3', 'C4', 'C5', 'C6'],
+      ...['M1', 'M2'],
+    ].map((t) => movie(t, t)),
+  );
+
+  function renderRail() {
+    const onOpen = vi.fn();
+    render(
+      <LibraryGrid
+        label="Movies"
+        entries={railEntries}
+        keyMap={keyMap}
+        onBack={vi.fn()}
+        onOpen={onOpen}
+      />,
+    );
+    return { onOpen };
+  }
+  const railLetter = (l: string) => screen.getByLabelText(`Jump to ${l}`);
+  const isFocused = (el: Element | null) => !!el?.classList.contains('is-focused');
+
+  it('renders A–Z, disabling empty letters', () => {
+    renderRail();
+    expect(railLetter('A').getAttribute('aria-disabled')).toBe('false');
+    expect(railLetter('D').getAttribute('aria-disabled')).toBe('true');
+    expect(railLetter('D').classList.contains('is-disabled')).toBe(true);
+  });
+
+  it('crosses into the rail with Left, landing on the current section', () => {
+    renderRail();
+    // Focus starts on A1 (section A). Left from col 0 enters the rail at "A".
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(isFocused(railLetter('A'))).toBe(true);
+    // The grid tile no longer shows the ring (one focused region at a time).
+    expect(isFocused(screen.getByLabelText('A1'))).toBe(false);
+  });
+
+  it('navigates the rail skipping disabled letters and jumps on Select', () => {
+    renderRail();
+    fireEvent.keyDown(window, { key: 'ArrowLeft' }); // → rail at A
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // B
+    expect(isFocused(railLetter('B'))).toBe(true);
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // C
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // skips D–L → M
+    expect(isFocused(railLetter('M'))).toBe(true);
+    // Select jumps grid focus to the first M title and returns to the grid.
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(isFocused(screen.getByLabelText('M1'))).toBe(true);
+    expect(isFocused(railLetter('M'))).toBe(false);
+  });
+
+  it('jumps to the exact first title of a section that starts mid-row', () => {
+    renderRail();
+    // B's first title is at index 4 (row 0, col 4) — a mid-row section start.
+    fireEvent.keyDown(window, { key: 'b' }); // type-to-jump
+    expect(isFocused(screen.getByLabelText('B1'))).toBe(true);
+  });
+
+  it('type-to-jump moves straight to a letter from the grid', () => {
+    renderRail();
+    fireEvent.keyDown(window, { key: 'c' });
+    expect(isFocused(screen.getByLabelText('C1'))).toBe(true);
+  });
+
+  it('ignores a typed letter with no titles', () => {
+    renderRail();
+    // Focus starts on A1; pressing a disabled letter does nothing.
+    fireEvent.keyDown(window, { key: 'd' });
+    expect(isFocused(screen.getByLabelText('A1'))).toBe(true);
+  });
+
+  it('jumps on a rail letter click (mouse parity)', () => {
+    renderRail();
+    fireEvent.click(railLetter('C'));
+    expect(isFocused(screen.getByLabelText('C1'))).toBe(true);
+  });
+
+  it('Back from the rail returns to the grid without jumping', () => {
+    renderRail();
+    fireEvent.keyDown(window, { key: 'ArrowLeft' }); // → rail
+    expect(isFocused(railLetter('A'))).toBe(true);
+    fireEvent.keyDown(window, { key: 'Escape' }); // back → grid
+    expect(isFocused(screen.getByLabelText('A1'))).toBe(true); // grid focus restored
+    expect(isFocused(railLetter('A'))).toBe(false);
+  });
+});
+
 // Virtualization (#130). jsdom reports no layout, so we feed fake metrics
 // (viewport 800px, tile 180px + 20px gap → 200px pitch) to drive the measured,
 // windowed path and assert only a bounded slice of rows is mounted.

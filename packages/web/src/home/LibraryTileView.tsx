@@ -15,6 +15,7 @@ export function LibraryTileView({
   row,
   col,
   scrollOnFocus = true,
+  active = true,
 }: {
   entry: LibraryEntry;
   row: number;
@@ -25,9 +26,15 @@ export function LibraryTileView({
    * as-yet-unmounted row still works.
    */
   scrollOnFocus?: boolean;
+  /**
+   * Whether this tile's focus region is active (default true). When the grid
+   * shares the screen with the A–Z rail (#131), the grid passes false while the
+   * rail holds focus so the ring shows on exactly one region at a time.
+   */
+  active?: boolean;
 }): ReactNode {
   const { isFocused, focusAt, activate } = useFocus();
-  const focused = isFocused(row, col);
+  const focused = active && isFocused(row, col);
   const ref = useScrollIntoViewOnFocus<HTMLDivElement>(focused && scrollOnFocus);
   const [failed, setFailed] = useState(false);
   const className = ['tile', 'tile--library', focused ? 'is-focused' : '']
