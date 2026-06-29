@@ -33,7 +33,12 @@ export const SCREENSAVER_REGISTRY: Record<ScreensaverType, ScreensaverDef> = {
   },
 };
 
-/** Ordered list of savers for the Settings picker (registry order = SCREENSAVERS order). */
+/**
+ * Ordered list of savers for the Settings picker (registry order = SCREENSAVERS
+ * order). `SCREENSAVER_REGISTRY` is typed `Record<ScreensaverType, …>`, so adding
+ * an id to `SCREENSAVERS` in shared without a matching entry here is a *compile*
+ * error — the picker can never map to an `undefined` saver.
+ */
 export const SCREENSAVER_LIST: ScreensaverDef[] = SCREENSAVERS.map(
   (id) => SCREENSAVER_REGISTRY[id],
 );

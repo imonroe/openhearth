@@ -3,6 +3,11 @@
  * §2); px for blur radii. The whole field is in constant slow motion AND under
  * a continuous hue rotation so every pixel cycles colour over time — that's the
  * burn-in defence, not just an aesthetic.
+ *
+ * NOTE: deliberately does NOT honour `prefers-reduced-motion`. Here the motion
+ * is functional, not decorative — stopping it would defeat the burn-in
+ * protection that is the whole point of the screensaver. Do not add a
+ * reduced-motion media query that freezes these animations.
  */
 
 .screensaver {
@@ -73,14 +78,17 @@
   pointer-events: none;
 }
 
-/* The clock slowly wanders a wide path so it never sits in one place. */
+/* The clock slowly wanders a wide path so it never sits in one place. Linear
+   timing (not ease-in-out) spreads its near-grayscale pixels evenly across the
+   path rather than dwelling at the extremes — hue-rotate barely shifts the
+   light text, so even travel is the better burn-in hedge. */
 .aurora__clock-drift {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: aurora-clock-drift 74s ease-in-out infinite alternate;
+  animation: aurora-clock-drift 74s linear infinite alternate;
   will-change: transform;
 }
 .aurora__clock {
