@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { visibleRowRange, scrollTopForRow } from './gridWindow';
+import { visibleRowRange, windowWithFocus, scrollTopForRow } from './gridWindow';
 
 // Realistic-ish numbers: 200px row pitch, 800px viewport (4 rows visible).
 const ROW = 200;
@@ -38,6 +38,50 @@ describe('visibleRowRange (#130)', () => {
     const huge = visibleRowRange(20000, VIEW, ROW, 100000, 3);
     expect(huge.end - huge.start).toBe(small.end - small.start); // O(1) in N
     expect(huge.end - huge.start).toBeLessThan(20);
+  });
+});
+
+describe('windowWithFocus (#130 — focus invariant)', () => {
+  const OVER = 3;
+
+  it('returns the base window unchanged when the focused row is already mounted', () => {
+    expect(windowWithFocus({ start: 10, end: 20 }, 15, 200, OVER)).toEqual({ start: 10, end: 20 });
+  });
+
+  it('always mounts the focused row — extends up when it sits just above', () => {
+    // Focused row 8, window [10,20): extend the top to include it (with overscan).
+    const win = windowWithFocus({ start: 10, end: 20 }, 8, 200, OVER);
+    expect(win.start).toBeLessThanOrEqual(8);
+    expect(win.end).toBe(20);
+    expect(8).toBeGreaterThanOrEqual(win.start);
+    expect(8).toBeLessThan(win.end);
+  });
+
+  it('always mounts the focused row — extends down when it sits just below', () => {
+    const win = windowWithFocus({ start: 10, end: 20 }, 22, 200, OVER);
+    expect(win.start).toBe(10);
+    expect(win.end).toBeGreaterThan(22);
+  });
+
+  it('re-anchors a bounded band when the focused row is far away (large jump)', () => {
+    // The C1 case: scroll is around the top [0,8) but focus jumped to row 150.
+    // The result must mount row 150 WITHOUT mounting everything in between.
+    const win = windowWithFocus({ start: 0, end: 8 }, 150, 200, OVER);
+    expect(150).toBeGreaterThanOrEqual(win.start);
+    expect(150).toBeLessThan(win.end);
+    expect(win.end - win.start).toBeLessThan(2 * OVER + 2); // bounded, not O(N)
+    expect(win.start).toBeGreaterThan(8); // didn't span the gap from the base window
+  });
+
+  it('clamps the anchored band at the grid edges', () => {
+    expect(windowWithFocus({ start: 50, end: 60 }, 0, 200, OVER).start).toBe(0);
+    const top = windowWithFocus({ start: 0, end: 8 }, 199, 200, OVER);
+    expect(top.end).toBe(200);
+  });
+
+  it('is a no-op for an empty grid or out-of-range focus', () => {
+    expect(windowWithFocus({ start: 0, end: 0 }, 0, 0, OVER)).toEqual({ start: 0, end: 0 });
+    expect(windowWithFocus({ start: 0, end: 8 }, 999, 200, OVER)).toEqual({ start: 0, end: 8 });
   });
 });
 

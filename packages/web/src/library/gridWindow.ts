@@ -44,6 +44,46 @@ export function visibleRowRange(
 }
 
 /**
+ * Guarantee the focused row is inside the mounted window — the focus invariant
+ * (design-system §9: one focused element at all times, focus never disappears)
+ * must hold regardless of scroll timing. A smooth focus-scroll animates the
+ * container over several frames, and each frame's `onScroll` recomputes the
+ * scroll-derived window; without this, the focused destination row would be
+ * unmounted (blank focus) until the animation arrives.
+ *
+ * If the focused row is already mounted, the base window is returned unchanged.
+ * If it sits just outside, the window is extended to reach it. If it's far
+ * outside (a large jump still settling), the window is *re-anchored* on the
+ * focused row as a bounded band rather than mounting every row in between — so
+ * the node count stays bounded even mid-jump.
+ */
+export function windowWithFocus(
+  base: RowWindow,
+  focusedRow: number,
+  totalRows: number,
+  overscan: number,
+): RowWindow {
+  if (totalRows <= 0) return { start: 0, end: 0 };
+  const { start, end } = base;
+  if (focusedRow < 0 || focusedRow >= totalRows) return { start, end };
+  if (focusedRow >= start && focusedRow < end) return { start, end }; // already mounted
+
+  // "Close enough" to bridge by extending the window rather than re-anchoring.
+  const near = overscan * 2;
+  if (focusedRow < start && start - focusedRow <= near) {
+    return { start: Math.max(0, focusedRow - overscan), end };
+  }
+  if (focusedRow >= end && focusedRow - end < near) {
+    return { start, end: Math.min(totalRows, focusedRow + overscan + 1) };
+  }
+  // Far away: anchor a bounded band on the focused row.
+  return {
+    start: Math.max(0, focusedRow - overscan),
+    end: Math.min(totalRows, focusedRow + overscan + 1),
+  };
+}
+
+/**
  * The `scrollTop` that brings grid `row` just into view — `block: 'nearest'`
  * semantics: scroll up if the row sits above the viewport, down if it sits
  * below, otherwise leave the scroll position untouched. `pad` keeps a little

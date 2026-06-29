@@ -38,7 +38,7 @@ import type { FocusPosition } from '../focus/focusEngine';
 import type { KeyMap } from '../keybindings';
 import { LibraryTileView } from '../home/LibraryTileView';
 import { entryId, type LibraryEntry } from './libraryModel';
-import { visibleRowRange, scrollTopForRow } from './gridWindow';
+import { visibleRowRange, windowWithFocus, scrollTopForRow } from './gridWindow';
 
 /** Grid width. Shared with the CSS via the `--grid-cols` custom property below. */
 export const GRID_COLUMNS = 6;
@@ -109,7 +109,12 @@ export function LibraryGrid({
       const sc = scrollRef.current;
       const grid = gridRef.current;
       if (!sc || !grid) return;
-      const tile = grid.querySelector<HTMLElement>('.tile');
+      // Measure an *unfocused* tile: the focused library tile scales up
+      // (.tile--library.is-focused), so measuring it would inflate the pitch and
+      // drift every row's position over a large library.
+      const tile =
+        grid.querySelector<HTMLElement>('.tile:not(.is-focused)') ??
+        grid.querySelector<HTMLElement>('.tile');
       const gap = parseFloat(getComputedStyle(grid).rowGap) || 0;
       const pitch = tile ? tile.offsetHeight + gap : 0;
       const viewport = sc.clientHeight;
@@ -160,12 +165,17 @@ export function LibraryGrid({
       sc.scrollTop,
       FOCUS_SCROLL_PAD,
     );
-    if (target === sc.scrollTop) return;
+    if (Math.abs(target - sc.scrollTop) < 1) return; // already there (sub-pixel tolerant)
     const reduced =
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    // Jump instantly when the move is larger than the overscan band (e.g. an
+    // alphabet jump): a smooth animation would scroll through rows that aren't
+    // mounted, flashing blank. Small steps stay smooth.
+    const farJump = Math.abs(target - sc.scrollTop) > OVERSCAN_ROWS * metrics.pitch;
+    const behavior: ScrollBehavior = reduced || farJump ? 'auto' : 'smooth';
     if (typeof sc.scrollTo === 'function') {
-      sc.scrollTo({ top: target, behavior: reduced ? 'auto' : 'smooth' });
+      sc.scrollTo({ top: target, behavior });
     } else {
       sc.scrollTop = target;
     }
@@ -181,8 +191,15 @@ export function LibraryGrid({
     [entries, onOpen],
   );
 
+  // Window = the rows near the scroll position, then force-include the focused
+  // row so it can never be unmounted (focus invariant), even mid-scroll.
   const win = measured
-    ? visibleRowRange(scrollTop, metrics.viewport, metrics.pitch, totalRows, OVERSCAN_ROWS)
+    ? windowWithFocus(
+        visibleRowRange(scrollTop, metrics.viewport, metrics.pitch, totalRows, OVERSCAN_ROWS),
+        focusedRow,
+        totalRows,
+        OVERSCAN_ROWS,
+      )
     : { start: 0, end: Math.min(totalRows, INITIAL_ROWS) };
 
   const tiles: ReactNode[] = [];
