@@ -12,15 +12,18 @@
  */
 import {
   createContext,
+  forwardRef,
   useCallback,
   useContext,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
+  type ForwardedRef,
   type ReactNode,
 } from 'react';
-import { move, firstFocusable, type FocusPosition } from './focusEngine';
+import { move, firstFocusable, type Direction, type FocusPosition } from './focusEngine';
 import { buildKeyMap, type KeyMap } from '../keybindings';
 import type { ActionName } from '@openhearth/shared';
 
@@ -35,6 +38,12 @@ interface FocusContextValue {
 
 const FocusContext = createContext<FocusContextValue | null>(null);
 
+/** Imperative handle (via ref) for moving focus from outside the provider. */
+export interface FocusHandle {
+  /** Move focus to a cell, if it's a valid focusable position. No-op otherwise. */
+  focusAt: (position: FocusPosition) => void;
+}
+
 export interface FocusProviderProps {
   /** Number of focusable items per row, top to bottom. */
   rowLengths: number[];
@@ -42,6 +51,13 @@ export interface FocusProviderProps {
   initialPosition?: FocusPosition;
   /** physical-key → action map (from config). Defaults when omitted. */
   keyMap?: KeyMap;
+  /**
+   * Whether this provider's keyboard listener is live. Defaults to true. Set
+   * false to keep the provider mounted (and its focus state + highlight) but
+   * stop it consuming keys — used when two focus regions coexist (e.g. the
+   * library grid and its A–Z rail) and only one is active at a time.
+   */
+  active?: boolean;
   /** Invoked when the `select` action fires, with the focused position. */
   onSelect?: (position: FocusPosition) => void;
   /** Invoked on the reserved `home` action, after focus is reset to entry. */
@@ -54,22 +70,33 @@ export interface FocusProviderProps {
   /** Invoked whenever the focused position changes (e.g. to derive live state
    *  like the active TV season from a focused tab). */
   onFocusChange?: (position: FocusPosition) => void;
+  /**
+   * Invoked when a `navigate` is blocked at an edge (the move didn't change the
+   * position). Lets a parent hand off to an adjacent focus region — e.g. Left at
+   * the grid's first column crosses into the A–Z rail (#131).
+   */
+  onNavigateEdge?: (direction: Direction) => void;
   children: ReactNode;
 }
 
 const DEFAULT_KEY_MAP = buildKeyMap();
 
-export function FocusProvider({
-  rowLengths,
-  initialPosition,
-  keyMap,
-  onSelect,
-  onHome,
-  onBack,
-  onAction,
-  onFocusChange,
-  children,
-}: FocusProviderProps): ReactNode {
+function FocusProviderInner(
+  {
+    rowLengths,
+    initialPosition,
+    keyMap,
+    active = true,
+    onSelect,
+    onHome,
+    onBack,
+    onAction,
+    onFocusChange,
+    onNavigateEdge,
+    children,
+  }: FocusProviderProps,
+  ref: ForwardedRef<FocusHandle>,
+): ReactNode {
   // The `{ 0, 0 }` last-resort fallback is only reached if the grid has no
   // focusable cells at all. Callers must supply at least one non-empty row to
   // honour the "one focused element at all times" invariant (the home screen's
@@ -95,6 +122,8 @@ export function FocusProvider({
   onBackRef.current = onBack;
   const onActionRef = useRef(onAction);
   onActionRef.current = onAction;
+  const onNavigateEdgeRef = useRef(onNavigateEdge);
+  onNavigateEdgeRef.current = onNavigateEdge;
   const keyMapRef = useRef(keyMap ?? DEFAULT_KEY_MAP);
   keyMapRef.current = keyMap ?? DEFAULT_KEY_MAP;
   const initialPositionRef = useRef(initialPosition);
@@ -137,7 +166,13 @@ export function FocusProvider({
         case 'navigate': {
           const dir = bound.params?.direction;
           if (dir === 'up' || dir === 'down' || dir === 'left' || dir === 'right') {
-            setFocused((prev) => move(rowLengthsRef.current, prev, dir));
+            // Compute the move outside setFocused so a blocked edge can notify a
+            // parent (to hand off to an adjacent region) without a side effect
+            // inside the state updater (which StrictMode would double-invoke).
+            const prev = focusedRef.current;
+            const next = move(rowLengthsRef.current, prev, dir);
+            if (next.row === prev.row && next.col === prev.col) onNavigateEdgeRef.current?.(dir);
+            else setFocused(next);
           }
           return;
         }
@@ -149,9 +184,12 @@ export function FocusProvider({
       }
     };
     // Capture phase so the reserved keys can't be shadowed by any other handler.
+    // Only the active region listens, so coexisting regions don't both consume a
+    // key (re-binds when `active` flips).
+    if (!active) return;
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, []);
+  }, [active]);
 
   // Notify listeners when focus moves (e.g. to derive the active TV season from
   // the focused season tab). Kept in a ref so we don't re-bind on every change.
@@ -179,6 +217,28 @@ export function FocusProvider({
     onSelectRef.current?.(position);
   }, []);
 
+  // Imperative focus for a parent coordinating regions (e.g. landing grid focus
+  // on the row an A–Z jump targeted). Validates against the current shape so an
+  // out-of-range request is a safe no-op.
+  useImperativeHandle(
+    ref,
+    (): FocusHandle => ({
+      focusAt: (position) => {
+        const lengths = rowLengthsRef.current;
+        const len = lengths[position.row] ?? 0;
+        if (
+          position.row >= 0 &&
+          position.row < lengths.length &&
+          position.col >= 0 &&
+          position.col < len
+        ) {
+          setFocused(position);
+        }
+      },
+    }),
+    [],
+  );
+
   const value = useMemo<FocusContextValue>(
     () => ({ focused, isFocused, focusAt, activate }),
     [focused, isFocused, focusAt, activate],
@@ -186,6 +246,9 @@ export function FocusProvider({
 
   return <FocusContext.Provider value={value}>{children}</FocusContext.Provider>;
 }
+
+/** Focus engine React binding. Forwards a {@link FocusHandle} ref. */
+export const FocusProvider = forwardRef(FocusProviderInner);
 
 export function useFocus(): FocusContextValue {
   const ctx = useContext(FocusContext);

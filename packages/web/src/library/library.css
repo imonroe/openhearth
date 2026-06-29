@@ -62,15 +62,66 @@
   font-size: 0.833rem;
   color: var(--color-text-muted);
 }
+/* Body holds the A–Z rail (#131) alongside the scrolling grid. min-height:0 so
+   the scroll child can actually scroll inside the flex column. */
+.library-grid__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 0.833rem;
+}
+
+/* A–Z jump rail (#131): a compact vertical letter column down the left edge. */
+.rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.104rem;
+  padding: 0.5rem 0.2rem;
+  /* 27 letters fit at 16:9; on a shorter viewport let the column scroll (focus
+     drives it) rather than clip an unreachable letter. Scrollbar hidden — 10-foot UI. */
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.rail::-webkit-scrollbar {
+  width: 0;
+  display: none;
+}
+.rail__letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.667rem;
+  height: 1.354rem;
+  font-size: 0.833rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-radius: 6px;
+  border: var(--focus-ring-width) solid transparent;
+}
+.rail__letter.is-disabled {
+  color: var(--color-text-muted);
+  opacity: 0.45;
+}
+.rail__letter.is-focused {
+  border-color: var(--color-focus-ring);
+  box-shadow: var(--focus-ring-glow);
+  color: var(--color-text-accent);
+}
+
 /* The grid scrolls vertically; focus drives the scroll position
    (useScrollIntoViewOnFocus). Reserve room for the focus-ring glow with padding
    and hide the native scrollbar — focus-driven, 10-foot UI. */
 .library-grid__scroll {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 1.5rem;
-  margin: 0 -1.5rem;
+  margin: 0 -1.5rem 0 0;
   scroll-padding-block: 1.5rem;
   scroll-behavior: smooth;
   scrollbar-width: none;
