@@ -40,6 +40,14 @@ describe('bucketForTitle (#131)', () => {
     expect(bucketForTitle('über')).toBe('U');
     expect(bucketForTitle('Núñez')).toBe('N');
   });
+  it('folds stroked/ligature letters and ß to their collation base', () => {
+    expect(bucketForTitle('Łódź')).toBe('L');
+    expect(bucketForTitle('Øresund')).toBe('O');
+    expect(bucketForTitle('Æon Flux')).toBe('A');
+    expect(bucketForTitle('Œuvre')).toBe('O');
+    expect(bucketForTitle('Straße')).toBe('S'); // starts with S anyway
+    expect(bucketForTitle('ßeta')).toBe('S'); // ß.toUpperCase() === 'SS' → clamp to S
+  });
 });
 
 describe('buildRailSections (#131)', () => {

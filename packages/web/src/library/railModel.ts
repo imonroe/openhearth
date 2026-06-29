@@ -15,20 +15,39 @@ import { entryTitle, type LibraryEntry } from './libraryModel';
 export const NON_ALPHA = '#';
 
 /**
+ * Stroked/ligature letters that NFD does NOT decompose, mapped to the base
+ * letter `localeCompare('en')` collates them next to — so they bucket where they
+ * sort, keeping each section contiguous. Keyed by the uppercased character.
+ */
+const LETTER_FOLD: Record<string, string> = {
+  Ł: 'L',
+  Ø: 'O',
+  Æ: 'A',
+  Œ: 'O',
+  Đ: 'D',
+  Ð: 'D',
+  Þ: 'T',
+};
+
+/**
  * The rail bucket a title falls in: its first character folded to a base `A`–`Z`
  * letter, otherwise the `#` (non-alphabetic) bucket. Leading whitespace is
- * ignored. Diacritics are stripped (NFD decomposition drops combining marks) so
- * accented titles bucket under their base letter — matching how
- * `buildLibraryEntries` collates them (`localeCompare('en')` sorts `Ångström`
- * next to `Apple`), which keeps each bucket contiguous in the sorted list.
+ * ignored. Diacritics are stripped (NFD drops combining marks) and a few
+ * non-decomposing letters are mapped explicitly, so accented/stroked titles
+ * bucket under their base letter — matching how `buildLibraryEntries` collates
+ * them (`localeCompare('en')` sorts `Ångström` next to `Apple`), which keeps
+ * each bucket contiguous in the sorted list.
  */
 export function bucketForTitle(title: string): string {
-  const c = title
+  const first = title
     .trimStart()
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .charAt(0)
     .toUpperCase();
+  // toUpperCase can expand a code point (ß → "SS"); fold the explicit set, else
+  // take a single code unit so the bucket is always one character.
+  const c = LETTER_FOLD[first] ?? first.charAt(0);
   return c >= 'A' && c <= 'Z' ? c : NON_ALPHA;
 }
 
