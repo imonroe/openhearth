@@ -15,13 +15,20 @@ import { entryTitle, type LibraryEntry } from './libraryModel';
 export const NON_ALPHA = '#';
 
 /**
- * The rail bucket a title falls in: its uppercased first character if it's
- * `A`–`Z`, otherwise the `#` (non-alphabetic) bucket. Leading whitespace is
- * ignored so " The Wire" still buckets under `T`-less… (titles are pre-trimmed,
- * but be defensive).
+ * The rail bucket a title falls in: its first character folded to a base `A`–`Z`
+ * letter, otherwise the `#` (non-alphabetic) bucket. Leading whitespace is
+ * ignored. Diacritics are stripped (NFD decomposition drops combining marks) so
+ * accented titles bucket under their base letter — matching how
+ * `buildLibraryEntries` collates them (`localeCompare('en')` sorts `Ångström`
+ * next to `Apple`), which keeps each bucket contiguous in the sorted list.
  */
 export function bucketForTitle(title: string): string {
-  const c = title.trimStart().charAt(0).toUpperCase();
+  const c = title
+    .trimStart()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .charAt(0)
+    .toUpperCase();
   return c >= 'A' && c <= 'Z' ? c : NON_ALPHA;
 }
 

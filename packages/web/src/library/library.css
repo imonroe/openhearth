@@ -80,6 +80,15 @@
   justify-content: center;
   gap: 0.104rem;
   padding: 0.5rem 0.2rem;
+  /* 27 letters fit at 16:9; on a shorter viewport let the column scroll (focus
+     drives it) rather than clip an unreachable letter. Scrollbar hidden — 10-foot UI. */
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.rail::-webkit-scrollbar {
+  width: 0;
+  display: none;
 }
 .rail__letter {
   display: flex;

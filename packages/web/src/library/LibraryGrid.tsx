@@ -238,8 +238,10 @@ export function LibraryGrid({
   const onGridEdge = useCallback(
     (dir: Direction) => {
       if (dir !== 'left') return;
-      railEntryRef.current = sectionIndexForEntry(sections, focusedRow * GRID_COLUMNS, entries);
-      setRailIndex(railEntryRef.current);
+      const target = sectionIndexForEntry(sections, focusedRow * GRID_COLUMNS, entries);
+      if (target < 0) return; // no enabled letters (empty library) — stay in the grid
+      railEntryRef.current = target;
+      setRailIndex(target);
       setRailNonce((n) => n + 1);
       setRegion('rail');
     },
@@ -256,6 +258,10 @@ export function LibraryGrid({
   // Type a letter (or digit → #) to jump straight there, from either region.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      // Ignore a key the active focus region already consumed (e.g. a printable
+      // character bound to navigate/select), so a custom keymap can't both move
+      // focus and jump.
+      if (event.defaultPrevented) return;
       if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1) return;
       const upper = event.key.toUpperCase();
       const letter =

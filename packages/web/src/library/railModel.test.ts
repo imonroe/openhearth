@@ -34,6 +34,12 @@ describe('bucketForTitle (#131)', () => {
   it('ignores leading whitespace', () => {
     expect(bucketForTitle('  Zodiac')).toBe('Z');
   });
+  it('folds accented letters to their base letter (matches en collation)', () => {
+    expect(bucketForTitle('Ångström')).toBe('A');
+    expect(bucketForTitle('Évolution')).toBe('E');
+    expect(bucketForTitle('über')).toBe('U');
+    expect(bucketForTitle('Núñez')).toBe('N');
+  });
 });
 
 describe('buildRailSections (#131)', () => {
