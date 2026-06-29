@@ -13,11 +13,12 @@
  * than one capture-phase key handler installed at a time.
  */
 import { useCallback, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import type { Config, WallpaperContentType } from '@openhearth/shared';
+import type { Config, ScreensaverType, WallpaperContentType } from '@openhearth/shared';
 import { FocusProvider, useFocus } from '../focus/FocusProvider';
 import type { FocusPosition } from '../focus/focusEngine';
 import type { KeyMap } from '../keybindings';
 import { updateUiSettings, uploadWallpaper, deleteWallpaper } from '../api';
+import { SCREENSAVER_LIST, resolveScreensaver } from '../screensaver/screensavers';
 import './settings.css';
 
 /** A resolved wallpaper layer: the image URL and its opacity (#118). */
@@ -28,6 +29,9 @@ export interface WallpaperView {
 
 /** Opacity presets offered in the Appearance panel (100% → 20%). */
 const OPACITY_PRESETS = [1, 0.8, 0.6, 0.4, 0.2] as const;
+
+/** Idle-timeout presets for the screensaver, in minutes (#126). */
+const TIMEOUT_PRESETS = [1, 3, 5, 10, 15, 30] as const;
 
 /** Mirrors the server cap (20 MiB) so oversized files fail fast, client-side. */
 const MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
@@ -57,8 +61,20 @@ function fileToBase64(file: File): Promise<string> {
 //   row 1: wallpaper enable toggle
 //   row 2: [choose/replace image] [remove]
 //   row 3: opacity presets (5)
-//   row 4: done
-const ROW_LENGTHS = [1, 1, 2, OPACITY_PRESETS.length, 1];
+//   row 4: screensaver enable toggle
+//   row 5: screensaver picker (one cell per saver)
+//   row 6: idle-timeout presets
+//   row 7: done
+const ROW_LENGTHS = [
+  1,
+  1,
+  2,
+  OPACITY_PRESETS.length,
+  1,
+  SCREENSAVER_LIST.length,
+  TIMEOUT_PRESETS.length,
+  1,
+];
 
 export function Settings({
   config,
@@ -82,6 +98,9 @@ export function Settings({
   const wpEnabled = wp?.enabled ?? false;
   const wpOpacity = wp?.opacity ?? 1;
   const hasImage = Boolean(wp?.image);
+
+  // Screensaver settings, with defaults applied (#126).
+  const ss = resolveScreensaver(config.ui?.screensaver);
 
   // Run a persisting action: lift the returned config on success, surface a
   // non-fatal message on failure. A failed save never breaks the modal.
@@ -121,6 +140,26 @@ export function Settings({
   const removeWallpaper = useCallback(() => {
     run(async () => (await deleteWallpaper()).config);
   }, [run]);
+
+  const toggleScreensaver = useCallback(() => {
+    run(async () => (await updateUiSettings({ screensaver: { enabled: !ss.enabled } })).config);
+  }, [run, ss.enabled]);
+
+  const setScreensaverType = useCallback(
+    (type: ScreensaverType) => {
+      run(async () => (await updateUiSettings({ screensaver: { type } })).config);
+    },
+    [run],
+  );
+
+  const setScreensaverTimeout = useCallback(
+    (minutes: number) => {
+      run(
+        async () => (await updateUiSettings({ screensaver: { timeoutMinutes: minutes } })).config,
+      );
+    },
+    [run],
+  );
 
   const chooseFile = useCallback(() => fileInputRef.current?.click(), []);
 
@@ -164,13 +203,35 @@ export function Settings({
           setOpacity(OPACITY_PRESETS[pos.col] ?? 1);
           return;
         case 4:
+          toggleScreensaver();
+          return;
+        case 5: {
+          const saver = SCREENSAVER_LIST[pos.col];
+          if (saver) setScreensaverType(saver.id);
+          return;
+        }
+        case 6:
+          setScreensaverTimeout(TIMEOUT_PRESETS[pos.col] ?? TIMEOUT_PRESETS[2]);
+          return;
+        case 7:
           onBack();
           return;
         default:
           return;
       }
     },
-    [busy, toggleTheme, toggleWallpaper, chooseFile, removeWallpaper, setOpacity, onBack],
+    [
+      busy,
+      toggleTheme,
+      toggleWallpaper,
+      chooseFile,
+      removeWallpaper,
+      setOpacity,
+      toggleScreensaver,
+      setScreensaverType,
+      setScreensaverTimeout,
+      onBack,
+    ],
   );
 
   return (
@@ -244,6 +305,46 @@ export function Settings({
               </div>
             </div>
 
+            <div className="settings__section-label">Screensaver</div>
+
+            <SettingRow
+              row={4}
+              label="Enable screensaver"
+              hint="Show a screensaver after the interface is idle"
+            >
+              <Toggle on={ss.enabled} />
+            </SettingRow>
+
+            <div className="settings__opacity">
+              <div className="settings__opacity-label">Style</div>
+              <div className="settings__presets" role="group" aria-label="Screensaver style">
+                {SCREENSAVER_LIST.map((saver, col) => (
+                  <PresetButton
+                    key={saver.id}
+                    row={5}
+                    col={col}
+                    label={saver.label}
+                    selected={ss.type === saver.id}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="settings__opacity">
+              <div className="settings__opacity-label">Start after idle</div>
+              <div className="settings__presets" role="group" aria-label="Screensaver idle timeout">
+                {TIMEOUT_PRESETS.map((minutes, col) => (
+                  <PresetButton
+                    key={minutes}
+                    row={6}
+                    col={col}
+                    label={`${minutes} min`}
+                    selected={ss.timeoutMinutes === minutes}
+                  />
+                ))}
+              </div>
+            </div>
+
             {error ? (
               <div className="settings__error" role="alert">
                 {error}
@@ -251,7 +352,7 @@ export function Settings({
             ) : null}
 
             <div className="settings__footer">
-              <FocusButton row={4} col={0} label="Done" variant="primary" />
+              <FocusButton row={7} col={0} label="Done" variant="primary" />
             </div>
           </section>
         </div>

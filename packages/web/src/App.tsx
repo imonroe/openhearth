@@ -16,6 +16,9 @@ import { LibraryGrid } from './library/LibraryGrid';
 import { Player } from './player/Player';
 import type { LibraryEntry } from './library/libraryModel';
 import { launchService, defaultNavigate, type Navigate } from './launch';
+import { Screensaver } from './screensaver/Screensaver';
+import { useIdleTimer } from './screensaver/useIdleTimer';
+import { resolveScreensaver } from './screensaver/screensavers';
 
 type LibraryBySource = Map<string, LibraryItem[]>;
 
@@ -215,6 +218,19 @@ function ReadyApp({
   const [player, setPlayer] = useState<LibraryItem | null>(null);
   const [settings, setSettings] = useState(false);
 
+  // Idle screensaver (#126): after the configured idle time with no interaction
+  // the saver takes over the whole frame; any interaction dismisses it. It's
+  // suppressed while the player is open (you're watching, not idle — and we must
+  // not tear down the <video>), and paused once showing so the only thing that
+  // can wake it is the overlay's own capture-phase wake handler.
+  const screensaver = resolveScreensaver(config.ui?.screensaver);
+  const [idle, setIdle] = useState(false);
+  useIdleTimer({
+    timeoutMs: screensaver.timeoutMinutes * 60_000,
+    enabled: screensaver.enabled && !player && !idle,
+    onIdle: () => setIdle(true),
+  });
+
   // select on home: open Settings from the header (FR; #118), launch a service
   // tile (FR-A2), open the full-library grid (the leading "See all" tile, col 0),
   // or open a library item's detail.
@@ -241,6 +257,13 @@ function ReadyApp({
     },
     [model, navigate],
   );
+
+  // Idle screensaver takes over the whole frame (#126), on top of whatever
+  // screen is showing. `!player` is enforced above (the timer is disabled during
+  // playback) and re-checked here so the <video> is never unmounted under it.
+  if (idle && !player) {
+    return <Screensaver type={screensaver.type} onWake={() => setIdle(false)} />;
+  }
 
   // The player sits on top of the detail it launched from: Back returns to the
   // detail, Home returns all the way to the home grid.

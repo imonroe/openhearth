@@ -335,6 +335,33 @@ describe('UI settings & wallpaper (#118)', () => {
     expect(cfgRes.json().config.ui.theme).toBe('light');
   });
 
+  it('PUT /api/v1/ui/settings persists screensaver settings (#126)', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/ui/settings',
+      payload: { screensaver: { enabled: true, timeoutMinutes: 20, type: 'aurora' } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.status).toBe('ok');
+    expect(body.config.ui.screensaver).toEqual({
+      enabled: true,
+      timeoutMinutes: 20,
+      type: 'aurora',
+    });
+    const cfgRes = await app.inject({ method: 'GET', url: '/api/v1/config' });
+    expect(cfgRes.json().config.ui.screensaver.timeoutMinutes).toBe(20);
+  });
+
+  it('PUT /api/v1/ui/settings rejects an invalid screensaver type (#126)', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/ui/settings',
+      payload: { screensaver: { type: 'matrix' } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('PUT /api/v1/ui/settings rejects an out-of-range opacity', async () => {
     const res = await app.inject({
       method: 'PUT',

@@ -18,6 +18,12 @@ ui:
     - { type: services, group: Music }
     - { type: library, source: movies }
     - { type: library, source: tv }
+  # Idle screensaver (prevents TV burn-in). Any interaction dismisses it; it
+  # never shows during playback. Editable here or from in-app Settings.
+  screensaver:
+    enabled: true
+    timeoutMinutes: 5 # idle minutes before it starts (1–240)
+    type: aurora # drifting colour fields with a wandering clock
 
 library:
   sources:

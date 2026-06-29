@@ -1,0 +1,147 @@
+/*
+ * Screensaver (#126). rem for sizing (scales with viewport per design-system
+ * §2); px for blur radii. The whole field is in constant slow motion AND under
+ * a continuous hue rotation so every pixel cycles colour over time — that's the
+ * burn-in defence, not just an aesthetic.
+ *
+ * NOTE: deliberately does NOT honour `prefers-reduced-motion`. Here the motion
+ * is functional, not decorative — stopping it would defeat the burn-in
+ * protection that is the whole point of the screensaver. Do not add a
+ * reduced-motion media query that freezes these animations.
+ */
+
+.screensaver {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  background: #05060d;
+}
+
+/* The container carries the global hue rotation: it tints every layer below,
+   so no pixel keeps a constant colour even where a gradient is momentarily
+   static. ~80s for a full revolution — present but never distracting. */
+.aurora {
+  position: absolute;
+  inset: 0;
+  animation: aurora-hue 80s linear infinite;
+  will-change: filter;
+}
+
+/* Base wash: a deep, saturated gradient (never pure black, so hue-rotate has
+   colour to act on everywhere) that slides across the frame. */
+.aurora__base {
+  position: absolute;
+  inset: -20%;
+  background: linear-gradient(120deg, #11204a 0%, #1a0e3a 35%, #06283a 70%, #2a103e 100%);
+  background-size: 220% 220%;
+  animation: aurora-base 46s ease-in-out infinite alternate;
+  will-change: background-position;
+}
+
+/* Soft colour blobs drift on independent slow loops so each screen region is
+   swept by a bright region over the cycle. */
+.aurora__blob {
+  position: absolute;
+  width: 70rem;
+  height: 70rem;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  will-change: transform;
+}
+.aurora__blob--a {
+  background: radial-gradient(circle at center, rgba(245, 166, 35, 0.85), transparent 62%);
+  top: -18rem;
+  left: -12rem;
+  animation: aurora-drift-a 53s ease-in-out infinite alternate;
+}
+.aurora__blob--b {
+  background: radial-gradient(circle at center, rgba(76, 130, 220, 0.8), transparent 62%);
+  bottom: -22rem;
+  right: -14rem;
+  animation: aurora-drift-b 67s ease-in-out infinite alternate;
+}
+.aurora__blob--c {
+  background: radial-gradient(circle at center, rgba(212, 98, 44, 0.7), transparent 62%);
+  top: 30%;
+  left: 35%;
+  animation: aurora-drift-c 61s ease-in-out infinite alternate;
+}
+
+/* Gentle edge darkening so the field reads as a cohesive frame, not flat. */
+.aurora__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+}
+
+/* The clock slowly wanders a wide path so it never sits in one place. Linear
+   timing (not ease-in-out) spreads its near-grayscale pixels evenly across the
+   path rather than dwelling at the extremes — hue-rotate barely shifts the
+   light text, so even travel is the better burn-in hedge. */
+.aurora__clock-drift {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: aurora-clock-drift 74s linear infinite alternate;
+  will-change: transform;
+}
+.aurora__clock {
+  font-family: var(--font-display);
+  font-size: 7rem;
+  font-weight: 200;
+  letter-spacing: 0.05em;
+  color: rgba(240, 238, 232, 0.92);
+  text-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes aurora-hue {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+@keyframes aurora-base {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 100%;
+  }
+}
+@keyframes aurora-drift-a {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(40rem, 26rem) scale(1.25);
+  }
+}
+@keyframes aurora-drift-b {
+  from {
+    transform: translate(0, 0) scale(1.1);
+  }
+  to {
+    transform: translate(-38rem, -24rem) scale(0.9);
+  }
+}
+@keyframes aurora-drift-c {
+  from {
+    transform: translate(0, 0) scale(0.95);
+  }
+  to {
+    transform: translate(-30rem, 22rem) scale(1.3);
+  }
+}
+@keyframes aurora-clock-drift {
+  from {
+    transform: translate(-22rem, -12rem);
+  }
+  to {
+    transform: translate(22rem, 12rem);
+  }
+}

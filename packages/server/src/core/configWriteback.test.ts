@@ -111,6 +111,36 @@ describe('ConfigService.applyUiSettings (#118)', () => {
     expect(read('openhearth.yaml')).not.toContain('old.png');
   });
 
+  it('writes screensaver settings and preserves comments + unrelated keys (#126)', async () => {
+    write(
+      'openhearth.yaml',
+      ['# hand-edited', 'ui:', '  title: Home # the heading', ''].join('\n'),
+    );
+    svc = new ConfigService({ configDir: dir });
+    await svc.load();
+
+    const snap = await svc.applyUiSettings({
+      screensaver: { enabled: true, timeoutMinutes: 15, type: 'aurora' },
+    });
+    expect(snap.config.ui?.screensaver).toEqual({
+      enabled: true,
+      timeoutMinutes: 15,
+      type: 'aurora',
+    });
+    expect(snap.config.ui?.title).toBe('Home');
+
+    const text = read('openhearth.yaml');
+    expect(text).toContain('# hand-edited');
+    expect(text).toContain('# the heading');
+    expect(text).toContain('timeoutMinutes: 15');
+
+    // Re-loading from disk yields the same (it was actually written).
+    const fresh = new ConfigService({ configDir: dir });
+    const reloaded = await fresh.load();
+    expect(reloaded.config.ui?.screensaver?.timeoutMinutes).toBe(15);
+    await fresh.stop();
+  });
+
   it('refuses to write when the existing file has YAML syntax errors', async () => {
     write('openhearth.yaml', 'server:\n  port: [unclosed\n');
     svc = new ConfigService({ configDir: dir });

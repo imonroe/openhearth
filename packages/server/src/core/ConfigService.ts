@@ -21,7 +21,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { parse as parseYaml, parseDocument, isMap } from 'yaml';
 import chokidar, { type FSWatcher } from 'chokidar';
-import { validateConfig, type Config } from '@openhearth/shared';
+import { validateConfig, type Config, type ScreensaverType } from '@openhearth/shared';
 
 export interface ConfigServiceOptions {
   /** Directory holding the host-mapped YAML (defaults to `/config`). */
@@ -69,6 +69,12 @@ export interface UiSettingsPatch {
     /** Relative path under the config dir, or `null` to clear it. */
     image?: string | null;
     opacity?: number;
+  };
+  /** Idle screensaver settings (#126). */
+  screensaver?: {
+    enabled?: boolean;
+    timeoutMinutes?: number;
+    type?: ScreensaverType;
   };
 }
 
@@ -218,6 +224,14 @@ export class ConfigService extends EventEmitter {
         if (w.image === null) doc.deleteIn(['ui', 'wallpaper', 'image']);
         else doc.setIn(['ui', 'wallpaper', 'image'], w.image);
       }
+    }
+    if (patch.screensaver) {
+      const s = patch.screensaver;
+      if (s.enabled !== undefined) doc.setIn(['ui', 'screensaver', 'enabled'], s.enabled);
+      if (s.timeoutMinutes !== undefined) {
+        doc.setIn(['ui', 'screensaver', 'timeoutMinutes'], s.timeoutMinutes);
+      }
+      if (s.type !== undefined) doc.setIn(['ui', 'screensaver', 'type'], s.type);
     }
 
     // Atomic replace so a reader (or the watcher) never sees a half-written file.
