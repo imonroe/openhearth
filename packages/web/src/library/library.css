@@ -86,6 +86,13 @@
     scroll-behavior: auto;
   }
 }
+/* Sizer reserves the full scroll height of the (virtualized) grid so the
+   scrollbar range matches the real item count even though only a window of rows
+   is mounted (#130). Height is set inline from totalRows × row pitch; in the
+   unmeasured fallback it has no height and just wraps the grid in normal flow. */
+.library-grid__sizer {
+  position: relative;
+}
 .library-grid__grid {
   display: grid;
   /* Column count is supplied inline from GRID_COLUMNS so the visual grid and the
@@ -93,4 +100,14 @@
   grid-template-columns: repeat(var(--grid-cols, 6), 7.708rem);
   justify-content: center;
   gap: 1.667rem 0.833rem; /* row gap a touch larger to separate title lines */
+}
+/* When virtualized, the windowed rows are offset to their true position with an
+   inline translateY; absolute positioning keeps them out of normal flow so the
+   sizer's reserved height drives the scroll range. */
+.library-grid__grid.is-virtual {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  will-change: transform;
 }

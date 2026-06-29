@@ -14,14 +14,21 @@ export function LibraryTileView({
   entry,
   row,
   col,
+  scrollOnFocus = true,
 }: {
   entry: LibraryEntry;
   row: number;
   col: number;
+  /**
+   * Self-scroll into view when focused (default). The virtualized grid (#130)
+   * sets this false and scrolls its container instead, so a focus jump to an
+   * as-yet-unmounted row still works.
+   */
+  scrollOnFocus?: boolean;
 }): ReactNode {
   const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(row, col);
-  const ref = useScrollIntoViewOnFocus<HTMLDivElement>(focused);
+  const ref = useScrollIntoViewOnFocus<HTMLDivElement>(focused && scrollOnFocus);
   const [failed, setFailed] = useState(false);
   const className = ['tile', 'tile--library', focused ? 'is-focused' : '']
     .filter(Boolean)

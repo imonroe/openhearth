@@ -79,11 +79,15 @@ describe('Player', () => {
     await screen.findByText(/Resume from 2:05/);
     expect(screen.getByText('▶ Start over')).toBeTruthy();
 
-    // Select the focused "Resume" → stream starts at the saved offset.
-    fireEvent.keyDown(window, { key: 'Enter' });
-    await waitFor(() =>
-      expect(videoEl(container)!.getAttribute('src')).toBe('/api/v1/library/m1/stream?t=125'),
-    );
+    // Select the focused "Resume" → stream starts at the saved offset. Fire
+    // inside the retry so a press that lands before the prompt's FocusProvider
+    // keydown listener has attached (a passive effect, scheduled after the
+    // commit findByText resolves on) is retried, not lost — re-selecting Resume
+    // is idempotent. Same pattern as App.test.tsx's first-keypress retries.
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'Enter' });
+      expect(videoEl(container)?.getAttribute('src')).toBe('/api/v1/library/m1/stream?t=125');
+    });
   });
 
   it('"Start over" begins from the top and forgets the saved position', async () => {
@@ -92,11 +96,13 @@ describe('Player', () => {
       <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
     );
     await screen.findByText(/Resume from/);
-    fireEvent.keyDown(window, { key: 'ArrowRight' }); // focus "Start over"
-    fireEvent.keyDown(window, { key: 'Enter' });
-    await waitFor(() =>
-      expect(videoEl(container)!.getAttribute('src')).toBe('/api/v1/library/m1/stream'),
-    );
+    // Fire inside the retry to survive the listener-attach race (see above);
+    // ArrowRight clamps on the last button and re-selecting is idempotent.
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: 'ArrowRight' }); // focus "Start over"
+      fireEvent.keyDown(window, { key: 'Enter' });
+      expect(videoEl(container)?.getAttribute('src')).toBe('/api/v1/library/m1/stream');
+    });
     // Choosing "Start over" clears the stale resume row.
     expect(deleteCount).toBe(1);
   });
