@@ -82,6 +82,39 @@ export const wallpaperConfigSchema = z
 
 export type WallpaperConfig = z.infer<typeof wallpaperConfigSchema>;
 
+/**
+ * Available screensavers (#126). One procedurally-generated saver to start
+ * (`aurora`); the list is the extension point — new savers are added here and
+ * picked up by the Settings selector and the web screensaver registry. The
+ * value is a stable id, not a display label.
+ */
+export const SCREENSAVERS = ['aurora'] as const;
+export type ScreensaverType = (typeof SCREENSAVERS)[number];
+
+/** Default idle timeout (minutes) before the screensaver activates. */
+export const SCREENSAVER_DEFAULT_TIMEOUT_MINUTES = 5;
+/** Upper bound on the configurable idle timeout (minutes). */
+export const SCREENSAVER_MAX_TIMEOUT_MINUTES = 240;
+
+/**
+ * Idle screensaver (#126). After `timeoutMinutes` with no interaction the kiosk
+ * shows the selected saver full-screen; any interaction dismisses it. The saver
+ * is procedurally generated and animates across the whole frame to avoid panel
+ * burn-in. Off only while a video is actively playing (handled client-side).
+ */
+export const screensaverConfigSchema = z
+  .object({
+    /** Activate the screensaver on idle. Defaults to on. */
+    enabled: z.boolean().optional(),
+    /** Idle minutes before activation (1 – {@link SCREENSAVER_MAX_TIMEOUT_MINUTES}). */
+    timeoutMinutes: z.number().int().min(1).max(SCREENSAVER_MAX_TIMEOUT_MINUTES).optional(),
+    /** Which saver to show. Defaults to the first entry in {@link SCREENSAVERS}. */
+    type: z.enum(SCREENSAVERS).optional(),
+  })
+  .strict();
+
+export type ScreensaverConfig = z.infer<typeof screensaverConfigSchema>;
+
 /** UI / home-screen options. */
 export const uiConfigSchema = z
   .object({
@@ -91,6 +124,8 @@ export const uiConfigSchema = z
     rows: z.array(uiRowSchema).optional(),
     /** Custom background wallpaper (#118). */
     wallpaper: wallpaperConfigSchema.optional(),
+    /** Idle screensaver (#126). */
+    screensaver: screensaverConfigSchema.optional(),
   })
   .strict();
 
@@ -111,6 +146,8 @@ export const uiSettingsPatchSchema = z
       })
       .strict()
       .optional(),
+    /** Screensaver settings the modal can persist (#126). */
+    screensaver: screensaverConfigSchema.optional(),
   })
   .strict();
 

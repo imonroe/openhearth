@@ -105,6 +105,41 @@ describe('Settings modal (#118)', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/PNG, JPEG, or WebP/i);
   });
 
+  it('toggles the screensaver (defaults on → off) from row 4 (#126)', async () => {
+    renderSettings();
+    for (let i = 0; i < 4; i++) fireEvent.keyDown(window, { key: 'ArrowDown' }); // → row 4
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({ screensaver: { enabled: false } }),
+    );
+  });
+
+  it('selects the screensaver style from row 5 (#126)', async () => {
+    renderSettings();
+    for (let i = 0; i < 5; i++) fireEvent.keyDown(window, { key: 'ArrowDown' }); // → row 5
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({ screensaver: { type: 'aurora' } }),
+    );
+  });
+
+  it('sets an idle-timeout preset from row 6 (#126)', async () => {
+    renderSettings();
+    for (let i = 0; i < 6; i++) fireEvent.keyDown(window, { key: 'ArrowDown' }); // → row 6, col 0 (1 min)
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // col 1 = 3 min
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // col 2 = 5 min
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({ screensaver: { timeoutMinutes: 5 } }),
+    );
+  });
+
+  it('marks the current screensaver timeout as selected (#126)', () => {
+    renderSettings({ ui: { screensaver: { timeoutMinutes: 15 } } });
+    const chip = screen.getByText('15 min').closest('button');
+    expect(chip?.classList.contains('is-selected')).toBe(true);
+  });
+
   it('closes on the reserved Back key and the Done button', () => {
     const { onBack } = renderSettings();
     fireEvent.keyDown(window, { key: 'Escape' });

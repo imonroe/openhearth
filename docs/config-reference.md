@@ -57,6 +57,7 @@ located error.
 | `ui.theme` | `dark` \| `light` | `dark` | `dark` |
 | `ui.rows` | list of [row](#ui-row) | _(none)_ | see below |
 | `ui.wallpaper` | [wallpaper](#ui-wallpaper) | _(none)_ | Custom home-screen background. |
+| `ui.screensaver` | [screensaver](#ui-screensaver) | _(on, 5 min)_ | Idle screensaver. |
 
 #### `ui` wallpaper
 
@@ -83,6 +84,28 @@ ui:
 > in the app are written back to this file in place — your comments and layout
 > survive. If `openhearth.yaml` has a YAML syntax error, the app won't overwrite
 > it; fix the error first.
+
+#### `ui` screensaver
+
+After the interface sits idle for `timeoutMinutes`, a full-screen screensaver
+takes over to prevent panel burn-in (#126). Any key, click, or remote press
+dismisses it instantly and returns you to exactly where you were. It never
+appears while a video is playing. Editable here or from the in-app **Settings**
+modal.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Activate the screensaver on idle. |
+| `timeoutMinutes` | integer `1`–`240` | `5` | Idle minutes before it starts. |
+| `type` | `aurora` | `aurora` | Which screensaver to show. `aurora` is slowly drifting colour fields with a wandering clock. |
+
+```yaml
+ui:
+  screensaver:
+    enabled: true
+    timeoutMinutes: 10
+    type: aurora
+```
 
 #### `ui` row
 

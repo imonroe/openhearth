@@ -102,6 +102,32 @@ describe('ui.wallpaper (#118)', () => {
   });
 });
 
+describe('ui.screensaver (#126)', () => {
+  it('accepts a full screensaver block', () => {
+    expect(
+      validateConfig({
+        ui: { screensaver: { enabled: true, timeoutMinutes: 10, type: 'aurora' } },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it('accepts a partial screensaver block (every field optional)', () => {
+    expect(validateConfig({ ui: { screensaver: { enabled: false } } }).ok).toBe(true);
+    expect(validateConfig({ ui: { screensaver: {} } }).ok).toBe(true);
+  });
+
+  it('rejects a non-integer or out-of-range timeout', () => {
+    expect(validateConfig({ ui: { screensaver: { timeoutMinutes: 0 } } }).ok).toBe(false);
+    expect(validateConfig({ ui: { screensaver: { timeoutMinutes: 2.5 } } }).ok).toBe(false);
+    expect(validateConfig({ ui: { screensaver: { timeoutMinutes: 100000 } } }).ok).toBe(false);
+  });
+
+  it('rejects an unknown screensaver type and unknown keys (strict)', () => {
+    expect(validateConfig({ ui: { screensaver: { type: 'matrix' } } }).ok).toBe(false);
+    expect(validateConfig({ ui: { screensaver: { speed: 'fast' } } }).ok).toBe(false);
+  });
+});
+
 describe('uiSettingsPatchSchema (PUT /api/v1/ui/settings)', () => {
   it('accepts theme and wallpaper enabled/opacity', () => {
     expect(uiSettingsPatchSchema.safeParse({ theme: 'light' }).success).toBe(true);
@@ -109,6 +135,21 @@ describe('uiSettingsPatchSchema (PUT /api/v1/ui/settings)', () => {
       uiSettingsPatchSchema.safeParse({ wallpaper: { enabled: true, opacity: 0.5 } }).success,
     ).toBe(true);
     expect(uiSettingsPatchSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('accepts a screensaver patch (#126)', () => {
+    expect(
+      uiSettingsPatchSchema.safeParse({ screensaver: { enabled: true, timeoutMinutes: 15 } })
+        .success,
+    ).toBe(true);
+    expect(uiSettingsPatchSchema.safeParse({ screensaver: { type: 'aurora' } }).success).toBe(true);
+  });
+
+  it('rejects an invalid screensaver patch', () => {
+    expect(uiSettingsPatchSchema.safeParse({ screensaver: { type: 'nope' } }).success).toBe(false);
+    expect(uiSettingsPatchSchema.safeParse({ screensaver: { timeoutMinutes: -1 } }).success).toBe(
+      false,
+    );
   });
 
   it('does NOT accept a free-form wallpaper image path (set only by upload)', () => {
