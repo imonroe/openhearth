@@ -141,8 +141,8 @@ function MovieDetail({
             ) : null}
             {meta?.genres && meta.genres.length > 0 ? (
               <div className="detail__genres" aria-label="Genres">
-                {meta.genres.map((g) => (
-                  <span key={g} className="detail__genre">
+                {meta.genres.map((g, i) => (
+                  <span key={`${i}-${g}`} className="detail__genre">
                     {g}
                   </span>
                 ))}
@@ -163,10 +163,12 @@ function MovieDetail({
             ) : null}
             {meta?.cast && meta.cast.length > 0 ? (
               <div className="detail__cast">
-                <div className="detail__credit-label">Cast</div>
-                <ul className="detail__cast-list">
-                  {meta.cast.map((c) => (
-                    <li key={`${c.name}:${c.character ?? ''}`} className="detail__cast-member">
+                <div className="detail__credit-label" id="detail-cast-label">
+                  Cast
+                </div>
+                <ul className="detail__cast-list" aria-labelledby="detail-cast-label">
+                  {meta.cast.map((c, i) => (
+                    <li key={`${i}-${c.name}`} className="detail__cast-member">
                       <span className="detail__cast-name">{c.name}</span>
                       {c.character ? (
                         <span className="detail__cast-character"> as {c.character}</span>

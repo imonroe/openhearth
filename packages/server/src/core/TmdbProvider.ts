@@ -67,6 +67,7 @@ interface TmdbRecord {
   tagline?: string | null;
   vote_average?: number;
   credits?: { cast?: TmdbCastRecord[]; crew?: TmdbCrewRecord[] };
+  created_by?: { name?: string }[]; // tv: series creators (no series-level director)
 }
 
 interface TmdbSearchResponse {
@@ -221,10 +222,13 @@ function toResult(provider: string, kind: MetadataKind, r: TmdbRecord): Metadata
       };
     })
     .filter((c): c is MetadataCastMember => c !== null);
-  const directors = r.credits?.crew
-    ?.filter((c) => c.job === 'Director')
-    .map((c) => c.name?.trim())
-    .filter((n): n is string => !!n);
+  // Movies have a series-level Director in the crew; TV does not (directing is
+  // per-episode), so for a series we surface the creators instead.
+  const directorsRaw =
+    kind === 'movie'
+      ? r.credits?.crew?.filter((c) => c.job === 'Director').map((c) => c.name?.trim())
+      : r.created_by?.map((c) => c.name?.trim());
+  const directors = directorsRaw?.filter((n): n is string => !!n);
   const tagline = r.tagline?.trim() || undefined;
   const rating =
     typeof r.vote_average === 'number' && r.vote_average > 0

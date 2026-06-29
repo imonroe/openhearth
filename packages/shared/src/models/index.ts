@@ -105,7 +105,7 @@ export const mediaItemSchema = z
     /** Runtime in whole minutes (movie runtime, or a TV episode's runtime). */
     runtime_minutes: z.number().int().positive().nullable().optional(),
     /** Genre names (e.g. `["Science Fiction", "Drama"]`). */
-    genres: z.array(z.string()).optional(),
+    genres: z.array(z.string().min(1)).optional(),
     /** Principal cast, best-first, capped by the provider. */
     cast: z.array(castMemberSchema).optional(),
     /** Director name(s) (creators for a series). */

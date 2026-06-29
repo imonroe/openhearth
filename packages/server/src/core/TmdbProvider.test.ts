@@ -193,15 +193,24 @@ describe('TmdbProvider.details', () => {
     ]);
   });
 
-  it('maps a tv episode runtime and omits empty rich fields', async () => {
+  it('maps a tv episode runtime, creators-as-directors, and omits empty rich fields', async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse({ ...TV, episode_run_time: [47], vote_average: 0, genres: [] }),
+      jsonResponse({
+        ...TV,
+        episode_run_time: [47],
+        vote_average: 0,
+        genres: [],
+        // A series has no series-level Director in crew; creators stand in.
+        created_by: [{ name: 'Vince Gilligan' }, { name: '' }],
+        credits: { crew: [{ name: 'Some Person', job: 'Director' }] },
+      }),
     );
     const out = await provider(fetchImpl).details('tmdb:tv:1396');
     expect(out?.runtime_minutes).toBe(47);
     expect(out?.rating).toBeUndefined(); // 0 → omitted
     expect(out?.genres).toBeUndefined();
     expect(out?.cast).toBeUndefined();
+    expect(out?.directors).toEqual(['Vince Gilligan']); // created_by, not crew
   });
 });
 
