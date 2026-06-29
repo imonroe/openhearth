@@ -10,6 +10,7 @@ import {
   createMetadataProvider,
   mediaItemFromMetadata,
   metadataCacheKey,
+  metadataDetailsCacheKey,
   metadataQueryForLibraryItem,
   type MetadataProvider,
   type MetadataResult,
@@ -166,6 +167,76 @@ describe('MetadataService.resolveMedia — caching (#41)', () => {
     const query = { title: 'The Matrix', year: 1999, kind: 'movie' as const };
     expect(await svc.resolveMedia(query)).toBeNull();
     expect(store.getMetadata(metadataCacheKey(query))).toBeUndefined();
+    store.close();
+  });
+});
+
+describe('MetadataService.resolveDetails — full details, cached (#123)', () => {
+  const search = result({ ref: 'tmdb:movie:603', title: 'The Matrix', year: 1999 });
+  const detailed = result({
+    ref: 'tmdb:movie:603',
+    title: 'The Matrix',
+    year: 1999,
+    overview: 'A hacker learns the truth.',
+    runtime_minutes: 136,
+    genres: ['Science Fiction'],
+    cast: [{ name: 'Keanu Reeves', character: 'Neo' }],
+    directors: ['Lana Wachowski'],
+    rating: 8.2,
+  });
+  const query = { title: 'The Matrix', year: 1999, kind: 'movie' as const };
+
+  function setup() {
+    const searchFn = vi.fn(async () => [search]);
+    const detailsFn = vi.fn(async () => detailed);
+    const provider = fakeProvider({ search: searchFn, details: detailsFn });
+    const store = new CacheStore(':memory:');
+    const svc = new MetadataService(provider, { cache: store });
+    return { svc, store, searchFn, detailsFn };
+  }
+
+  it('searches, fetches details, and serves the second open from cache', async () => {
+    const { svc, searchFn, detailsFn } = setup();
+    const first = await svc.resolveDetails(query);
+    expect(first).toMatchObject({
+      id: 'tmdb:movie:603',
+      runtime_minutes: 136,
+      genres: ['Science Fiction'],
+      cast: [{ name: 'Keanu Reeves', character: 'Neo' }],
+      directors: ['Lana Wachowski'],
+      rating: 8.2,
+    });
+    expect(mediaItemSchema.safeParse(first).success).toBe(true);
+    // Second open hits neither the search nor the details endpoint.
+    await svc.resolveDetails(query);
+    expect(searchFn).toHaveBeenCalledTimes(1);
+    expect(detailsFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the search-level result when details fails', async () => {
+    const provider = fakeProvider({
+      search: vi.fn(async () => [search]),
+      details: vi.fn(async () => null),
+    });
+    const svc = new MetadataService(provider, { cache: new CacheStore(':memory:') });
+    const out = await svc.resolveDetails(query);
+    expect(out).toMatchObject({ id: 'tmdb:movie:603', title: 'The Matrix' });
+    expect(out?.runtime_minutes).toBeUndefined();
+  });
+
+  it("uses a key distinct from resolveMedia's, so list and detail don't collide", async () => {
+    const { svc, store } = setup();
+    await svc.resolveDetails(query);
+    expect(store.getMetadata(metadataDetailsCacheKey(query))?.item?.runtime_minutes).toBe(136);
+    // The lightweight list key is untouched by a details fetch.
+    expect(store.getMetadata(metadataCacheKey(query))).toBeUndefined();
+  });
+
+  it('with no provider returns null and never caches (degradation)', async () => {
+    const store = new CacheStore(':memory:');
+    const svc = new MetadataService(null, { cache: store });
+    expect(await svc.resolveDetails(query)).toBeNull();
+    expect(store.getMetadata(metadataDetailsCacheKey(query))).toBeUndefined();
     store.close();
   });
 });

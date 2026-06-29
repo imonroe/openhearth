@@ -37,6 +37,41 @@ describe('mediaItemSchema', () => {
     expect(mediaItemSchema.safeParse(full).success).toBe(true);
   });
 
+  it('accepts the rich detail fields (#123)', () => {
+    const rich: MediaItem = {
+      id: 'tmdb:movie:603',
+      title: 'The Matrix',
+      kind: 'movie',
+      runtime_minutes: 136,
+      genres: ['Science Fiction', 'Action'],
+      cast: [
+        { name: 'Keanu Reeves', character: 'Neo' },
+        { name: 'Carrie-Anne Moss', character: 'Trinity' },
+      ],
+      directors: ['Lana Wachowski', 'Lilly Wachowski'],
+      tagline: 'Welcome to the Real World.',
+      rating: 8.2,
+    };
+    expect(mediaItemSchema.safeParse(rich).success).toBe(true);
+  });
+
+  it('rejects malformed rich fields', () => {
+    expect(
+      mediaItemSchema.safeParse({ id: 'x', title: 'X', kind: 'movie', rating: 11 }).success,
+    ).toBe(false);
+    expect(
+      mediaItemSchema.safeParse({ id: 'x', title: 'X', kind: 'movie', runtime_minutes: 0 }).success,
+    ).toBe(false);
+    expect(
+      mediaItemSchema.safeParse({
+        id: 'x',
+        title: 'X',
+        kind: 'movie',
+        cast: [{ character: 'Neo' }],
+      }).success,
+    ).toBe(false); // cast member needs a name
+  });
+
   it('rejects unknown keys (strict) and an empty title', () => {
     expect(
       mediaItemSchema.safeParse({ id: 'x', title: 'X', kind: 'movie', bogus: 1 }).success,
