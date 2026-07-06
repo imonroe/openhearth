@@ -28,3 +28,8 @@ and the server URL must be edited for your machine.
 > See each deployment guide's Troubleshooting for branded-Chrome workarounds.
 > Deployment settings (home URL, return keys, debug) live in
 > [`home-guard/config.js`](home-guard/config.js).
+>
+> By default the launchers use your normal browser profile — the extension you
+> installed by hand lives there and Home/Back just works. If you need a dedicated
+> kiosk profile, see the optional `PROFILE_DIR` instructions in each launcher
+> script.

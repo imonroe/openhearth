@@ -31,8 +31,8 @@ mode pointed at it, launched automatically when the kiosk user logs in.
 
 [`scripts\kiosk\openhearth-kiosk.bat`](../../scripts/kiosk/openhearth-kiosk.bat)
 starts the browser with the kiosk flags (fullscreen, no chrome/infobars, autoplay
-allowed for the player, the Home-guard extension loaded) using a dedicated,
-persistent profile. Edit the paths at the top of the file:
+allowed for the player, the Home-guard extension loaded). Edit the paths at the
+top of the file:
 
 - `OPENHEARTH_URL` — your server URL.
 - `BROWSER` — path to `chrome.exe` (or `msedge.exe`).
@@ -53,6 +53,15 @@ mouse pointer. With a D-pad/keyboard remote and no mouse it never appears; if yo
 need it hidden with a mouse attached, use a small utility such as *AutoHideMouseCursor*
 or *NoMouse*. (Windows has no built-in idle-hide.)
 
+**Dedicated kiosk profile (optional).** By default, the launcher uses Chrome's
+normal profile — the one you installed the Home-guard extension into. If you'd
+prefer an isolated profile (useful when the kiosk account is also your daily
+driver), uncomment the `PROFILE_DIR` line in the `.bat` and add
+`--user-data-dir="%PROFILE_DIR%"` to the `start` command. If you do, install the
+extension into *that* profile first: launch Chrome once with the same
+`--user-data-dir` flag, go to `chrome://extensions`, enable Developer mode, and
+Load unpacked → the `home-guard` folder.
+
 ## Streaming DRM-protected services
 
 Netflix, Sling, YouTube TV, Max and friends are **DRM-protected** and need
@@ -60,22 +69,17 @@ Google's **Widevine** CDM to decrypt. Widevine ships **only in branded Google
 Chrome** (and Edge) — **not** in un-branded Chromium or Chrome For Testing. But
 branded Chrome 137+ ignores the `--load-extension` flag the launcher uses for the
 Home-guard. So to get **both** DRM playback **and** the Home/Back guarantee, run
-branded Chrome and load the Home-guard **once, by hand**, into the kiosk's
-persistent profile:
+branded Chrome and load the Home-guard **once, by hand**:
 
 1. If your server isn't at `http://localhost:8080`, set `homeUrl` in
    [`home-guard\config.js`](../../scripts/kiosk/home-guard/config.js) first.
-2. Start branded Chrome on the kiosk profile (the launcher's `--user-data-dir`),
-   e.g. from a Command Prompt:
-   ```bat
-   "C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir="%LOCALAPPDATA%\openhearth-kiosk"
-   ```
-3. Open `chrome://extensions`, enable **Developer mode** (top-right), click **Load
-   unpacked**, and select the `scripts\kiosk\home-guard` folder.
-4. The extension now **persists in that profile across reboots** — the kiosk picks
-   it up on every launch as long as you keep the same `--user-data-dir`. You do
-   **not** need `--load-extension`, so the `.bat` works unchanged (the ignored flag
-   is harmless); point `BROWSER` at branded `chrome.exe`.
+2. Open Chrome normally (your everyday profile — the launcher uses the same
+   profile by default).
+3. Go to `chrome://extensions`, enable **Developer mode** (top-right), click
+   **Load unpacked**, and select the `scripts\kiosk\home-guard` folder.
+4. The extension now **persists in your profile across reboots** — the kiosk
+   picks it up on every launch. You do **not** need `--load-extension` to work
+   (the ignored flag in the `.bat` is harmless).
 
 Verify: launch a service tile, confirm DRM playback works, and press **Home** to
 confirm you return to OpenHearth (that proves the unpacked Home-guard is active).
@@ -128,15 +132,19 @@ key returns to OpenHearth — that proves the Home-guard extension loaded.
 
 - **A console window flashes:** set the Startup shortcut to *Run: Minimized*
   (Option A), or run via Task Scheduler (Option B).
+- **"WARNING: Chrome is already running":** the launcher detects an existing
+  Chrome session and warns that kiosk flags may not apply. Close all Chrome
+  windows and re-run, or enable the dedicated `PROFILE_DIR` option in the `.bat`
+  (uncomment the line) — an isolated profile avoids the singleton collision.
 - **Home doesn't return from a service:** the extension didn't load. The most
-  common cause on Windows is **branded Google Chrome 137+ (or Edge) ignoring
+  common cause on Windows is **branded Google Chrome 137+ (or Edge) ignoring**
   `--load-extension`** as a security measure. Fix it one of these ways:
   1. Use un-branded **Chromium** or **Chrome For Testing** for the kiosk (set
      `BROWSER` to its `chrome.exe`) — they still honour `--load-extension`.
-  2. Keep branded Chrome but load the extension once by hand into the kiosk's
-     persistent profile: open `chrome://extensions`, enable **Developer mode**,
-     click **Load unpacked**, and pick the `scripts\kiosk\home-guard` folder. It
-     persists in the `--user-data-dir` profile across launches.
+  2. Keep branded Chrome but load the extension once by hand: open
+     `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
+     and pick the `scripts\kiosk\home-guard` folder. It persists in your profile
+     across launches — no `--load-extension` needed.
   3. As a stopgap while it still works, the launcher already passes
      `--disable-features=DisableLoadExtensionCommandLineSwitch` to re-enable the
      flag on branded builds; Google is removing that toggle, so don't rely on it.
@@ -158,3 +166,8 @@ key returns to OpenHearth — that proves the Home-guard extension loaded.
 - **Auth enabled?** If you set `server.auth.token`, the bundled UI doesn't yet
   attach it to its own requests; bind the server to `127.0.0.1` for a single-box
   kiosk instead (see [config-reference.md](../config-reference.md) § Security).
+- **Using a dedicated kiosk profile?** If you uncommented the `PROFILE_DIR` line
+  in the `.bat` for profile isolation, make sure the Home-guard extension was
+  installed into *that* profile (launch Chrome once with the same
+  `--user-data-dir`, then load the extension there). An extension installed in
+  your default profile won't be visible to the dedicated profile.

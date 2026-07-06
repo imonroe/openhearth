@@ -10,11 +10,9 @@ The full requirements live in [docs/prd.md](docs/prd.md). The implementation str
 
 ## Status
 
-The codebase is in **Phase 0 (pre-scaffolding)**. The workspace, packages, and Docker image do not yet exist. All implementation follows the plan in `docs/implementation_plan.md`, targeting **M0** first.
+**v1.0.0 shipped** (2026-06-24). All Must and Should functional requirements are implemented and tested — see [docs/v1-audit.md](docs/v1-audit.md) for the full coverage map. Active development continues on `dev` with post-v1.0 polish: screensaver, wallpaper/settings, A–Z jump rail, library grid virtualization, richer movie metadata, and the CDP-backed kiosk Home/Back daemon ([ADR 0001](docs/adr/0001-kiosk-home-back-cdp-daemon.md)).
 
-## Planned Commands
-
-Once scaffolded (pnpm workspaces with `packages/shared`, `packages/server`, `packages/web`):
+## Commands
 
 ```sh
 pnpm build          # build all packages
@@ -64,7 +62,7 @@ The system has two logical pieces that communicate **only** via a documented HTT
 | B — Aggregator | Cross-service discovery | Foundation only in v1 (normalized metadata model, stub search). Full unified search is v1.x. |
 | C — Player | Local/self-hosted media | Native ad-free playback with ffmpeg transcoding fallback. |
 
-## Repository Layout (planned)
+## Repository Layout
 
 ```
 packages/
@@ -93,14 +91,16 @@ docker-compose.yml      — reference compose
 docs/
   prd.md                — requirements (the "what")
   implementation_plan.md — implementation strategy (the "how")
-  protocol.md           — (Phase 5) versioned remote-control protocol spec
+  protocol.md           — versioned remote-control protocol spec
   config-reference.md   — config schema documentation
+  v1-audit.md           — Must-FR coverage & Should/Could triage for v1.0
+  adr/                  — architecture decision records
   deployment/           — windows-kiosk.md, linux-kiosk.md
 designs/                — wireframes, focus maps, visual language artifacts
   designs_1.pen         — source designs (all 15 screens + components, Pencil format)
   design-system.md      — authoritative visual spec and developer handoff reference
   screen-inventory.md   — screen list, navigation map, per-screen design notes
-scripts/kiosk/          — example Chromium kiosk launch shortcuts/units
+scripts/kiosk/          — example Chromium kiosk launch shortcuts/units + home-guard extension
 ```
 
 ## Remote-Control Protocol

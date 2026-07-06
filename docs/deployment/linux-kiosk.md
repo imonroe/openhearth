@@ -35,16 +35,15 @@ automatically on power-on.
 
 [`scripts/kiosk/openhearth-kiosk.sh`](../../scripts/kiosk/openhearth-kiosk.sh)
 launches Chromium with the kiosk flags (fullscreen, no chrome/infobars, autoplay
-allowed for the player, the Home-guard extension loaded, gesture-nav disabled)
-and a dedicated persistent profile. Make it executable and test it inside a
-graphical session:
+allowed for the player, the Home-guard extension loaded, gesture-nav disabled).
+Make it executable and test it inside a graphical session:
 
 ```sh
 chmod +x scripts/kiosk/openhearth-kiosk.sh
 OPENHEARTH_URL=http://localhost:8080 scripts/kiosk/openhearth-kiosk.sh
 ```
 
-Environment overrides: `OPENHEARTH_URL`, `CHROMIUM_BIN`, `OPENHEARTH_PROFILE_DIR`,
+Environment overrides: `OPENHEARTH_URL`, `CHROMIUM_BIN`,
 `OPENHEARTH_HOME_GUARD_DIR`.
 
 > **If you change `OPENHEARTH_URL`** away from `http://localhost:8080`, you must
@@ -60,6 +59,15 @@ hide the mouse pointer. The launch script starts `unclutter -idle 0.5` when it's
 installed, which hides the pointer after half a second of inactivity. (With a
 D-pad/keyboard remote and no mouse, the pointer never appears anyway.)
 
+**Dedicated kiosk profile (optional).** By default, the launcher uses Chromium's
+normal profile — the one you installed the Home-guard extension into. If you'd
+prefer an isolated profile (useful when the kiosk account is also your daily
+driver), uncomment the `PROFILE_DIR` line in the script and add
+`--user-data-dir="$PROFILE_DIR"` to the `exec` command. If you do, install the
+extension into *that* profile first: launch Chromium once with the same
+`--user-data-dir`, go to `chrome://extensions`, enable Developer mode, and Load
+unpacked → the `home-guard` folder.
+
 ## Streaming DRM-protected services
 
 Netflix, Sling, YouTube TV, Max and friends are **DRM-protected** and need
@@ -67,21 +75,21 @@ Google's **Widevine** CDM to decrypt. Widevine ships **only in branded Google
 Chrome** (and Edge) — **not** in un-branded Chromium or Chrome For Testing. But
 branded Chrome 137+ ignores the `--load-extension` flag the launcher uses for the
 Home-guard. So to get **both** DRM playback **and** the Home/Back guarantee, run
-branded Chrome and load the Home-guard **once, by hand**, into the kiosk's
-persistent profile:
+branded Chrome and load the Home-guard **once, by hand**:
 
 1. If your server isn't at `http://localhost:8080`, set `homeUrl` in
    [`home-guard/config.js`](../../scripts/kiosk/home-guard/config.js) first.
-2. Start branded Chrome on the kiosk profile (the launcher's `--user-data-dir`):
+2. Open Chrome normally (your everyday profile — the launcher uses the same
+   profile by default):
    ```sh
-   google-chrome --user-data-dir="$HOME/.config/openhearth-kiosk"
+   google-chrome
    ```
-3. Open `chrome://extensions`, enable **Developer mode** (top-right), click **Load
-   unpacked**, and select the `scripts/kiosk/home-guard/` folder.
-4. The extension now **persists in that profile across reboots** — the kiosk picks
-   it up on every launch as long as you keep the same `--user-data-dir`. You do
-   **not** need `--load-extension`, so the launcher works unchanged (the ignored
-   flag is harmless); set `CHROMIUM_BIN=google-chrome` when running it.
+3. Go to `chrome://extensions`, enable **Developer mode** (top-right), click
+   **Load unpacked**, and select the `scripts/kiosk/home-guard/` folder.
+4. The extension now **persists in your profile across reboots** — the kiosk
+   picks it up on every launch. You do **not** need `--load-extension` to work
+   (the ignored flag in the launcher is harmless); set
+   `CHROMIUM_BIN=google-chrome` when running the script.
 
 Verify: launch a service tile, confirm DRM playback works, and press **Home** to
 confirm you return to OpenHearth (that proves the unpacked Home-guard is active).
@@ -152,13 +160,19 @@ proves the Home-guard extension loaded.
 
 - **Blank/again-and-again restart:** check `journalctl --user -u openhearth-kiosk`
   (Option A) — usually a wrong `ExecStart` path or `DISPLAY` not `:0`.
+- **"openhearth-kiosk: chromium is already running":** the launcher detected an
+  existing Chromium/Chrome session using the default profile and refused to
+  start, because kiosk flags won't apply to an already-running process. Close all
+  Chromium/Chrome windows and re-run, or enable the dedicated `PROFILE_DIR`
+  option in the script (uncomment the lines) — an isolated profile avoids the
+  singleton collision.
 - **Home doesn't return from a service:** the extension didn't load — verify the
   `--load-extension` path resolves to `scripts/kiosk/home-guard`, and that
   `homeUrl` in `home-guard/config.js` matches your `OPENHEARTH_URL`. If you're
   running **branded Google Chrome** (not Chromium), Chrome 137+ ignores
   `--load-extension` — switch the kiosk to Chromium / Chrome For Testing, or load
   the extension once via `chrome://extensions` (Developer mode → Load unpacked)
-  into the persistent profile. On a managed/enterprise machine, check that
+  into your Chrome profile. On a managed/enterprise machine, check that
   extension-install policy isn't blocking the unpacked load. See the
   [home-guard README](../../scripts/kiosk/home-guard/README.md).
 - **Your remote/keyboard has no Home key:** many compact Bluetooth keyboard +
@@ -171,3 +185,8 @@ proves the Home-guard extension loaded.
 - **Auth enabled?** If you set `server.auth.token`, the bundled UI doesn't yet
   attach it to its own requests; bind the server to `127.0.0.1` for a single-box
   kiosk instead (see [config-reference.md](../config-reference.md) § Security).
+- **Using a dedicated kiosk profile?** If you uncommented the `PROFILE_DIR` line
+  in the script for profile isolation, make sure the Home-guard extension was
+  installed into *that* profile (launch Chrome once with the same
+  `--user-data-dir`, then load the extension there). An extension installed in
+  your default profile won't be visible to the dedicated profile.
