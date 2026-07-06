@@ -77,12 +77,15 @@ browser console, add it to `returnKeys`, and set `debug` back to `false`.
 ## Install (kiosk)
 
 1. Edit [`config.js`](config.js) if OpenHearth is not at `http://localhost:8080`.
-2. Load the extension into the kiosk Chromium profile, either:
-   - **Unpacked (dev/manual):** `chrome://extensions` → enable Developer mode →
-     "Load unpacked" → select this `home-guard/` folder; or
+2. Load the extension into your Chromium profile, either:
+   - **Unpacked (dev/manual):** open Chrome/Chromium normally, go to
+     `chrome://extensions` → enable Developer mode → "Load unpacked" → select
+     this `home-guard/` folder. The extension persists in your profile across
+     reboots — no `--load-extension` flag needed.
    - **Kiosk launch flag:** start Chromium with
      `--load-extension=/path/to/scripts/kiosk/home-guard` (wired into the
-     auto-launch scripts).
+     auto-launch scripts). Only works with un-branded Chromium / Chrome For
+     Testing.
 
    > **Branded Chrome 137+ ignores `--load-extension`.** Google disabled that
    > switch in branded Google Chrome (and Edge) for security. Two paths:
@@ -90,9 +93,9 @@ browser console, add it to `returnKeys`, and set `debug` back to `false`.
    > - **Streaming DRM services (Netflix, Sling, YouTube TV…)?** You must use
    >   **branded Google Chrome** — only it ships the Widevine CDM; un-branded
    >   Chromium and Chrome For Testing can't decrypt those streams. Load this
-   >   extension by hand (the "Unpacked" path above) into the kiosk's persistent
-   >   profile; it persists across reboots. See the "Streaming DRM-protected
-   >   services" recipe in
+   >   extension by hand (the "Unpacked" path above) into your Chrome profile;
+   >   the launcher uses the same profile by default, so the extension is picked
+   >   up automatically. See the "Streaming DRM-protected services" recipe in
    >   [`docs/deployment/linux-kiosk.md`](../../../docs/deployment/linux-kiosk.md)
    >   / [`windows-kiosk.md`](../../../docs/deployment/windows-kiosk.md).
    > - **Free / self-hosted content only?** Un-branded **Chromium** / **Chrome For
