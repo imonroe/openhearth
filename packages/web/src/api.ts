@@ -7,6 +7,7 @@ import {
   type ActionName,
   type Config,
   type LibraryListResponse,
+  type MediaItem,
   type PlaybackInfo,
   type ResumePosition,
   type ServiceCatalog,
@@ -71,6 +72,24 @@ export async function fetchPlaybackInfo(
     const res = await fetch(`/api/v1/library/${encodeURIComponent(id)}/playback`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as PlaybackInfo;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch rich detail metadata (overview, runtime, genres, cast, …) for an item
+ * (#123), or null on failure. Resolved + cached server-side, so the detail
+ * screen calls this on open and a re-open costs no provider round-trip.
+ */
+export async function fetchItemMetadata(
+  id: string,
+  signal?: AbortSignal,
+): Promise<MediaItem | null> {
+  try {
+    const res = await fetch(`/api/v1/library/${encodeURIComponent(id)}/metadata`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as MediaItem;
   } catch {
     return null;
   }

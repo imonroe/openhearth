@@ -614,6 +614,41 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     return reply.send(createReadStream(cached.path));
   });
 
+  // Rich detail metadata for an item (#123): overview, runtime, genres, cast, …
+  // Resolved from the provider on first open and cached, so a re-open costs no
+  // API call. Always returns a valid item — with no provider or no match it
+  // degrades to the filename-derived projection (the screen just shows less).
+  //
+  // Sanitized so no raw provider image URL reaches the browser (NFR-9): the
+  // poster is swapped for our own proxied/cached route and cast `profile_url`s
+  // (raw TMDB CDN) are dropped — cast images are a follow-up that needs a
+  // poster-style proxy. The richer text fields are what the UI renders.
+  app.get<{ Params: { id: string } }>('/api/v1/library/:id/metadata', async (request, reply) => {
+    const item = libraryService?.get(request.params.id);
+    if (!item) return reply.code(404).send({ status: 'not_found' });
+
+    const poster = cachedPosterUrl(item);
+    const sanitize = (media: MediaItem): MediaItem => {
+      const out: MediaItem = { ...media };
+      // Swap the raw provider poster for our proxied/cached route (or drop it).
+      if (poster) out.artwork = { poster_url: poster };
+      else delete out.artwork;
+      // Keep cast name/character but drop raw TMDB headshot URLs (no proxy yet).
+      if (out.cast) {
+        out.cast = out.cast.map((c) => ({
+          name: c.name,
+          ...(c.character ? { character: c.character } : {}),
+        }));
+      }
+      return out;
+    };
+
+    const base = mediaItemFromLibraryItem(item);
+    if (!metadataService?.enabled) return sanitize(base);
+    const rich = await metadataService.resolveDetails(metadataQueryForLibraryItem(item));
+    return sanitize(rich ?? base);
+  });
+
   // Search (#43, FR-B3). v1 returns local-library matches only, grouped into
   // `source`-keyed sections so cross-service results can slot in later without a
   // breaking change. No cross-service search ships in v1 (PRD §22/§23).

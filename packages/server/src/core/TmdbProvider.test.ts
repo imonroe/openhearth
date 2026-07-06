@@ -146,6 +146,72 @@ describe('TmdbProvider.details', () => {
     const fetchImpl = vi.fn(async () => jsonResponse({}, { status: 404 }));
     expect(await provider(fetchImpl).details('tmdb:movie:999')).toBeNull();
   });
+
+  it('requests credits and maps the rich detail fields (#123)', async () => {
+    const fetchImpl = vi.fn<(input: string | URL | Request) => Promise<Response>>(async () =>
+      jsonResponse({
+        ...MOVIE,
+        runtime: 136,
+        tagline: 'Welcome to the Real World.',
+        vote_average: 8.234,
+        genres: [
+          { id: 1, name: 'Science Fiction' },
+          { id: 2, name: 'Action' },
+        ],
+        credits: {
+          cast: [
+            { name: 'Keanu Reeves', character: 'Neo', profile_path: '/keanu.jpg' },
+            { name: 'Carrie-Anne Moss', character: 'Trinity', profile_path: null },
+            { name: '' }, // dropped (no usable name)
+          ],
+          crew: [
+            { name: 'Lana Wachowski', job: 'Director' },
+            { name: 'Lilly Wachowski', job: 'Director' },
+            { name: 'Joel Silver', job: 'Producer' }, // not a director
+          ],
+        },
+      }),
+    );
+    const out = await provider(fetchImpl).details('tmdb:movie:603');
+    // The single details request carries append_to_response=credits.
+    expect(
+      new URL(fetchImpl.mock.calls[0]![0] as string).searchParams.get('append_to_response'),
+    ).toBe('credits');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(out?.runtime_minutes).toBe(136);
+    expect(out?.tagline).toBe('Welcome to the Real World.');
+    expect(out?.rating).toBe(8.2); // rounded to 1dp
+    expect(out?.genres).toEqual(['Science Fiction', 'Action']);
+    expect(out?.directors).toEqual(['Lana Wachowski', 'Lilly Wachowski']);
+    expect(out?.cast).toEqual([
+      {
+        name: 'Keanu Reeves',
+        character: 'Neo',
+        profile_url: 'https://image.tmdb.org/t/p/w185/keanu.jpg',
+      },
+      { name: 'Carrie-Anne Moss', character: 'Trinity' },
+    ]);
+  });
+
+  it('maps a tv episode runtime, creators-as-directors, and omits empty rich fields', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        ...TV,
+        episode_run_time: [47],
+        vote_average: 0,
+        genres: [],
+        // A series has no series-level Director in crew; creators stand in.
+        created_by: [{ name: 'Vince Gilligan' }, { name: '' }],
+        credits: { crew: [{ name: 'Some Person', job: 'Director' }] },
+      }),
+    );
+    const out = await provider(fetchImpl).details('tmdb:tv:1396');
+    expect(out?.runtime_minutes).toBe(47);
+    expect(out?.rating).toBeUndefined(); // 0 → omitted
+    expect(out?.genres).toBeUndefined();
+    expect(out?.cast).toBeUndefined();
+    expect(out?.directors).toEqual(['Vince Gilligan']); // created_by, not crew
+  });
 });
 
 describe('TmdbProvider rate limiting', () => {
