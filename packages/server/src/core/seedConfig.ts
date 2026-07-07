@@ -16,7 +16,12 @@ import * as path from 'node:path';
 
 export interface SeedResult {
   seeded: boolean;
-  reason: 'seeded' | 'config-not-empty' | 'config-nonempty-missing-primary' | 'no-seed-dir' | 'error';
+  reason:
+    | 'seeded'
+    | 'config-not-empty'
+    | 'config-nonempty-missing-primary'
+    | 'no-seed-dir'
+    | 'error';
   /** Present when `reason === 'error'`: the failure message. Never thrown. */
   error?: string;
   /** Present when `reason === 'config-nonempty-missing-primary'`: help text for the likely cause. */
