@@ -11,6 +11,8 @@ import {
   type PlaybackInfo,
   type ResumePosition,
   type ServiceCatalog,
+  type SlideshowImageContentType,
+  type SlideshowManifest,
   type SubtitleTrack,
   type UiSettingsPatchBody,
   type WallpaperContentType,
@@ -189,6 +191,50 @@ export async function deleteWallpaper(): Promise<ConfigResponse> {
  */
 export function wallpaperUrl(image: string): string {
   return `/api/v1/ui/wallpaper?v=${encodeURIComponent(image)}`;
+}
+
+/** Fetch the resolved slideshow manifest (image ids + playback settings) (#164). */
+export async function fetchSlideshowManifest(signal?: AbortSignal): Promise<SlideshowManifest> {
+  const res = await fetch('/api/v1/slideshow/manifest', { signal });
+  if (!res.ok) throw new Error(`GET /api/v1/slideshow/manifest failed: ${res.status}`);
+  return (await res.json()) as SlideshowManifest;
+}
+
+/** URL for a slideshow image by its opaque id (#164). */
+export function slideshowImageUrl(id: string): string {
+  return `/api/v1/slideshow/image/${encodeURIComponent(id)}`;
+}
+
+/** Upload a slideshow photo (base64). Returns the updated manifest (#164). */
+export async function uploadSlideshowPhoto(
+  contentType: SlideshowImageContentType,
+  dataBase64: string,
+): Promise<SlideshowManifest> {
+  const res = await fetch('/api/v1/slideshow/photos', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content_type: contentType, data_base64: dataBase64 }),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = (await res.json()) as { errors?: string[] };
+      detail = body.errors?.join('; ') ?? '';
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail || `POST /api/v1/slideshow/photos failed: ${res.status}`);
+  }
+  return ((await res.json()) as { manifest: SlideshowManifest }).manifest;
+}
+
+/** Delete an uploaded slideshow photo by id. Returns the updated manifest (#164). */
+export async function deleteSlideshowPhoto(id: string): Promise<SlideshowManifest> {
+  const res = await fetch(`/api/v1/slideshow/photos/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`DELETE /api/v1/slideshow/photos failed: ${res.status}`);
+  return ((await res.json()) as { manifest: SlideshowManifest }).manifest;
 }
 
 /** Resolve the artwork URL for a tile: remote URL as-is, bare filename via the

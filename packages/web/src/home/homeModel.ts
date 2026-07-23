@@ -33,7 +33,7 @@ export interface HomeModel {
   rows: HomeRow[];
 }
 
-const HEADER_ROW: HomeRow = { kind: 'header', itemCount: 2 }; // Search, Settings
+const HEADER_ROW: HomeRow = { kind: 'header', itemCount: 3 }; // Search, Settings, Slideshow
 
 export function buildHomeModel(
   config: Config,

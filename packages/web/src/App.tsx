@@ -19,6 +19,7 @@ import { launchService, defaultNavigate, type Navigate } from './launch';
 import { Screensaver } from './screensaver/Screensaver';
 import { useIdleTimer } from './screensaver/useIdleTimer';
 import { resolveScreensaver } from './screensaver/screensavers';
+import { Slideshow } from './slideshow/Slideshow';
 
 type LibraryBySource = Map<string, LibraryItem[]>;
 
@@ -217,17 +218,23 @@ function ReadyApp({
   const [detail, setDetail] = useState<LibraryEntry | null>(null);
   const [player, setPlayer] = useState<LibraryItem | null>(null);
   const [settings, setSettings] = useState(false);
+  // On-demand slideshow (#164): launched from the header; Back/Home exits.
+  const [slideshow, setSlideshow] = useState(false);
 
   // Idle screensaver (#126): after the configured idle time with no interaction
   // the saver takes over the whole frame; any interaction dismisses it. It's
   // suppressed while the player is open (you're watching, not idle — and we must
-  // not tear down the <video>), and paused once showing so the only thing that
-  // can wake it is the overlay's own capture-phase wake handler.
+  // not tear down the <video>) or while the on-demand slideshow is up, and
+  // paused once showing so the only thing that can wake it is the overlay's own
+  // capture-phase wake handler.
   const screensaver = resolveScreensaver(config.ui?.screensaver);
+  // When the user has opted the slideshow in as their screensaver, the idle path
+  // shows photos instead of a procedural saver (#164).
+  const slideshowAsScreensaver = config.ui?.slideshow?.useAsScreensaver === true;
   const [idle, setIdle] = useState(false);
   useIdleTimer({
     timeoutMs: screensaver.timeoutMinutes * 60_000,
-    enabled: screensaver.enabled && !player && !idle,
+    enabled: screensaver.enabled && !player && !idle && !slideshow,
     onIdle: () => setIdle(true),
   });
 
@@ -238,8 +245,10 @@ function ReadyApp({
     (pos: FocusPosition) => {
       const row = model.rows[pos.row];
       if (row?.kind === 'header') {
-        // col 0 is Search (not yet implemented); col 1 is Settings.
+        // col 0 is Search (not yet implemented); col 1 is Settings; col 2 is
+        // the on-demand slideshow (#164).
         if (pos.col === 1) setSettings(true);
+        else if (pos.col === 2) setSlideshow(true);
         return;
       }
       if (row?.kind === 'services') {
@@ -261,8 +270,27 @@ function ReadyApp({
   // Idle screensaver takes over the whole frame (#126), on top of whatever
   // screen is showing. `!player` is enforced above (the timer is disabled during
   // playback) and re-checked here so the <video> is never unmounted under it.
+  // When the slideshow is the chosen screensaver it renders instead, falling
+  // back to the procedural saver if there are no photos (#164).
   if (idle && !player) {
+    if (slideshowAsScreensaver) {
+      return (
+        <Slideshow
+          mode="screensaver"
+          keyMap={keyMap}
+          onWake={() => setIdle(false)}
+          fallback={<Screensaver type={screensaver.type} onWake={() => setIdle(false)} />}
+        />
+      );
+    }
     return <Screensaver type={screensaver.type} onWake={() => setIdle(false)} />;
+  }
+
+  // The on-demand slideshow (#164): launched from the header, it fills the frame
+  // and returns home on Back/Home. It sits above the home but below the idle
+  // screensaver (the idle timer is disabled while it's open).
+  if (slideshow) {
+    return <Slideshow mode="ondemand" keyMap={keyMap} onExit={() => setSlideshow(false)} />;
   }
 
   // The player sits on top of the detail it launched from: Back returns to the

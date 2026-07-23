@@ -144,7 +144,7 @@ describe('slideshow image serve (#164)', () => {
         '',
       ].join('\n'),
     );
-    const id = (await manifest()).images[0].id;
+    const id = (await manifest()).images[0]!.id;
     const res = await app.inject({ method: 'GET', url: `/api/v1/slideshow/image/${id}` });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('image/png');
@@ -170,14 +170,14 @@ describe('slideshow photo upload/delete (#164)', () => {
     expect(up.statusCode).toBe(200);
     const m = up.json().manifest as SlideshowManifest;
     expect(m.images.length).toBe(1);
-    expect(m.images[0].uploaded).toBe(true);
+    expect(m.images[0]!.uploaded).toBe(true);
     // Stored under config/slideshow/uploads/.
     const uploads = path.join(configDir, 'slideshow', 'uploads');
     expect(fs.readdirSync(uploads).length).toBe(1);
 
     const serve = await app.inject({
       method: 'GET',
-      url: `/api/v1/slideshow/image/${m.images[0].id}`,
+      url: `/api/v1/slideshow/image/${m.images[0]!.id}`,
     });
     expect(serve.statusCode).toBe(200);
   });

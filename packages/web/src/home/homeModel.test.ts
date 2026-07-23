@@ -94,8 +94,8 @@ describe('buildHomeModel', () => {
   });
 
   it('rowLengths includes the header count and the library See All tile', () => {
-    // header(2), services(2), library(3 entries + 1 See All) (#124).
-    expect(rowLengths(buildHomeModel(config, catalog, library))).toEqual([2, 2, 4]);
+    // header(3: Search, Settings, Slideshow), services(2), library(3 + See All).
+    expect(rowLengths(buildHomeModel(config, catalog, library))).toEqual([3, 2, 4]);
   });
 
   it('firstContentRow skips the header and empty rows', () => {
