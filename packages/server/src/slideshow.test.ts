@@ -195,6 +195,20 @@ describe('slideshow photo upload/delete (#164)', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('rejects a payload that only starts with "GIF" but is not a real GIF (415)', async () => {
+    await makeApp('server:\n  port: 8080\n');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/slideshow/photos',
+      // Starts with "GIF" but not the GIF87a/GIF89a signature.
+      payload: {
+        content_type: 'image/gif',
+        data_base64: Buffer.from('GIF junk', 'ascii').toString('base64'),
+      },
+    });
+    expect(res.statusCode).toBe(415);
+  });
+
   it('rejects mismatched magic bytes (415), SVG (400), and empty (400)', async () => {
     await makeApp('server:\n  port: 8080\n');
     const mismatch = await app.inject({

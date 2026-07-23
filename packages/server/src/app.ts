@@ -105,8 +105,9 @@ function imageBytesMatch(ext: string, buf: Buffer): boolean {
     );
   }
   if (ext === 'gif') {
-    // "GIF87a" or "GIF89a".
-    return buf.length >= 6 && buf.toString('ascii', 0, 3) === 'GIF';
+    // Full 6-byte signature — "GIF" alone would let a non-GIF payload through.
+    const sig = buf.length >= 6 ? buf.toString('ascii', 0, 6) : '';
+    return sig === 'GIF87a' || sig === 'GIF89a';
   }
   return false;
 }
