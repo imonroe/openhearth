@@ -48,6 +48,9 @@ interface ResolvedImage {
   relPath: string;
 }
 
+/** How long a resolved image list is reused before a rescan (ms). */
+export const SLIDESHOW_CACHE_TTL_MS = 2000;
+
 export interface SlideshowServiceOptions {
   /** Absolute path of the config dir (uploads live under it). */
   configDir: string;
@@ -55,6 +58,10 @@ export interface SlideshowServiceOptions {
   getConfig: () => SlideshowConfig | undefined;
   /** Optional warning sink (e.g. request.log.warn) for truncation notices. */
   onWarn?: (message: string) => void;
+  /** Injectable clock (epoch ms) for deterministic tests. Defaults to Date.now. */
+  now?: () => number;
+  /** Rescan TTL in ms; 0 disables caching. Defaults to {@link SLIDESHOW_CACHE_TTL_MS}. */
+  cacheTtlMs?: number;
 }
 
 /** Resolved slideshow playback settings with defaults applied. */
@@ -72,11 +79,22 @@ export class SlideshowService {
   private readonly configDir: string;
   private readonly getConfig: () => SlideshowConfig | undefined;
   private readonly onWarn?: (message: string) => void;
+  private readonly now: () => number;
+  private readonly cacheTtlMs: number;
+  /** Memoized resolved list; short-lived so image serving isn't a full rescan. */
+  private cache: { at: number; entries: ResolvedImage[] } | null = null;
 
   constructor(opts: SlideshowServiceOptions) {
     this.configDir = opts.configDir;
     this.getConfig = opts.getConfig;
     this.onWarn = opts.onWarn;
+    this.now = opts.now ?? (() => Date.now());
+    this.cacheTtlMs = opts.cacheTtlMs ?? SLIDESHOW_CACHE_TTL_MS;
+  }
+
+  /** Drop the memoized image list (call after an upload/delete changes it). */
+  invalidate(): void {
+    this.cache = null;
   }
 
   /** The resolved manifest: ordered image ids + playback settings. */
@@ -108,8 +126,25 @@ export class SlideshowService {
     return this.collect().some((e) => e.id === id && e.uploaded);
   }
 
-  /** Build the ordered, deterministic list of resolved images. */
+  /**
+   * The resolved image list, memoized for {@link cacheTtlMs}. Serving an image
+   * (once per interval) and a DELETE (resolve + isUploaded + manifest) would
+   * otherwise each re-walk every source folder synchronously. Uploads/deletes
+   * call {@link invalidate} so a stale list is never returned across a change;
+   * a config edit is picked up within the TTL.
+   */
   private collect(): ResolvedImage[] {
+    const cached = this.cache;
+    if (cached && this.cacheTtlMs > 0 && this.now() - cached.at < this.cacheTtlMs) {
+      return cached.entries;
+    }
+    const entries = this.build();
+    this.cache = { at: this.now(), entries };
+    return entries;
+  }
+
+  /** Build the ordered, deterministic list of resolved images (uncached). */
+  private build(): ResolvedImage[] {
     const config = this.getConfig();
     const out: ResolvedImage[] = [];
 

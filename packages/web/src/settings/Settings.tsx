@@ -739,12 +739,15 @@ function PresetButton({
 function PhotoThumb({ row, col, id }: { row: number; col: number; id: string }): ReactNode {
   const { isFocused, focusAt, activate } = useFocus();
   const focused = isFocused(row, col);
+  // Unique, position-based name so screen readers can tell the delete buttons
+  // apart (they'd otherwise all read "Remove photo").
+  const label = `Remove photo ${col + 1}`;
   return (
     <button
       type="button"
       className={`settings__photo ${focused ? 'is-focused' : ''}`}
-      aria-label="Remove photo"
-      title="Remove photo"
+      aria-label={label}
+      title={label}
       onMouseEnter={() => focusAt({ row, col })}
       onClick={() => activate({ row, col })}
     >

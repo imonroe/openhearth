@@ -598,6 +598,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         request.log.error({ err }, 'slideshow photo write failed');
         return reply.code(500).send({ status: 'write_failed' });
       }
+      slideshow.invalidate(); // the new photo must show up in the returned manifest
       return { status: 'ok', manifest: slideshow.manifest() };
     },
   );
@@ -620,6 +621,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       request.log.error({ err }, 'slideshow photo delete failed');
       return reply.code(500).send({ status: 'delete_failed' });
     }
+    slideshow.invalidate(); // the removed photo must be gone from the returned manifest
     return { status: 'ok', manifest: slideshow.manifest() };
   });
 

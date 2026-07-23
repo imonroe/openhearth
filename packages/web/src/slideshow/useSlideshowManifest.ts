@@ -37,12 +37,25 @@ export function useSlideshowManifest(): SlideshowManifestState {
 
   useEffect(() => {
     const controller = new AbortController();
+    // Guard every state write: aborting a superseded fetch still rejects its
+    // promise, so without this an older (or aborted) response could overwrite a
+    // newer manifest — or the abort's rejection could wrongly flip to empty.
+    let alive = true;
     setLoading(true);
     fetchSlideshowManifest(controller.signal)
-      .then((m) => setManifest(m))
-      .catch(() => setManifest(EMPTY_MANIFEST))
-      .finally(() => setLoading(false));
-    return () => controller.abort();
+      .then((m) => {
+        if (alive) setManifest(m);
+      })
+      .catch(() => {
+        if (alive) setManifest(EMPTY_MANIFEST);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+      controller.abort();
+    };
   }, [nonce]);
 
   return { manifest, loading, reload };
