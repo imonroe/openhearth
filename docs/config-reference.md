@@ -58,6 +58,7 @@ located error.
 | `ui.rows` | list of [row](#ui-row) | _(none)_ | see below |
 | `ui.wallpaper` | [wallpaper](#ui-wallpaper) | _(none)_ | Custom home-screen background. |
 | `ui.screensaver` | [screensaver](#ui-screensaver) | _(on, 5 min)_ | Idle screensaver. |
+| `ui.slideshow` | [slideshow](#ui-slideshow) | _(off)_ | Slideshow / digital photo frame. |
 
 #### `ui` wallpaper
 
@@ -106,6 +107,56 @@ ui:
     timeoutMinutes: 10
     type: aurora
 ```
+
+<a id="ui-slideshow"></a>
+
+#### `ui` slideshow
+
+A slideshow / digital photo frame (#164). It cycles through your photos on the
+TV and can run two ways: as the **idle screensaver** (set `useAsScreensaver:
+true`) and **on demand** from the home-screen header. Images come from two
+sources, combined: photos **uploaded** through the in-app **Settings** modal
+(stored under `config/slideshow/uploads/`) and any host-mapped **folders** you
+declare in `sources`. Full design: [`slideshow-plan.md`](./slideshow-plan.md).
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `useAsScreensaver` | boolean | `false` | Show the slideshow on idle instead of the screensaver. With no images available it falls back to the configured screensaver, so the idle screen is never blank. |
+| `intervalSeconds` | integer `3`–`3600` | `8` | Seconds each image is shown. |
+| `transition` | `cut` \| `fade` \| `crossfade` \| `wipe` | `crossfade` | Animation between images. `cut` is instant; `fade` goes through black; `crossfade` dissolves; `wipe` reveals with a moving edge. |
+| `order` | `sequential` \| `shuffle` | `sequential` | Play in folder/upload order, or shuffle. |
+| `sources` | list of [source](#ui-slideshow-source) | _(none)_ | Host-mapped folders scanned for images. |
+
+<a id="ui-slideshow-source"></a>
+
+Each `sources[]` entry:
+
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `id` | yes | string | Stable id (used to derive image ids). |
+| `label` | no | string | Display label. |
+| `path` | yes | string | Host-mapped path inside the container (e.g. `/photos`). Read-only; scanned for raster images (PNG/JPEG/WebP/GIF). Symlinks that escape the folder are ignored. |
+| `recursive` | no | boolean | Descend into subfolders. Defaults to `false` (top level only). |
+
+```yaml
+ui:
+  slideshow:
+    useAsScreensaver: true
+    intervalSeconds: 10
+    transition: crossfade
+    order: shuffle
+    sources:
+      - id: photos
+        label: Family Photos
+        path: /photos # mount `./my-photos:/photos:ro`
+        recursive: false
+```
+
+> Uploaded photos are stored under `config/slideshow/uploads/` (add or remove
+> them from **Settings**). Folder `sources` are configured here — folders can't
+> be chosen from the sandboxed browser, so the container only ever sees what you
+> mount. Like all image routes, serving is raster-only, path-contained, and
+> `nosniff` (no SVG).
 
 #### `ui` row
 

@@ -6,6 +6,7 @@ import {
   REDACTED,
   uiSettingsPatchSchema,
   wallpaperUploadSchema,
+  slideshowUploadSchema,
   type Config,
 } from './index';
 
@@ -128,6 +129,71 @@ describe('ui.screensaver (#126)', () => {
   });
 });
 
+describe('ui.slideshow (#164)', () => {
+  it('accepts a full slideshow block', () => {
+    expect(
+      validateConfig({
+        ui: {
+          slideshow: {
+            useAsScreensaver: true,
+            intervalSeconds: 12,
+            transition: 'crossfade',
+            order: 'shuffle',
+            sources: [{ id: 'photos', label: 'Family', path: '/photos', recursive: true }],
+          },
+        },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it('accepts a partial/empty slideshow block (every field optional)', () => {
+    expect(validateConfig({ ui: { slideshow: {} } }).ok).toBe(true);
+    expect(validateConfig({ ui: { slideshow: { transition: 'wipe' } } }).ok).toBe(true);
+  });
+
+  it('rejects a non-integer or out-of-range interval with a path-scoped error', () => {
+    expect(validateConfig({ ui: { slideshow: { intervalSeconds: 2 } } }).ok).toBe(false);
+    expect(validateConfig({ ui: { slideshow: { intervalSeconds: 4.5 } } }).ok).toBe(false);
+    const result = validateConfig({ ui: { slideshow: { intervalSeconds: 99999 } } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.some((e) => e.startsWith('ui.slideshow.intervalSeconds'))).toBe(true);
+    }
+  });
+
+  it('rejects an unknown transition, order, and unknown keys (strict)', () => {
+    expect(validateConfig({ ui: { slideshow: { transition: 'spin' } } }).ok).toBe(false);
+    expect(validateConfig({ ui: { slideshow: { order: 'reverse' } } }).ok).toBe(false);
+    expect(validateConfig({ ui: { slideshow: { speed: 'fast' } } }).ok).toBe(false);
+  });
+
+  it('rejects a source missing a required id or path', () => {
+    expect(validateConfig({ ui: { slideshow: { sources: [{ path: '/photos' }] } } }).ok).toBe(
+      false,
+    );
+    expect(validateConfig({ ui: { slideshow: { sources: [{ id: 'photos' }] } } }).ok).toBe(false);
+  });
+});
+
+describe('slideshowUploadSchema (POST /api/v1/slideshow/photos)', () => {
+  it('accepts allowed raster content types with base64 data', () => {
+    for (const content_type of ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const) {
+      expect(slideshowUploadSchema.safeParse({ content_type, data_base64: 'iVBOR' }).success).toBe(
+        true,
+      );
+    }
+  });
+
+  it('rejects SVG (no scriptable image types) and an empty payload', () => {
+    expect(
+      slideshowUploadSchema.safeParse({ content_type: 'image/svg+xml', data_base64: 'x' }).success,
+    ).toBe(false);
+    expect(
+      slideshowUploadSchema.safeParse({ content_type: 'image/png', data_base64: '' }).success,
+    ).toBe(false);
+  });
+});
+
 describe('uiSettingsPatchSchema (PUT /api/v1/ui/settings)', () => {
   it('accepts theme and wallpaper enabled/opacity', () => {
     expect(uiSettingsPatchSchema.safeParse({ theme: 'light' }).success).toBe(true);
@@ -148,6 +214,33 @@ describe('uiSettingsPatchSchema (PUT /api/v1/ui/settings)', () => {
   it('rejects an invalid screensaver patch', () => {
     expect(uiSettingsPatchSchema.safeParse({ screensaver: { type: 'nope' } }).success).toBe(false);
     expect(uiSettingsPatchSchema.safeParse({ screensaver: { timeoutMinutes: -1 } }).success).toBe(
+      false,
+    );
+  });
+
+  it('accepts a slideshow patch but NOT a free-form sources path (#164)', () => {
+    expect(
+      uiSettingsPatchSchema.safeParse({
+        slideshow: {
+          useAsScreensaver: true,
+          intervalSeconds: 15,
+          transition: 'fade',
+          order: 'shuffle',
+        },
+      }).success,
+    ).toBe(true);
+    // sources (folder paths) are YAML-only, never persisted from the browser.
+    expect(
+      uiSettingsPatchSchema.safeParse({ slideshow: { sources: [{ id: 'x', path: '/etc' }] } })
+        .success,
+    ).toBe(false);
+  });
+
+  it('rejects an invalid slideshow patch', () => {
+    expect(uiSettingsPatchSchema.safeParse({ slideshow: { transition: 'nope' } }).success).toBe(
+      false,
+    );
+    expect(uiSettingsPatchSchema.safeParse({ slideshow: { intervalSeconds: 1 } }).success).toBe(
       false,
     );
   });
