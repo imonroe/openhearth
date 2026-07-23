@@ -21,7 +21,13 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { parse as parseYaml, parseDocument, isMap } from 'yaml';
 import chokidar, { type FSWatcher } from 'chokidar';
-import { validateConfig, type Config, type ScreensaverType } from '@openhearth/shared';
+import {
+  validateConfig,
+  type Config,
+  type ScreensaverType,
+  type SlideshowTransition,
+  type SlideshowOrder,
+} from '@openhearth/shared';
 
 export interface ConfigServiceOptions {
   /** Directory holding the host-mapped YAML (defaults to `/config`). */
@@ -75,6 +81,13 @@ export interface UiSettingsPatch {
     enabled?: boolean;
     timeoutMinutes?: number;
     type?: ScreensaverType;
+  };
+  /** Slideshow settings the UI can persist (#164). `sources` is YAML-only. */
+  slideshow?: {
+    useAsScreensaver?: boolean;
+    intervalSeconds?: number;
+    transition?: SlideshowTransition;
+    order?: SlideshowOrder;
   };
 }
 
@@ -232,6 +245,17 @@ export class ConfigService extends EventEmitter {
         doc.setIn(['ui', 'screensaver', 'timeoutMinutes'], s.timeoutMinutes);
       }
       if (s.type !== undefined) doc.setIn(['ui', 'screensaver', 'type'], s.type);
+    }
+    if (patch.slideshow) {
+      const sl = patch.slideshow;
+      if (sl.useAsScreensaver !== undefined) {
+        doc.setIn(['ui', 'slideshow', 'useAsScreensaver'], sl.useAsScreensaver);
+      }
+      if (sl.intervalSeconds !== undefined) {
+        doc.setIn(['ui', 'slideshow', 'intervalSeconds'], sl.intervalSeconds);
+      }
+      if (sl.transition !== undefined) doc.setIn(['ui', 'slideshow', 'transition'], sl.transition);
+      if (sl.order !== undefined) doc.setIn(['ui', 'slideshow', 'order'], sl.order);
     }
 
     // Atomic replace so a reader (or the watcher) never sees a half-written file.

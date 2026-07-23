@@ -24,6 +24,21 @@ ui:
     enabled: true
     timeoutMinutes: 5 # idle minutes before it starts (1–240)
     type: aurora # drifting colour fields with a wandering clock
+  # Slideshow / digital photo frame (#164). Cycles your photos on the TV — as the
+  # idle screensaver (set useAsScreensaver) and/or on demand from the home header.
+  # Images come from photos uploaded in Settings (stored under config/slideshow/
+  # uploads/) plus any folders declared below. Editable here or in-app Settings.
+  slideshow:
+    useAsScreensaver: false # show the slideshow instead of the screensaver on idle
+    intervalSeconds: 8 # seconds per image (3–3600)
+    transition: crossfade # cut | fade | crossfade | wipe
+    order: sequential # sequential | shuffle
+    # Host-mapped folders to scan for images (mount them read-only in compose):
+    # sources:
+    #   - id: photos
+    #     label: Family Photos
+    #     path: /photos # e.g. mount `./my-photos:/photos:ro`
+    #     recursive: false # scan subfolders too
 
 library:
   sources:

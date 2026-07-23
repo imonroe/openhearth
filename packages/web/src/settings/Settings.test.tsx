@@ -16,6 +16,19 @@ vi.mock('../api', () => ({
     config: { ui: { wallpaper: { enabled: true, image: 'wallpaper/background-1.png' } } } as Config,
   })),
   deleteWallpaper: vi.fn(async () => ({ config: { ui: {} } as Config, errors: [], valid: true })),
+  fetchSlideshowManifest: vi.fn(async () => ({
+    images: [],
+    settings: { intervalSeconds: 8, transition: 'crossfade', order: 'sequential' },
+  })),
+  uploadSlideshowPhoto: vi.fn(async () => ({
+    images: [{ id: 'p1', uploaded: true }],
+    settings: { intervalSeconds: 8, transition: 'crossfade', order: 'sequential' },
+  })),
+  deleteSlideshowPhoto: vi.fn(async () => ({
+    images: [],
+    settings: { intervalSeconds: 8, transition: 'crossfade', order: 'sequential' },
+  })),
+  slideshowImageUrl: (id: string) => `/api/v1/slideshow/image/${id}`,
 }));
 
 const keyMap = buildKeyMap();
@@ -146,5 +159,47 @@ describe('Settings modal (#118)', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByText('Done'));
     expect(onBack).toHaveBeenCalledTimes(2);
+  });
+
+  it('toggles "use slideshow as screensaver" from row 7 (#164)', async () => {
+    renderSettings();
+    for (let i = 0; i < 7; i++) fireEvent.keyDown(window, { key: 'ArrowDown' }); // → row 7
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({
+        slideshow: { useAsScreensaver: true },
+      }),
+    );
+  });
+
+  it('selects a transition from the slideshow picker (#164)', async () => {
+    renderSettings();
+    for (let i = 0; i < 9; i++) fireEvent.keyDown(window, { key: 'ArrowDown' }); // → row 9 col 0 (cut)
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // col 1 = fade
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // col 2 = crossfade
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({ slideshow: { transition: 'crossfade' } }),
+    );
+  });
+
+  it('sets shuffle order from row 10 (#164)', async () => {
+    renderSettings();
+    for (let i = 0; i < 10; i++) fireEvent.keyDown(window, { key: 'ArrowDown' }); // → row 10 col 0
+    fireEvent.keyDown(window, { key: 'ArrowRight' }); // col 1 = shuffle
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() =>
+      expect(api.updateUiSettings).toHaveBeenCalledWith({ slideshow: { order: 'shuffle' } }),
+    );
+  });
+
+  it('uploads a slideshow photo through the photo input (#164)', async () => {
+    renderSettings();
+    const input = document.querySelector('.settings__file-input--photo') as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], 'p.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(api.uploadSlideshowPhoto).toHaveBeenCalledWith('image/png', expect.any(String)),
+    );
   });
 });

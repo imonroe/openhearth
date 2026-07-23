@@ -27,6 +27,9 @@ services:
       - ./config:/config # host-mapped YAML (read/write, source of truth)
       - media:/media:ro # SMB share \\192.168.1.223\Ian\Media\Video (see volumes: below)
       - ./cache:/cache # derived index/artwork/transcode cache (disposable)
+      # Optional slideshow / photo-frame source (#164): mount a folder of images
+      # read-only, then reference it under ui.slideshow.sources in openhearth.yaml.
+      # - ./photos:/photos:ro
     environment:
       - TMDB_API_KEY=${TMDB_API_KEY:-} # optional; app is fully usable without it
       # Config hot-reload polls by default — native fs events don't cross bind

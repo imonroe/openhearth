@@ -11,6 +11,7 @@
 import { existsSync, createReadStream, realpathSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { join, resolve, sep, extname } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, {
@@ -26,6 +27,8 @@ import {
   uiSettingsPatchSchema,
   wallpaperUploadSchema,
   WALLPAPER_CONTENT_TYPES,
+  slideshowUploadSchema,
+  SLIDESHOW_IMAGE_CONTENT_TYPES,
   commandMessageSchema,
   makeStateEvent,
   LIBRARY_ITEM_KINDS,
@@ -42,6 +45,7 @@ import {
 import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
 import { ControlService } from './core/ControlService.js';
+import { SlideshowService } from './core/SlideshowService.js';
 import type { LibraryService } from './core/LibraryService.js';
 import type { MediaStreamer } from './core/TranscodeService.js';
 import { SubtitleService } from './core/SubtitleService.js';
@@ -76,6 +80,9 @@ const BUNDLED_ICON_TYPES: Record<string, string> = {
 const MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
 const WALLPAPER_DIR = 'wallpaper';
 
+// Slideshow photo upload (#164): cap each image at 20 MiB, same as wallpaper.
+const MAX_SLIDESHOW_IMAGE_BYTES = 20 * 1024 * 1024;
+
 /**
  * Cheap magic-byte check that decoded bytes actually match the declared image
  * type. Stops a client storing a mislabeled/non-image file under an image
@@ -96,6 +103,11 @@ function imageBytesMatch(ext: string, buf: Buffer): boolean {
       buf.toString('ascii', 0, 4) === 'RIFF' &&
       buf.toString('ascii', 8, 12) === 'WEBP'
     );
+  }
+  if (ext === 'gif') {
+    // Full 6-byte signature — "GIF" alone would let a non-GIF payload through.
+    const sig = buf.length >= 6 ? buf.toString('ascii', 0, 6) : '';
+    return sig === 'GIF87a' || sig === 'GIF89a';
   }
   return false;
 }
@@ -282,6 +294,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
   const control = options.controlService ?? new ControlService();
+  const slideshow = new SlideshowService({
+    configDir: configService.configDir,
+    getConfig: () => configService.config.ui?.slideshow,
+  });
   const subtitles = streamer ? new SubtitleService(streamer) : null;
 
   // Typed separately so the custom serializer doesn't skew Fastify's server-type
@@ -517,6 +533,97 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       // Directory may not exist — nothing to remove.
     }
     return { status: 'ok', config: redactConfig(snap.config) };
+  });
+
+  // --- API: slideshow / digital photo frame (#164) -----------------------
+  // The image set is (configured folders ∪ uploaded photos), resolved fresh on
+  // each request from config + filesystem. Empty is a valid result (never 500).
+  app.get('/api/v1/slideshow/manifest', async () => {
+    return slideshow.manifest();
+  });
+
+  // Serve one image by opaque id with the same defense-in-depth as the
+  // wallpaper/icon routes (raster-only, two-stage path containment, nosniff).
+  // The id maps back to a (baseDir, relPath) server-side, so a client never
+  // supplies a path: an unknown id 404s, a containment escape 400s.
+  app.get<{ Params: { id: string } }>('/api/v1/slideshow/image/:id', async (request, reply) => {
+    const resolved = slideshow.resolveImage(request.params.id);
+    if (!resolved) return reply.code(404).send({ status: 'not_found' });
+    reply.header('Cache-Control', 'public, max-age=86400');
+    return sendIconFile(reply, resolved.baseDir, resolved.relPath, ICON_TYPES);
+  });
+
+  // Upload a photo (base64 JSON). Accumulates under config/slideshow/uploads/ —
+  // unlike wallpaper it appends rather than replacing. Same validation as the
+  // wallpaper upload (size cap, magic-byte match, atomic temp-file+rename).
+  app.post(
+    '/api/v1/slideshow/photos',
+    { bodyLimit: Math.ceil(MAX_SLIDESHOW_IMAGE_BYTES * 1.4) + 1024 },
+    async (request, reply) => {
+      const parsed = slideshowUploadSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          status: 'bad_request',
+          errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+        });
+      }
+      const ext = SLIDESHOW_IMAGE_CONTENT_TYPES[parsed.data.content_type];
+      const buf = Buffer.from(parsed.data.data_base64, 'base64');
+      if (buf.length === 0) {
+        return reply.code(400).send({ status: 'bad_request', errors: ['empty image'] });
+      }
+      if (buf.length > MAX_SLIDESHOW_IMAGE_BYTES) {
+        return reply.code(413).send({
+          status: 'payload_too_large',
+          errors: [`image exceeds ${Math.round(MAX_SLIDESHOW_IMAGE_BYTES / (1024 * 1024))} MB`],
+        });
+      }
+      if (!imageBytesMatch(ext, buf)) {
+        return reply.code(415).send({
+          status: 'unsupported_media_type',
+          errors: ['image bytes do not match the declared content type'],
+        });
+      }
+
+      const dir = slideshow.uploadsDir();
+      // Timestamp + random suffix so rapid uploads never collide and the id is unique.
+      const name = `photo-${Date.now()}-${randomBytes(4).toString('hex')}.${ext}`;
+      const dest = join(dir, name);
+      const tmp = `${dest}.tmp`;
+      try {
+        await fsp.mkdir(dir, { recursive: true });
+        await fsp.writeFile(tmp, buf);
+        await fsp.rename(tmp, dest);
+      } catch (err) {
+        await fsp.rm(tmp, { force: true }).catch(() => undefined);
+        request.log.error({ err }, 'slideshow photo write failed');
+        return reply.code(500).send({ status: 'write_failed' });
+      }
+      slideshow.invalidate(); // the new photo must show up in the returned manifest
+      return { status: 'ok', manifest: slideshow.manifest() };
+    },
+  );
+
+  // Delete an uploaded photo by id. Folder-sourced images are read-only (400):
+  // the operator manages those files on the host.
+  app.delete<{ Params: { id: string } }>('/api/v1/slideshow/photos/:id', async (request, reply) => {
+    const id = request.params.id;
+    const resolved = slideshow.resolveImage(id);
+    if (!resolved) return reply.code(404).send({ status: 'not_found' });
+    if (!slideshow.isUploaded(id)) {
+      return reply.code(400).send({
+        status: 'bad_request',
+        errors: ['only uploaded photos can be deleted; folder sources are read-only'],
+      });
+    }
+    try {
+      await fsp.rm(join(resolved.baseDir, resolved.relPath), { force: true });
+    } catch (err) {
+      request.log.error({ err }, 'slideshow photo delete failed');
+      return reply.code(500).send({ status: 'delete_failed' });
+    }
+    slideshow.invalidate(); // the removed photo must be gone from the returned manifest
+    return { status: 'ok', manifest: slideshow.manifest() };
   });
 
   // --- API: service tile catalog (ordered + grouped) ---------------------

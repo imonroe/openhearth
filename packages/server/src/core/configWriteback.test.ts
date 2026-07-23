@@ -141,6 +141,41 @@ describe('ConfigService.applyUiSettings (#118)', () => {
     await fresh.stop();
   });
 
+  it('writes slideshow settings and preserves comments + unrelated keys (#164)', async () => {
+    write(
+      'openhearth.yaml',
+      ['# hand-edited', 'ui:', '  title: Home # the heading', ''].join('\n'),
+    );
+    svc = new ConfigService({ configDir: dir });
+    await svc.load();
+
+    const snap = await svc.applyUiSettings({
+      slideshow: {
+        useAsScreensaver: true,
+        intervalSeconds: 12,
+        transition: 'wipe',
+        order: 'shuffle',
+      },
+    });
+    expect(snap.config.ui?.slideshow).toEqual({
+      useAsScreensaver: true,
+      intervalSeconds: 12,
+      transition: 'wipe',
+      order: 'shuffle',
+    });
+    expect(snap.config.ui?.title).toBe('Home');
+
+    const text = read('openhearth.yaml');
+    expect(text).toContain('# hand-edited');
+    expect(text).toContain('# the heading');
+    expect(text).toContain('transition: wipe');
+
+    const fresh = new ConfigService({ configDir: dir });
+    const reloaded = await fresh.load();
+    expect(reloaded.config.ui?.slideshow?.transition).toBe('wipe');
+    await fresh.stop();
+  });
+
   it('refuses to write when the existing file has YAML syntax errors', async () => {
     write('openhearth.yaml', 'server:\n  port: [unclosed\n');
     svc = new ConfigService({ configDir: dir });
