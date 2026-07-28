@@ -12,7 +12,12 @@
  * phone remote).
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActionName, LibraryItem, SubtitleTrack } from '@openhearth/shared';
+import {
+  PLAYBACK_FINISHED_THRESHOLD,
+  type ActionName,
+  type LibraryItem,
+  type SubtitleTrack,
+} from '@openhearth/shared';
 import {
   libraryStreamUrl,
   fetchResume,
@@ -29,7 +34,7 @@ type Dispatch = (action: ActionName, params?: Record<string, unknown>) => void;
 type Phase = 'loading' | 'prompt' | 'playing';
 
 const SEEK_STEP_SEC = 10;
-const SAVE_INTERVAL_MS = 5000;
+export const SAVE_INTERVAL_MS = 5000;
 /** Hide the player chrome after this long with no input while playing. */
 export const CHROME_IDLE_MS = 3000;
 
@@ -57,6 +62,9 @@ export function Player({
   onHome: () => void;
 }): ReactNode {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Once this playback crosses the finished threshold we mark the item watched a
+  // single time (drives "Next Up" #155). Reset when the item changes.
+  const markedWatchedRef = useRef(false);
   const [phase, setPhase] = useState<Phase>('loading');
   const [resumeSec, setResumeSec] = useState(0);
   const [promptIdx, setPromptIdx] = useState(0); // 0 = Resume, 1 = Start over
@@ -106,6 +114,7 @@ export function Player({
 
   // Load any saved resume position, then either prompt or start from the top.
   useEffect(() => {
+    markedWatchedRef.current = false; // new item — allow marking it watched again
     const controller = new AbortController();
     fetchResume(item.id, controller.signal)
       .then((r) => {
@@ -126,15 +135,29 @@ export function Player({
     return () => controller.abort();
   }, [item.id]);
 
-  // Persist position periodically while actually playing.
+  // Persist position periodically while actually playing. Once playback passes
+  // the finished threshold, mark the item watched once so "Next Up" advances even
+  // if the user backs out before the `ended` event (#155) — the server drops such
+  // near-finished items from Continue Watching, so this keeps the two rows in sync.
   useEffect(() => {
     if (phase !== 'playing') return;
     const iv = setInterval(() => {
       const v = videoRef.current;
-      if (v && !v.paused && v.currentTime > 1) saveResume(item.id, v.currentTime);
+      if (!v || v.paused || v.currentTime <= 1) return;
+      saveResume(item.id, v.currentTime);
+      const total =
+        serverDuration > 0 ? serverDuration : Number.isFinite(v.duration) ? v.duration : 0;
+      if (
+        !markedWatchedRef.current &&
+        total > 0 &&
+        v.currentTime / total >= PLAYBACK_FINISHED_THRESHOLD
+      ) {
+        markedWatchedRef.current = true;
+        markWatched(item.id);
+      }
     }, SAVE_INTERVAL_MS);
     return () => clearInterval(iv);
-  }, [phase, item.id]);
+  }, [phase, item.id, serverDuration]);
 
   // Auto-hide the chrome (OSD) during playback so it doesn't sit over the film.
   // Any mouse movement or key press reveals it and restarts the idle timer; while

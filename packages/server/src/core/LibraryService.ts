@@ -14,12 +14,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { ContinueWatchingEntry, LibraryItem, LibrarySource } from '@openhearth/shared';
+import {
+  PLAYBACK_FINISHED_THRESHOLD,
+  type ContinueWatchingEntry,
+  type LibraryItem,
+  type LibrarySource,
+} from '@openhearth/shared';
 import { parseMediaPath, type SourceKind } from './libraryNaming.js';
 import type { CacheStore } from './CacheStore.js';
-
-/** Fraction of a known duration past which an item counts as finished (#155). */
-export const FINISHED_THRESHOLD = 0.95;
 
 /** Recognized media file extensions (lower-case, no dot). */
 export const MEDIA_EXTENSIONS = new Set([
@@ -135,18 +137,19 @@ export class LibraryService {
 
   /**
    * "Continue Watching" (#155): in-progress items, most-recently-watched first.
-   * An item that's effectively finished (watched past {@link FINISHED_THRESHOLD}
-   * of a known duration) is dropped — the resume row lingers until the video
-   * fires `ended`, so we don't want a 99%-watched movie clinging to the row.
+   * An item that's effectively finished (watched past
+   * {@link PLAYBACK_FINISHED_THRESHOLD} of a known duration) is dropped — the
+   * resume row lingers until the player marks it watched / it fires `ended`, so a
+   * 99%-watched movie shouldn't cling to the row. We scan all resume rows (they're
+   * naturally bounded — cleared on finish) and take the first `limit` that survive
+   * the filter, so a run of finished items can't leave the row short.
    */
   listContinueWatching(limit: number): ContinueWatchingEntry[] {
-    // Over-fetch so filtering finished items still fills the row.
-    const rows = this.store.listResumePositions(Math.max(limit * 2, limit + 10));
     const out: ContinueWatchingEntry[] = [];
-    for (const r of rows) {
+    for (const r of this.store.listResumePositions()) {
       const dur = r.item.duration_sec ?? null;
       const progress = dur && dur > 0 ? Math.min(1, r.position_sec / dur) : null;
-      if (progress != null && progress >= FINISHED_THRESHOLD) continue;
+      if (progress != null && progress >= PLAYBACK_FINISHED_THRESHOLD) continue;
       out.push({ item: r.item, position_sec: r.position_sec, updated_at: r.updated_at, progress });
       if (out.length >= limit) break;
     }

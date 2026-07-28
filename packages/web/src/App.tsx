@@ -3,7 +3,13 @@
  * shell under the focus engine.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ActionName, Config, LibraryItem, ServiceCatalog } from '@openhearth/shared';
+import {
+  HOME_ROW_DEFAULT,
+  type ActionName,
+  type Config,
+  type LibraryItem,
+  type ServiceCatalog,
+} from '@openhearth/shared';
 import {
   fetchConfig,
   fetchServices,
@@ -58,9 +64,16 @@ function librarySources(config: Config): string[] {
   return [...new Set(ids)];
 }
 
-/** Whether the config asks for a given derived row type (#155). */
-function hasRowType(config: Config, type: 'continue_watching' | 'next_up'): boolean {
-  return (config.ui?.rows ?? []).some((r) => r.type === type);
+/**
+ * The number of tiles to fetch for a derived row type (#155): the largest `limit`
+ * across the configured rows of that type, or the default. Returns 0 when the
+ * type isn't configured (so we skip the fetch entirely).
+ */
+function rowFetchLimit(config: Config, type: 'continue_watching' | 'next_up'): number {
+  const rows = (config.ui?.rows ?? []).filter((r) => r.type === type);
+  if (rows.length === 0) return 0;
+  const limits = rows.map((r) => r.limit).filter((n): n is number => typeof n === 'number');
+  return limits.length ? Math.max(...limits) : HOME_ROW_DEFAULT;
 }
 
 /** How often the kiosk re-fetches config to pick up a server hot-reload (FR-R4). */
@@ -110,9 +123,11 @@ export function App({
         // state. Fetched only when the config asks for them, and each degrades to
         // empty on failure (a broken derived row must never fail the home load).
         const dynamic: HomeDynamicRows = {};
+        const continueLimit = rowFetchLimit(config.config, 'continue_watching');
+        const nextUpLimit = rowFetchLimit(config.config, 'next_up');
         await Promise.all([
-          hasRowType(config.config, 'continue_watching')
-            ? fetchContinueWatching(controller.signal)
+          continueLimit > 0
+            ? fetchContinueWatching(controller.signal, continueLimit)
                 .then((r) => {
                   dynamic.continueWatching = r.items;
                 })
@@ -122,8 +137,8 @@ export function App({
                   }
                 })
             : Promise.resolve(),
-          hasRowType(config.config, 'next_up')
-            ? fetchNextUp(controller.signal)
+          nextUpLimit > 0
+            ? fetchNextUp(controller.signal, nextUpLimit)
                 .then((r) => {
                   dynamic.nextUp = r.items;
                 })

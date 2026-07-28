@@ -87,6 +87,14 @@ export const HOME_ROW_DEFAULT = 20;
 export const HOME_ROW_MAX = 100;
 
 /**
+ * Fraction of a known duration at/after which an item counts as finished (#155).
+ * Shared so the player (which marks an item watched once it crosses this) and the
+ * server (which drops finished items from "Continue Watching") agree — otherwise
+ * an item stopped in the 95–100% band could fall through both rows.
+ */
+export const PLAYBACK_FINISHED_THRESHOLD = 0.95;
+
+/**
  * One "Continue Watching" entry (#155): an in-progress item plus its saved
  * position. `progress` is the fraction watched (0–1) when a probed duration is
  * known, else null (duration lands with ffprobe enrichment, #34).
