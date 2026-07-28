@@ -223,6 +223,38 @@ describe('App shell', () => {
     expect(screen.getByText('Netflix')).toBeTruthy();
   });
 
+  it('renders a Continue Watching row from /home/continue (#155)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        const body = url.includes('/api/v1/services')
+          ? mockCatalog()
+          : url.includes('/api/v1/home/continue')
+            ? {
+                items: [
+                  {
+                    item: libItem({ id: 'm1', title: 'Arrival', year: 2016 }),
+                    position_sec: 60,
+                    updated_at: 1,
+                    progress: 0.4,
+                  },
+                ],
+              }
+            : url.includes('/api/v1/home/next-up')
+              ? { items: [] }
+              : {
+                  valid: true,
+                  errors: [],
+                  config: { ui: { rows: [{ type: 'continue_watching' }] } },
+                };
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+      }),
+    );
+    render(<App />);
+    expect(await screen.findByText('Continue Watching')).toBeTruthy();
+    expect(screen.getByText('Arrival')).toBeTruthy();
+  });
+
   it('browses the library row with real tiles (movies + aggregated show)', async () => {
     render(<App />);
     await screen.findByText('Netflix');

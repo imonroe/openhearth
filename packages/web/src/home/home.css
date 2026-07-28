@@ -181,6 +181,7 @@
   flex: 0 0 auto;
 }
 .tile__frame {
+  position: relative; /* anchor the Continue Watching progress bar (#155) */
   background: var(--color-tile-bg);
   border: var(--focus-ring-width) solid transparent; /* reserve space so focus doesn't shift layout */
   overflow: hidden;
@@ -222,6 +223,20 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+/* Continue Watching progress bar (#155): a thin amber fill along the poster's
+   bottom edge showing how far through the item the user is. */
+.tile__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.tile__progress-fill {
+  height: 100%;
+  background: var(--color-focus-ring, #f5a623);
 }
 /* Service logos (the bundled icon set + most remote service icons) have varied
    aspect ratios and transparent backgrounds, so contain them with padding rather

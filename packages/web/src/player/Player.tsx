@@ -19,6 +19,7 @@ import {
   fetchPlaybackInfo,
   saveResume,
   clearResume,
+  markWatched,
   fetchSubtitles,
   subtitleTrackUrl,
 } from '../api';
@@ -361,6 +362,9 @@ export function Player({
         onPlay={() => setPaused(false)}
         onPause={() => setPaused(true)}
         onEnded={() => {
+          // Played to the end: forget the resume point and record it watched so
+          // "Next Up" can surface the following episode (#155).
+          markWatched(item.id);
           clearResume(item.id);
           onExit();
         }}

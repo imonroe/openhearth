@@ -10,6 +10,7 @@ import { ServiceTileView } from './ServiceTileView';
 import { LibraryTileView } from './LibraryTileView';
 import { SeeAllTileView } from './SeeAllTileView';
 import { RowStrip } from './RowStrip';
+import { HomeMediaTile, mediaSubLabel } from './HomeMediaTile';
 import { entryId } from '../library/libraryModel';
 
 export function Home({
@@ -72,6 +73,29 @@ export function Home({
                         ))}
                       </>
                     )
+                  ) : row.kind === 'continue' ? (
+                    row.entries.map((entry, col) => (
+                      <HomeMediaTile
+                        key={entry.item.id}
+                        row={rowIndex}
+                        col={col}
+                        title={entry.item.title}
+                        sub={mediaSubLabel(entry.item)}
+                        artworkUrl={entry.item.artwork_url}
+                        progress={entry.progress}
+                      />
+                    ))
+                  ) : row.kind === 'nextup' ? (
+                    row.entries.map((item, col) => (
+                      <HomeMediaTile
+                        key={item.id}
+                        row={rowIndex}
+                        col={col}
+                        title={item.title}
+                        sub={mediaSubLabel(item)}
+                        artworkUrl={item.artwork_url}
+                      />
+                    ))
                   ) : null}
                 </RowStrip>
               </section>

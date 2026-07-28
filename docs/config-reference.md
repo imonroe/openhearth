@@ -160,19 +160,37 @@ ui:
 
 #### `ui` row
 
-Each row renders either the service grid or a library shelf, in order.
+Each row renders a service grid, a library shelf, or a derived row, in order.
 
 | Field | Required | Type | Notes |
 |---|---|---|---|
-| `type` | yes | `services` \| `library` | What the row renders. |
+| `type` | yes | `services` \| `library` \| `continue_watching` \| `next_up` | What the row renders. |
 | `group` | no | string | For `type: services` — which service `group` to show. |
 | `source` | no | string | For `type: library` — which `library.sources[].id` to show. |
+| `title` | no | string | Override the row heading (for `continue_watching`/`next_up`). |
+| `limit` | no | integer `1`–`100` | Max tiles for `continue_watching`/`next_up`. |
+
+**Continue Watching / Next Up** (#155) are derived from your **local** resume and
+watch history — no telemetry, nothing leaves the box:
+
+- `continue_watching` — items you've started but not finished, most-recently-watched
+  first. Selecting one jumps straight into the player (which offers resume vs. start
+  over). An item watched to the end (or past ~95% of a known duration) drops off.
+- `next_up` — the next unwatched episode for each series you've made progress in.
+  An episode is recorded "watched" when it plays to the end; Next Up then surfaces
+  the following episode (skipping any episode you're already mid-way through — that
+  one shows in Continue Watching instead).
+
+Both rows **only appear when they have something to show** — a cold `cache/` or
+nothing in progress simply hides them (they're rebuilt from the disposable cache).
 
 ```yaml
 ui:
   title: OpenHearth
   theme: dark
   rows:
+    - { type: continue_watching }
+    - { type: next_up, title: Up Next, limit: 10 }
     - { type: services, group: Streaming }
     - { type: library, source: movies }
 ```

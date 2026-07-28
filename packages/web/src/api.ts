@@ -6,8 +6,10 @@ import {
   PROTOCOL_VERSION,
   type ActionName,
   type Config,
+  type ContinueWatchingResponse,
   type LibraryListResponse,
   type MediaItem,
+  type NextUpResponse,
   type PlaybackInfo,
   type ResumePosition,
   type ServiceCatalog,
@@ -53,6 +55,30 @@ export async function fetchLibrary(
     throw new Error(`GET /api/v1/library failed: ${res.status}`);
   }
   return (await res.json()) as LibraryListResponse;
+}
+
+/** Fetch the "Continue Watching" row entries (in-progress items) (#155). */
+export async function fetchContinueWatching(
+  signal?: AbortSignal,
+  limit = 20,
+): Promise<ContinueWatchingResponse> {
+  const res = await fetch(`/api/v1/home/continue?limit=${limit}`, { signal });
+  if (!res.ok) throw new Error(`GET /api/v1/home/continue failed: ${res.status}`);
+  return (await res.json()) as ContinueWatchingResponse;
+}
+
+/** Fetch the "Next Up" row items (next unwatched episode per series) (#155). */
+export async function fetchNextUp(signal?: AbortSignal, limit = 20): Promise<NextUpResponse> {
+  const res = await fetch(`/api/v1/home/next-up?limit=${limit}`, { signal });
+  if (!res.ok) throw new Error(`GET /api/v1/home/next-up failed: ${res.status}`);
+  return (await res.json()) as NextUpResponse;
+}
+
+/** Mark an item watched/completed (fire-and-forget) — drives "Next Up" (#155). */
+export function markWatched(id: string): void {
+  void fetch(`/api/v1/library/${encodeURIComponent(id)}/watched`, { method: 'POST' }).catch(
+    (err: unknown) => console.error('OpenHearth: mark watched failed', err),
+  );
 }
 
 /** URL for an item's playable stream; `startSec` offsets a transcode (?t=). */
