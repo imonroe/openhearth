@@ -14,9 +14,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { LibraryItem, LibrarySource } from '@openhearth/shared';
+import type { ContinueWatchingEntry, LibraryItem, LibrarySource } from '@openhearth/shared';
 import { parseMediaPath, type SourceKind } from './libraryNaming.js';
 import type { CacheStore } from './CacheStore.js';
+
+/** Fraction of a known duration past which an item counts as finished (#155). */
+export const FINISHED_THRESHOLD = 0.95;
 
 /** Recognized media file extensions (lower-case, no dot). */
 export const MEDIA_EXTENSIONS = new Set([
@@ -123,6 +126,42 @@ export class LibraryService {
   /** Forget an item's resume position (finished / restart from 0). */
   clearResume(id: string): void {
     this.store.clearResumePosition(id);
+  }
+
+  /** Record that an item played to the end (#155) — drives "Next Up". */
+  markWatched(id: string): void {
+    this.store.markWatched(id, this.now());
+  }
+
+  /**
+   * "Continue Watching" (#155): in-progress items, most-recently-watched first.
+   * An item that's effectively finished (watched past {@link FINISHED_THRESHOLD}
+   * of a known duration) is dropped — the resume row lingers until the video
+   * fires `ended`, so we don't want a 99%-watched movie clinging to the row.
+   */
+  listContinueWatching(limit: number): ContinueWatchingEntry[] {
+    // Over-fetch so filtering finished items still fills the row.
+    const rows = this.store.listResumePositions(Math.max(limit * 2, limit + 10));
+    const out: ContinueWatchingEntry[] = [];
+    for (const r of rows) {
+      const dur = r.item.duration_sec ?? null;
+      const progress = dur && dur > 0 ? Math.min(1, r.position_sec / dur) : null;
+      if (progress != null && progress >= FINISHED_THRESHOLD) continue;
+      out.push({ item: r.item, position_sec: r.position_sec, updated_at: r.updated_at, progress });
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
+
+  /**
+   * "Next Up" (#155): the next unwatched episode for each series the user has
+   * made progress in, most-recent series first. See {@link computeNextUp}.
+   */
+  listNextUp(limit: number): LibraryItem[] {
+    const episodes = this.store.listLibraryItems({ kind: 'episode' });
+    const watched = this.store.listWatched();
+    const inProgress = new Set(this.store.listResumePositions().map((r) => r.item.id));
+    return computeNextUp(episodes, watched, inProgress).slice(0, limit);
   }
 
   private scanSource(source: LibrarySource): SourceScanResult {
@@ -263,4 +302,60 @@ export class LibraryService {
 /** Stable id for an item: a hash of source id + source-relative path. */
 export function itemId(sourceId: string, relPath: string): string {
   return createHash('sha1').update(`${sourceId}\0${relPath}`).digest('hex');
+}
+
+/** Series identity for grouping episodes: source + show title (the show key). */
+function seriesKey(ep: LibraryItem): string {
+  return `${ep.source_id}\0${ep.title}`;
+}
+
+/** Order episodes by season then episode (missing season → 1, missing ep → 0). */
+function compareEpisodes(a: LibraryItem, b: LibraryItem): number {
+  const sa = a.season ?? 1;
+  const sb = b.season ?? 1;
+  if (sa !== sb) return sa - sb;
+  return (a.episode ?? 0) - (b.episode ?? 0);
+}
+
+/**
+ * Compute "Next Up" (#155): for each series where the user has finished at least
+ * one episode, the episode immediately after the highest watched one — unless
+ * that next episode is already in progress (Continue Watching covers it) or the
+ * series is finished. Series are ordered by their most-recent watch, newest
+ * first. Pure and deterministic for unit testing.
+ */
+export function computeNextUp(
+  episodes: readonly LibraryItem[],
+  watchedAt: ReadonlyMap<string, number>,
+  inProgress: ReadonlySet<string>,
+): LibraryItem[] {
+  const groups = new Map<string, LibraryItem[]>();
+  for (const ep of episodes) {
+    const key = seriesKey(ep);
+    const list = groups.get(key);
+    if (list) list.push(ep);
+    else groups.set(key, [ep]);
+  }
+
+  const results: Array<{ ep: LibraryItem; recency: number }> = [];
+  for (const eps of groups.values()) {
+    const sorted = [...eps].sort(compareEpisodes);
+    let lastWatched = -1;
+    let recency = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const ts = watchedAt.get(sorted[i]!.id);
+      if (ts !== undefined) {
+        lastWatched = i;
+        recency = Math.max(recency, ts);
+      }
+    }
+    if (lastWatched === -1) continue; // series not started
+    const candidate = sorted[lastWatched + 1];
+    if (!candidate) continue; // finished the series
+    if (inProgress.has(candidate.id) || watchedAt.has(candidate.id)) continue;
+    results.push({ ep: candidate, recency });
+  }
+
+  results.sort((a, b) => b.recency - a.recency);
+  return results.map((r) => r.ep);
 }
