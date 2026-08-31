@@ -11,6 +11,11 @@ ui:
   title: OpenHearth
   theme: dark # dark | light
   rows: # ordered layout of the home screen
+    # Continue Watching / Next Up (#155): derived from your local resume + watch
+    # history. They render only when there's something to show (a cold cache or
+    # nothing in progress simply hides them). Optional `title:` and `limit:`.
+    - { type: continue_watching }
+    - { type: next_up }
     # One services row per group used in the catalog (services.yaml +
     # services.d/*). A tile only renders if its `group` has a row here.
     - { type: services, group: Streaming }

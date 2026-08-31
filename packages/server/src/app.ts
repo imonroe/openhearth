@@ -34,6 +34,8 @@ import {
   LIBRARY_ITEM_KINDS,
   LIBRARY_PAGE_DEFAULT,
   LIBRARY_PAGE_MAX,
+  HOME_ROW_DEFAULT,
+  HOME_ROW_MAX,
   resumeUpdateSchema,
   mediaItemFromLibraryItem,
   type EventMessage,
@@ -886,6 +888,38 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     libraryService?.clearResume(request.params.id);
     return { status: 'ok' };
   });
+
+  // Mark an item watched/completed (#155) — recorded when it plays to the end,
+  // and used to compute "Next Up". No-op (still 200) when the item is unknown or
+  // the library is unavailable, so a fire-and-forget call from the player never
+  // errors the UI.
+  app.post<{ Params: { id: string } }>('/api/v1/library/:id/watched', async (request) => {
+    if (libraryService?.get(request.params.id)) libraryService.markWatched(request.params.id);
+    return { status: 'ok' };
+  });
+
+  // Home rows derived from local resume/watch state (#155). Both degrade to an
+  // empty list on a cold cache or without a library — never an error.
+  app.get<{ Querystring: { limit?: string | string[] } }>(
+    '/api/v1/home/continue',
+    async (request) => {
+      if (!libraryService) return { items: [] };
+      const limit = clampInt(oneValue(request.query.limit), HOME_ROW_DEFAULT, 1, HOME_ROW_MAX);
+      const items = libraryService
+        .listContinueWatching(limit)
+        .map((e) => ({ ...e, item: withArtwork(e.item) }));
+      return { items };
+    },
+  );
+
+  app.get<{ Querystring: { limit?: string | string[] } }>(
+    '/api/v1/home/next-up',
+    async (request) => {
+      if (!libraryService) return { items: [] };
+      const limit = clampInt(oneValue(request.query.limit), HOME_ROW_DEFAULT, 1, HOME_ROW_MAX);
+      return { items: libraryService.listNextUp(limit).map(withArtwork) };
+    },
+  );
 
   // Subtitle tracks for an item (FR-C7): list, then fetch one as WebVTT. Both
   // require the file to be inside a library root (same containment as /stream).

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { LibraryItem } from '@openhearth/shared';
-import { Player, CHROME_IDLE_MS } from './Player';
+import { Player, CHROME_IDLE_MS, SAVE_INTERVAL_MS } from './Player';
 import { buildKeyMap } from '../keybindings';
 
 const keyMap = buildKeyMap();
@@ -18,6 +18,7 @@ const item: LibraryItem = {
 
 let resumeValue: { position_sec: number; updated_at: number } | null;
 let putBodies: string[];
+let watchedPosts: string[];
 let deleteCount: number;
 let subsValue: Array<{ id: string; label: string; lang?: string | null; source: string }>;
 let playbackValue: { mode: 'direct' | 'transcode'; duration_sec: number | null } | null;
@@ -29,6 +30,7 @@ function videoEl(container: HTMLElement): HTMLVideoElement | null {
 beforeEach(() => {
   resumeValue = null;
   putBodies = [];
+  watchedPosts = [];
   deleteCount = 0;
   subsValue = [];
   playbackValue = null;
@@ -43,6 +45,10 @@ beforeEach(() => {
         if (opts?.method === 'DELETE') deleteCount += 1;
         const body = opts?.method ? { status: 'ok' } : resumeValue;
         return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+      }
+      if (url.includes('/watched') && opts?.method === 'POST') {
+        watchedPosts.push(url);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
       }
       if (url.includes('/subtitles')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(subsValue) });
@@ -228,6 +234,40 @@ describe('Player', () => {
       expect(videoEl(container)!.getAttribute('src')).toBe('/api/v1/library/m1/stream'),
     );
     expect(deleteCount).toBe(1);
+  });
+
+  it('marks the item watched once playback crosses the finished threshold (#155)', async () => {
+    vi.useFakeTimers();
+    try {
+      playbackValue = { mode: 'direct', duration_sec: 100 };
+      const { container } = render(
+        <Player item={item} keyMap={keyMap} dispatch={vi.fn()} onExit={vi.fn()} onHome={vi.fn()} />,
+      );
+      // Flush the resume + playback fetches so the player is playing with a duration.
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const video = container.querySelector('video')!;
+      Object.defineProperty(video, 'paused', { value: false, configurable: true });
+      Object.defineProperty(video, 'currentTime', { value: 96, configurable: true }); // 96% ≥ 95%
+
+      await act(async () => {
+        vi.advanceTimersByTime(SAVE_INTERVAL_MS);
+        await Promise.resolve();
+      });
+      expect(watchedPosts.some((u) => u.includes('/api/v1/library/m1/watched'))).toBe(true);
+
+      // It only marks once, even as playback continues past the threshold.
+      await act(async () => {
+        vi.advanceTimersByTime(SAVE_INTERVAL_MS);
+        await Promise.resolve();
+      });
+      expect(watchedPosts).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fades the chrome out after inactivity while playing and reveals it on input', async () => {

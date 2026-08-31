@@ -82,6 +82,46 @@ export type LibraryListResponse = z.infer<typeof libraryListResponseSchema>;
 export const LIBRARY_PAGE_DEFAULT = 100;
 export const LIBRARY_PAGE_MAX = 500;
 
+/** Default/max row sizes for the Continue Watching / Next Up home rows (#155). */
+export const HOME_ROW_DEFAULT = 20;
+export const HOME_ROW_MAX = 100;
+
+/**
+ * Fraction of a known duration at/after which an item counts as finished (#155).
+ * Shared so the player (which marks an item watched once it crosses this) and the
+ * server (which drops finished items from "Continue Watching") agree — otherwise
+ * an item stopped in the 95–100% band could fall through both rows.
+ */
+export const PLAYBACK_FINISHED_THRESHOLD = 0.95;
+
+/**
+ * One "Continue Watching" entry (#155): an in-progress item plus its saved
+ * position. `progress` is the fraction watched (0–1) when a probed duration is
+ * known, else null (duration lands with ffprobe enrichment, #34).
+ */
+export const continueWatchingEntrySchema = z
+  .object({
+    item: libraryItemSchema,
+    position_sec: z.number().int().nonnegative(),
+    updated_at: z.number().int(),
+    progress: z.number().min(0).max(1).nullable(),
+  })
+  .strict();
+
+export type ContinueWatchingEntry = z.infer<typeof continueWatchingEntrySchema>;
+
+/** Response of `GET /api/v1/home/continue` (#155). */
+export const continueWatchingResponseSchema = z
+  .object({ items: z.array(continueWatchingEntrySchema) })
+  .strict();
+
+export type ContinueWatchingResponse = z.infer<typeof continueWatchingResponseSchema>;
+
+/** Response of `GET /api/v1/home/next-up` (#155): the next unwatched episodes. */
+export const nextUpResponseSchema = z.object({ items: z.array(libraryItemSchema) }).strict();
+
+export type NextUpResponse = z.infer<typeof nextUpResponseSchema>;
+
 /** A saved playback position for resume (FR-C5). */
 export const resumePositionSchema = z
   .object({

@@ -119,6 +119,11 @@ export class CacheStore {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS watched_items (
+        item_id TEXT PRIMARY KEY,
+        watched_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS metadata_cache (
         key TEXT PRIMARY KEY,
         payload TEXT,            -- JSON MediaItem, or NULL for a cached miss
@@ -256,6 +261,47 @@ export class CacheStore {
   /** Forget an item's resume position (e.g. on finish/stop-at-start). */
   clearResumePosition(itemId: string): void {
     this.db.prepare('DELETE FROM resume_positions WHERE item_id = ?').run(itemId);
+  }
+
+  /**
+   * All resume positions joined to their library item, most-recently-updated
+   * first — the source for the "Continue Watching" row (#155). Items whose file
+   * has since been pruned drop out (the JOIN excludes orphaned resume rows).
+   */
+  listResumePositions(
+    limit?: number,
+  ): Array<{ item: LibraryItem; position_sec: number; updated_at: number }> {
+    const base = `SELECT li.*, rp.position_sec AS position_sec, rp.updated_at AS resume_updated_at
+      FROM resume_positions rp
+      JOIN library_items li ON li.id = rp.item_id
+      ORDER BY rp.updated_at DESC`;
+    const sql = limit != null ? `${base} LIMIT @limit` : base;
+    const rows = (limit != null ? this.stmt(sql).all({ limit }) : this.stmt(sql).all()) as Array<
+      Row & { position_sec: number; resume_updated_at: number }
+    >;
+    return rows.map((r) => ({
+      item: this.rowToItem(r),
+      position_sec: r.position_sec,
+      updated_at: r.resume_updated_at,
+    }));
+  }
+
+  /** Mark an item watched/completed (#155). Recorded when it plays to the end. */
+  markWatched(itemId: string, watchedAt: number): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO watched_items (item_id, watched_at) VALUES (@item_id, @watched_at)`,
+      )
+      .run({ item_id: itemId, watched_at: watchedAt });
+  }
+
+  /** Every watched item id → when it was watched (epoch seconds). */
+  listWatched(): Map<string, number> {
+    const rows = this.db.prepare('SELECT item_id, watched_at FROM watched_items').all() as Array<{
+      item_id: string;
+      watched_at: number;
+    }>;
+    return new Map(rows.map((r) => [r.item_id, r.watched_at]));
   }
 
   /**

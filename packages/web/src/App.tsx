@@ -3,13 +3,33 @@
  * shell under the focus engine.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ActionName, Config, LibraryItem, ServiceCatalog } from '@openhearth/shared';
-import { fetchConfig, fetchServices, fetchLibrary, sendCommand, wallpaperUrl } from './api';
+import {
+  HOME_ROW_DEFAULT,
+  type ActionName,
+  type Config,
+  type LibraryItem,
+  type ServiceCatalog,
+} from '@openhearth/shared';
+import {
+  fetchConfig,
+  fetchServices,
+  fetchLibrary,
+  fetchContinueWatching,
+  fetchNextUp,
+  sendCommand,
+  wallpaperUrl,
+} from './api';
 import { FocusProvider } from './focus/FocusProvider';
 import { Settings, type WallpaperView } from './settings/Settings';
 import type { FocusPosition } from './focus/focusEngine';
 import { resolveKeyBindings } from './keybindings';
-import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
+import {
+  buildHomeModel,
+  rowLengths,
+  firstContentRow,
+  type HomeDynamicRows,
+  type HomeModel,
+} from './home/homeModel';
 import { Home } from './home/Home';
 import { LibraryDetail } from './detail/LibraryDetail';
 import { LibraryGrid } from './library/LibraryGrid';
@@ -26,7 +46,13 @@ type LibraryBySource = Map<string, LibraryItem[]>;
 type State =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; config: Config; catalog: ServiceCatalog; library: LibraryBySource };
+  | {
+      status: 'ready';
+      config: Config;
+      catalog: ServiceCatalog;
+      library: LibraryBySource;
+      dynamic: HomeDynamicRows;
+    };
 
 const EMPTY_CATALOG: ServiceCatalog = { groups: [], errors: [] };
 
@@ -36,6 +62,18 @@ function librarySources(config: Config): string[] {
     .filter((r) => r.type === 'library' && typeof r.source === 'string')
     .map((r) => r.source as string);
   return [...new Set(ids)];
+}
+
+/**
+ * The number of tiles to fetch for a derived row type (#155): the largest `limit`
+ * across the configured rows of that type, or the default. Returns 0 when the
+ * type isn't configured (so we skip the fetch entirely).
+ */
+function rowFetchLimit(config: Config, type: 'continue_watching' | 'next_up'): number {
+  const rows = (config.ui?.rows ?? []).filter((r) => r.type === type);
+  if (rows.length === 0) return 0;
+  const limits = rows.map((r) => r.limit).filter((n): n is number => typeof n === 'number');
+  return limits.length ? Math.max(...limits) : HOME_ROW_DEFAULT;
 }
 
 /** How often the kiosk re-fetches config to pick up a server hot-reload (FR-R4). */
@@ -81,7 +119,37 @@ export function App({
             }
           }),
         );
-        setState({ status: 'ready', config: config.config, catalog, library });
+        // Continue Watching / Next Up rows (#155): derived from local resume/watch
+        // state. Fetched only when the config asks for them, and each degrades to
+        // empty on failure (a broken derived row must never fail the home load).
+        const dynamic: HomeDynamicRows = {};
+        const continueLimit = rowFetchLimit(config.config, 'continue_watching');
+        const nextUpLimit = rowFetchLimit(config.config, 'next_up');
+        await Promise.all([
+          continueLimit > 0
+            ? fetchContinueWatching(controller.signal, continueLimit)
+                .then((r) => {
+                  dynamic.continueWatching = r.items;
+                })
+                .catch((err: unknown) => {
+                  if (!(err instanceof DOMException && err.name === 'AbortError')) {
+                    console.error('OpenHearth: failed to load Continue Watching', err);
+                  }
+                })
+            : Promise.resolve(),
+          nextUpLimit > 0
+            ? fetchNextUp(controller.signal, nextUpLimit)
+                .then((r) => {
+                  dynamic.nextUp = r.items;
+                })
+                .catch((err: unknown) => {
+                  if (!(err instanceof DOMException && err.name === 'AbortError')) {
+                    console.error('OpenHearth: failed to load Next Up', err);
+                  }
+                })
+            : Promise.resolve(),
+        ]);
+        setState({ status: 'ready', config: config.config, catalog, library, dynamic });
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         console.error('OpenHearth: failed to load config', err);
@@ -121,9 +189,13 @@ export function App({
   const config = state.status === 'ready' ? state.config : null;
   const catalog = state.status === 'ready' ? state.catalog : null;
   const library = state.status === 'ready' ? state.library : null;
+  const dynamic = state.status === 'ready' ? state.dynamic : null;
   const model = useMemo(
-    () => (config ? buildHomeModel(config, catalog ?? undefined, library ?? undefined) : null),
-    [config, catalog, library],
+    () =>
+      config
+        ? buildHomeModel(config, catalog ?? undefined, library ?? undefined, dynamic ?? undefined)
+        : null,
+    [config, catalog, library, dynamic],
   );
   // Focus enters on the first tile of the first non-empty content row (the
   // header is row 0), matching the Home screen focus-entry spec.
@@ -262,6 +334,14 @@ function ReadyApp({
         // Entries start after the "See all" tile when present.
         const entry = row.entries[pos.col - (row.seeAll ? 1 : 0)];
         if (entry) setDetail(entry);
+      } else if (row?.kind === 'continue') {
+        // Continue Watching launches straight into the player — the resume prompt
+        // there offers "resume" vs "start over" (#155).
+        const entry = row.entries[pos.col];
+        if (entry) setPlayer(entry.item);
+      } else if (row?.kind === 'nextup') {
+        const item = row.entries[pos.col];
+        if (item) setPlayer(item);
       }
     },
     [model, navigate],

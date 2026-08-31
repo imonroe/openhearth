@@ -51,12 +51,20 @@ export const serverConfigSchema = z
 /** A single home-screen row (PRD §10.2). Tightened as the UI lands (#21/#23). */
 export const uiRowSchema = z
   .object({
-    /** What the row renders. */
-    type: z.enum(['services', 'library']),
+    /**
+     * What the row renders. `continue_watching` and `next_up` (#155) are derived
+     * from local resume/watch state — they carry no `group`/`source` and simply
+     * disappear when empty (e.g. a cold cache).
+     */
+    type: z.enum(['services', 'library', 'continue_watching', 'next_up']),
     /** Service grouping to show (for `type: services`). */
     group: z.string().optional(),
     /** Library source id to show (for `type: library`). */
     source: z.string().optional(),
+    /** Override the row heading (defaults per type, e.g. "Continue Watching"). */
+    title: z.string().optional(),
+    /** Max tiles for `continue_watching`/`next_up` rows (1–100). */
+    limit: z.number().int().min(1).max(100).optional(),
   })
   .strict();
 
