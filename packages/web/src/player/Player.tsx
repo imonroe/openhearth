@@ -137,8 +137,11 @@ export function Player({
 
   // Persist position periodically while actually playing. Once playback passes
   // the finished threshold, mark the item watched once so "Next Up" advances even
-  // if the user backs out before the `ended` event (#155) — the server drops such
-  // near-finished items from Continue Watching, so this keeps the two rows in sync.
+  // if the user backs out before the `ended` event (#155). When the item's
+  // duration is known the server also drops it from Continue Watching past the
+  // same threshold, keeping the two rows in sync; if the duration isn't known yet
+  // (unenriched), the resume row may still show in Continue Watching, but Next Up
+  // advances regardless.
   useEffect(() => {
     if (phase !== 'playing') return;
     const iv = setInterval(() => {
