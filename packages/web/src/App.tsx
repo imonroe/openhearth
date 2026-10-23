@@ -3,25 +3,56 @@
  * shell under the focus engine.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ActionName, Config, LibraryItem, ServiceCatalog } from '@openhearth/shared';
-import { fetchConfig, fetchServices, fetchLibrary, sendCommand } from './api';
+import {
+  HOME_ROW_DEFAULT,
+  type ActionName,
+  type Config,
+  type LibraryItem,
+  type ServiceCatalog,
+} from '@openhearth/shared';
+import {
+  fetchConfig,
+  fetchServices,
+  fetchLibrary,
+  fetchContinueWatching,
+  fetchNextUp,
+  sendCommand,
+  wallpaperUrl,
+} from './api';
 import { FocusProvider } from './focus/FocusProvider';
+import { Settings, type WallpaperView } from './settings/Settings';
 import type { FocusPosition } from './focus/focusEngine';
 import { resolveKeyBindings } from './keybindings';
-import { buildHomeModel, rowLengths, firstContentRow, type HomeModel } from './home/homeModel';
+import {
+  buildHomeModel,
+  rowLengths,
+  firstContentRow,
+  type HomeDynamicRows,
+  type HomeModel,
+} from './home/homeModel';
 import { Home } from './home/Home';
 import { LibraryDetail } from './detail/LibraryDetail';
 import { LibraryGrid } from './library/LibraryGrid';
 import { Player } from './player/Player';
 import type { LibraryEntry } from './library/libraryModel';
 import { launchService, defaultNavigate, type Navigate } from './launch';
+import { Screensaver } from './screensaver/Screensaver';
+import { useIdleTimer } from './screensaver/useIdleTimer';
+import { resolveScreensaver } from './screensaver/screensavers';
+import { Slideshow } from './slideshow/Slideshow';
 
 type LibraryBySource = Map<string, LibraryItem[]>;
 
 type State =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; config: Config; catalog: ServiceCatalog; library: LibraryBySource };
+  | {
+      status: 'ready';
+      config: Config;
+      catalog: ServiceCatalog;
+      library: LibraryBySource;
+      dynamic: HomeDynamicRows;
+    };
 
 const EMPTY_CATALOG: ServiceCatalog = { groups: [], errors: [] };
 
@@ -31,6 +62,18 @@ function librarySources(config: Config): string[] {
     .filter((r) => r.type === 'library' && typeof r.source === 'string')
     .map((r) => r.source as string);
   return [...new Set(ids)];
+}
+
+/**
+ * The number of tiles to fetch for a derived row type (#155): the largest `limit`
+ * across the configured rows of that type, or the default. Returns 0 when the
+ * type isn't configured (so we skip the fetch entirely).
+ */
+function rowFetchLimit(config: Config, type: 'continue_watching' | 'next_up'): number {
+  const rows = (config.ui?.rows ?? []).filter((r) => r.type === type);
+  if (rows.length === 0) return 0;
+  const limits = rows.map((r) => r.limit).filter((n): n is number => typeof n === 'number');
+  return limits.length ? Math.max(...limits) : HOME_ROW_DEFAULT;
 }
 
 /** How often the kiosk re-fetches config to pick up a server hot-reload (FR-R4). */
@@ -76,7 +119,37 @@ export function App({
             }
           }),
         );
-        setState({ status: 'ready', config: config.config, catalog, library });
+        // Continue Watching / Next Up rows (#155): derived from local resume/watch
+        // state. Fetched only when the config asks for them, and each degrades to
+        // empty on failure (a broken derived row must never fail the home load).
+        const dynamic: HomeDynamicRows = {};
+        const continueLimit = rowFetchLimit(config.config, 'continue_watching');
+        const nextUpLimit = rowFetchLimit(config.config, 'next_up');
+        await Promise.all([
+          continueLimit > 0
+            ? fetchContinueWatching(controller.signal, continueLimit)
+                .then((r) => {
+                  dynamic.continueWatching = r.items;
+                })
+                .catch((err: unknown) => {
+                  if (!(err instanceof DOMException && err.name === 'AbortError')) {
+                    console.error('OpenHearth: failed to load Continue Watching', err);
+                  }
+                })
+            : Promise.resolve(),
+          nextUpLimit > 0
+            ? fetchNextUp(controller.signal, nextUpLimit)
+                .then((r) => {
+                  dynamic.nextUp = r.items;
+                })
+                .catch((err: unknown) => {
+                  if (!(err instanceof DOMException && err.name === 'AbortError')) {
+                    console.error('OpenHearth: failed to load Next Up', err);
+                  }
+                })
+            : Promise.resolve(),
+        ]);
+        setState({ status: 'ready', config: config.config, catalog, library, dynamic });
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         console.error('OpenHearth: failed to load config', err);
@@ -116,9 +189,13 @@ export function App({
   const config = state.status === 'ready' ? state.config : null;
   const catalog = state.status === 'ready' ? state.catalog : null;
   const library = state.status === 'ready' ? state.library : null;
+  const dynamic = state.status === 'ready' ? state.dynamic : null;
   const model = useMemo(
-    () => (config ? buildHomeModel(config, catalog ?? undefined, library ?? undefined) : null),
-    [config, catalog, library],
+    () =>
+      config
+        ? buildHomeModel(config, catalog ?? undefined, library ?? undefined, dynamic ?? undefined)
+        : null,
+    [config, catalog, library, dynamic],
   );
   // Focus enters on the first tile of the first non-empty content row (the
   // header is row 0), matching the Home screen focus-entry spec.
@@ -127,6 +204,20 @@ export function App({
     const row = firstContentRow(model);
     return row !== null ? { row, col: 0 } : undefined;
   }, [model]);
+
+  // The wallpaper layer behind the home UI (#118): only when enabled and an
+  // image is set. The URL carries the stored path so it changes on re-upload.
+  const wallpaper = useMemo<WallpaperView | null>(() => {
+    const wp = config?.ui?.wallpaper;
+    if (!wp?.enabled || !wp.image) return null;
+    return { url: wallpaperUrl(wp.image), opacity: wp.opacity ?? 1 };
+  }, [config]);
+
+  // Apply a config returned by a settings write so the change shows immediately,
+  // without waiting for the next background poll (which would also pick it up).
+  const applyConfig = useCallback((next: Config) => {
+    setState((prev) => (prev.status === 'ready' ? { ...prev, config: next } : prev));
+  }, []);
 
   if (state.status === 'loading') {
     return (
@@ -152,7 +243,9 @@ export function App({
       model={model}
       initialPosition={initialPosition}
       navigate={navigate}
-      keybindings={config.keybindings}
+      config={config}
+      wallpaper={wallpaper}
+      onConfigChange={applyConfig}
       dispatch={dispatch}
     />
   );
@@ -164,19 +257,26 @@ function ReadyApp({
   model,
   initialPosition,
   navigate,
-  keybindings,
+  config,
+  wallpaper,
+  onConfigChange,
   dispatch,
 }: {
   title: string;
   model: HomeModel;
   initialPosition: FocusPosition | undefined;
   navigate: Navigate;
-  keybindings: Config['keybindings'];
+  config: Config;
+  wallpaper: WallpaperView | null;
+  onConfigChange: (config: Config) => void;
   dispatch: (action: ActionName, params?: Record<string, unknown>) => void;
 }): ReactNode {
   const lengths = useMemo(() => rowLengths(model), [model]);
   // Rebuild the key→action map whenever the configured bindings change (FR-R4).
-  const { keyMap, warnings } = useMemo(() => resolveKeyBindings(keybindings), [keybindings]);
+  const { keyMap, warnings } = useMemo(
+    () => resolveKeyBindings(config.keybindings),
+    [config.keybindings],
+  );
   // Surface keybinding problems (conflicts, unknown names, reserved overrides) as
   // non-fatal warnings — a bad binding never breaks the UI (#46).
   useEffect(() => {
@@ -189,12 +289,40 @@ function ReadyApp({
   const [grid, setGrid] = useState<{ label: string; entries: LibraryEntry[] } | null>(null);
   const [detail, setDetail] = useState<LibraryEntry | null>(null);
   const [player, setPlayer] = useState<LibraryItem | null>(null);
+  const [settings, setSettings] = useState(false);
+  // On-demand slideshow (#164): launched from the header; Back/Home exits.
+  const [slideshow, setSlideshow] = useState(false);
 
-  // select on home: launch a service tile (FR-A2), open the full-library grid
-  // (the leading "See all" tile, col 0), or open a library item's detail.
+  // Idle screensaver (#126): after the configured idle time with no interaction
+  // the saver takes over the whole frame; any interaction dismisses it. It's
+  // suppressed while the player is open (you're watching, not idle — and we must
+  // not tear down the <video>) or while the on-demand slideshow is up, and
+  // paused once showing so the only thing that can wake it is the overlay's own
+  // capture-phase wake handler.
+  const screensaver = resolveScreensaver(config.ui?.screensaver);
+  // When the user has opted the slideshow in as their screensaver, the idle path
+  // shows photos instead of a procedural saver (#164).
+  const slideshowAsScreensaver = config.ui?.slideshow?.useAsScreensaver === true;
+  const [idle, setIdle] = useState(false);
+  useIdleTimer({
+    timeoutMs: screensaver.timeoutMinutes * 60_000,
+    enabled: screensaver.enabled && !player && !idle && !slideshow,
+    onIdle: () => setIdle(true),
+  });
+
+  // select on home: open Settings from the header (FR; #118), launch a service
+  // tile (FR-A2), open the full-library grid (the leading "See all" tile, col 0),
+  // or open a library item's detail.
   const onSelect = useCallback(
     (pos: FocusPosition) => {
       const row = model.rows[pos.row];
+      if (row?.kind === 'header') {
+        // col 0 is Search (not yet implemented); col 1 is Settings; col 2 is
+        // the on-demand slideshow (#164).
+        if (pos.col === 1) setSettings(true);
+        else if (pos.col === 2) setSlideshow(true);
+        return;
+      }
       if (row?.kind === 'services') {
         const tile = row.tiles[pos.col];
         if (tile) launchService(tile, navigate);
@@ -206,10 +334,44 @@ function ReadyApp({
         // Entries start after the "See all" tile when present.
         const entry = row.entries[pos.col - (row.seeAll ? 1 : 0)];
         if (entry) setDetail(entry);
+      } else if (row?.kind === 'continue') {
+        // Continue Watching launches straight into the player — the resume prompt
+        // there offers "resume" vs "start over" (#155).
+        const entry = row.entries[pos.col];
+        if (entry) setPlayer(entry.item);
+      } else if (row?.kind === 'nextup') {
+        const item = row.entries[pos.col];
+        if (item) setPlayer(item);
       }
     },
     [model, navigate],
   );
+
+  // Idle screensaver takes over the whole frame (#126), on top of whatever
+  // screen is showing. `!player` is enforced above (the timer is disabled during
+  // playback) and re-checked here so the <video> is never unmounted under it.
+  // When the slideshow is the chosen screensaver it renders instead, falling
+  // back to the procedural saver if there are no photos (#164).
+  if (idle && !player) {
+    if (slideshowAsScreensaver) {
+      return (
+        <Slideshow
+          mode="screensaver"
+          keyMap={keyMap}
+          onWake={() => setIdle(false)}
+          fallback={<Screensaver type={screensaver.type} onWake={() => setIdle(false)} />}
+        />
+      );
+    }
+    return <Screensaver type={screensaver.type} onWake={() => setIdle(false)} />;
+  }
+
+  // The on-demand slideshow (#164): launched from the header, it fills the frame
+  // and returns home on Back/Home. It sits above the home but below the idle
+  // screensaver (the idle timer is disabled while it's open).
+  if (slideshow) {
+    return <Slideshow mode="ondemand" keyMap={keyMap} onExit={() => setSlideshow(false)} />;
+  }
 
   // The player sits on top of the detail it launched from: Back returns to the
   // detail, Home returns all the way to the home grid.
@@ -257,6 +419,20 @@ function ReadyApp({
     );
   }
 
+  // Settings floats over the home as a focus-trapped modal (#118). It renders the
+  // wallpaper behind its scrim for a live preview as the user edits it.
+  if (settings) {
+    return (
+      <Settings
+        config={config}
+        wallpaper={wallpaper}
+        keyMap={keyMap}
+        onConfigChange={onConfigChange}
+        onBack={() => setSettings(false)}
+      />
+    );
+  }
+
   return (
     <FocusProvider
       rowLengths={lengths}
@@ -265,7 +441,7 @@ function ReadyApp({
       onSelect={onSelect}
       onAction={dispatch}
     >
-      <Home title={title} model={model} />
+      <Home title={title} model={model} wallpaper={wallpaper} />
     </FocusProvider>
   );
 }

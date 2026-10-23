@@ -9,7 +9,9 @@
  * configurable level. There is no telemetry and no outbound calls (NFR-9).
  */
 import { existsSync, createReadStream, realpathSync, statSync } from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import { join, resolve, sep, extname } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, {
@@ -22,11 +24,18 @@ import {
   PROTOCOL_VERSION,
   bundledIconName,
   redactConfig,
+  uiSettingsPatchSchema,
+  wallpaperUploadSchema,
+  WALLPAPER_CONTENT_TYPES,
+  slideshowUploadSchema,
+  SLIDESHOW_IMAGE_CONTENT_TYPES,
   commandMessageSchema,
   makeStateEvent,
   LIBRARY_ITEM_KINDS,
   LIBRARY_PAGE_DEFAULT,
   LIBRARY_PAGE_MAX,
+  HOME_ROW_DEFAULT,
+  HOME_ROW_MAX,
   resumeUpdateSchema,
   mediaItemFromLibraryItem,
   type EventMessage,
@@ -38,6 +47,7 @@ import {
 import type { ConfigService } from './core/ConfigService.js';
 import { CatalogService } from './core/CatalogService.js';
 import { ControlService } from './core/ControlService.js';
+import { SlideshowService } from './core/SlideshowService.js';
 import type { LibraryService } from './core/LibraryService.js';
 import type { MediaStreamer } from './core/TranscodeService.js';
 import { SubtitleService } from './core/SubtitleService.js';
@@ -66,6 +76,43 @@ const BUNDLED_ICON_TYPES: Record<string, string> = {
   ...ICON_TYPES,
   '.svg': 'image/svg+xml',
 };
+
+// Wallpaper upload (#118): cap the raw image at 20 MiB. The base64 request body
+// is ~33% larger, so the upload route raises its own bodyLimit to suit.
+const MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
+const WALLPAPER_DIR = 'wallpaper';
+
+// Slideshow photo upload (#164): cap each image at 20 MiB, same as wallpaper.
+const MAX_SLIDESHOW_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Cheap magic-byte check that decoded bytes actually match the declared image
+ * type. Stops a client storing a mislabeled/non-image file under an image
+ * extension — the served file uses `nosniff`, so the bytes must be the real type.
+ */
+function imageBytesMatch(ext: string, buf: Buffer): boolean {
+  if (ext === 'png') {
+    return (
+      buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
+    );
+  }
+  if (ext === 'jpg') {
+    return buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  }
+  if (ext === 'webp') {
+    return (
+      buf.length >= 12 &&
+      buf.toString('ascii', 0, 4) === 'RIFF' &&
+      buf.toString('ascii', 8, 12) === 'WEBP'
+    );
+  }
+  if (ext === 'gif') {
+    // Full 6-byte signature — "GIF" alone would let a non-GIF payload through.
+    const sig = buf.length >= 6 ? buf.toString('ascii', 0, 6) : '';
+    return sig === 'GIF87a' || sig === 'GIF89a';
+  }
+  return false;
+}
 
 /**
  * Stream an image file from a trusted base directory as an icon, with the same
@@ -249,6 +296,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const level = options.logLevel ?? configService.config.server?.logLevel ?? 'info';
   const catalog = new CatalogService(configService);
   const control = options.controlService ?? new ControlService();
+  const slideshow = new SlideshowService({
+    configDir: configService.configDir,
+    getConfig: () => configService.config.ui?.slideshow,
+  });
   const subtitles = streamer ? new SubtitleService(streamer) : null;
 
   // Typed separately so the custom serializer doesn't skew Fastify's server-type
@@ -354,6 +405,229 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     };
   });
 
+  // --- API: UI settings & wallpaper (#118) -------------------------------
+  // Persist the UI-editable subset of `ui.*` back into openhearth.yaml
+  // (comment-preserving). Returns the reloaded, redacted snapshot.
+  app.put('/api/v1/ui/settings', async (request, reply) => {
+    const parsed = uiSettingsPatchSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        status: 'bad_request',
+        errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+      });
+    }
+    try {
+      const snap = await configService.applyUiSettings(parsed.data);
+      return {
+        status: 'ok',
+        config: redactConfig(snap.config),
+        errors: snap.errors,
+        valid: snap.errors.length === 0,
+      };
+    } catch (err) {
+      request.log.error({ err }, 'settings write failed');
+      return reply
+        .code(409)
+        .send({ status: 'config_write_failed', errors: [(err as Error).message] });
+    }
+  });
+
+  // Serve the current wallpaper image with the same defense-in-depth as config/
+  // icons: raster-only, two-stage path containment, nosniff. Gated by the same
+  // auth as other /api routes — so, like service icons/artwork, the browser can't
+  // attach the token to this CSS/img fetch; with `server.auth.token` set, bind to
+  // 127.0.0.1 for a single-box kiosk (config-reference.md § Security).
+  app.get('/api/v1/ui/wallpaper', async (_request, reply) => {
+    const image = configService.config.ui?.wallpaper?.image;
+    if (!image) return reply.code(404).send({ status: 'not_found' });
+    return sendIconFile(reply, configService.configDir, image, ICON_TYPES);
+  });
+
+  // Upload a wallpaper (base64 JSON). Stored under config/wallpaper/ with a
+  // unique name (so the served URL changes on each upload, busting caches), then
+  // ui.wallpaper.{image,enabled} is persisted to openhearth.yaml.
+  app.post(
+    '/api/v1/ui/wallpaper',
+    // Base64 inflates the raw bytes ~33%; allow headroom over MAX_WALLPAPER_BYTES.
+    { bodyLimit: Math.ceil(MAX_WALLPAPER_BYTES * 1.4) + 1024 },
+    async (request, reply) => {
+      const parsed = wallpaperUploadSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          status: 'bad_request',
+          errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+        });
+      }
+      const ext = WALLPAPER_CONTENT_TYPES[parsed.data.content_type];
+      const buf = Buffer.from(parsed.data.data_base64, 'base64');
+      if (buf.length === 0) {
+        return reply.code(400).send({ status: 'bad_request', errors: ['empty image'] });
+      }
+      if (buf.length > MAX_WALLPAPER_BYTES) {
+        return reply.code(413).send({
+          status: 'payload_too_large',
+          errors: [`image exceeds ${Math.round(MAX_WALLPAPER_BYTES / (1024 * 1024))} MB`],
+        });
+      }
+      if (!imageBytesMatch(ext, buf)) {
+        return reply.code(415).send({
+          status: 'unsupported_media_type',
+          errors: ['image bytes do not match the declared content type'],
+        });
+      }
+
+      const dir = join(configService.configDir, WALLPAPER_DIR);
+      const name = `background-${Date.now()}.${ext}`;
+      const dest = join(dir, name);
+      const tmp = `${dest}.tmp`;
+      try {
+        await fsp.mkdir(dir, { recursive: true });
+        await fsp.writeFile(tmp, buf);
+        await fsp.rename(tmp, dest);
+        // Drop any prior wallpaper file(s) so the dir holds just the current one.
+        for (const f of await fsp.readdir(dir)) {
+          if (f.startsWith('background-') && f !== name) {
+            await fsp.rm(join(dir, f), { force: true });
+          }
+        }
+      } catch (err) {
+        await fsp.rm(tmp, { force: true }).catch(() => undefined);
+        request.log.error({ err }, 'wallpaper write failed');
+        return reply.code(500).send({ status: 'write_failed' });
+      }
+
+      const image = `${WALLPAPER_DIR}/${name}`;
+      try {
+        const snap = await configService.applyUiSettings({ wallpaper: { image, enabled: true } });
+        return { status: 'ok', image, config: redactConfig(snap.config) };
+      } catch (err) {
+        // The config pointer couldn't be persisted — roll back the orphaned file
+        // so we don't leave an image on disk that nothing references.
+        await fsp.rm(dest, { force: true }).catch(() => undefined);
+        request.log.error({ err }, 'settings write failed after wallpaper upload');
+        return reply
+          .code(409)
+          .send({ status: 'config_write_failed', errors: [(err as Error).message] });
+      }
+    },
+  );
+
+  // Remove the wallpaper. Clear the config pointer FIRST: if that write fails the
+  // stored file is left intact, so the wallpaper keeps working rather than the
+  // config pointing at a file we already deleted.
+  app.delete('/api/v1/ui/wallpaper', async (request, reply) => {
+    let snap;
+    try {
+      snap = await configService.applyUiSettings({ wallpaper: { image: null, enabled: false } });
+    } catch (err) {
+      request.log.error({ err }, 'settings write failed on wallpaper delete');
+      return reply
+        .code(409)
+        .send({ status: 'config_write_failed', errors: [(err as Error).message] });
+    }
+    // Pointer is cleared; now best-effort delete the stored file(s).
+    const dir = join(configService.configDir, WALLPAPER_DIR);
+    try {
+      for (const f of await fsp.readdir(dir)) {
+        if (f.startsWith('background-')) await fsp.rm(join(dir, f), { force: true });
+      }
+    } catch {
+      // Directory may not exist — nothing to remove.
+    }
+    return { status: 'ok', config: redactConfig(snap.config) };
+  });
+
+  // --- API: slideshow / digital photo frame (#164) -----------------------
+  // The image set is (configured folders ∪ uploaded photos), resolved fresh on
+  // each request from config + filesystem. Empty is a valid result (never 500).
+  app.get('/api/v1/slideshow/manifest', async () => {
+    return slideshow.manifest();
+  });
+
+  // Serve one image by opaque id with the same defense-in-depth as the
+  // wallpaper/icon routes (raster-only, two-stage path containment, nosniff).
+  // The id maps back to a (baseDir, relPath) server-side, so a client never
+  // supplies a path: an unknown id 404s, a containment escape 400s.
+  app.get<{ Params: { id: string } }>('/api/v1/slideshow/image/:id', async (request, reply) => {
+    const resolved = slideshow.resolveImage(request.params.id);
+    if (!resolved) return reply.code(404).send({ status: 'not_found' });
+    reply.header('Cache-Control', 'public, max-age=86400');
+    return sendIconFile(reply, resolved.baseDir, resolved.relPath, ICON_TYPES);
+  });
+
+  // Upload a photo (base64 JSON). Accumulates under config/slideshow/uploads/ —
+  // unlike wallpaper it appends rather than replacing. Same validation as the
+  // wallpaper upload (size cap, magic-byte match, atomic temp-file+rename).
+  app.post(
+    '/api/v1/slideshow/photos',
+    { bodyLimit: Math.ceil(MAX_SLIDESHOW_IMAGE_BYTES * 1.4) + 1024 },
+    async (request, reply) => {
+      const parsed = slideshowUploadSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          status: 'bad_request',
+          errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
+        });
+      }
+      const ext = SLIDESHOW_IMAGE_CONTENT_TYPES[parsed.data.content_type];
+      const buf = Buffer.from(parsed.data.data_base64, 'base64');
+      if (buf.length === 0) {
+        return reply.code(400).send({ status: 'bad_request', errors: ['empty image'] });
+      }
+      if (buf.length > MAX_SLIDESHOW_IMAGE_BYTES) {
+        return reply.code(413).send({
+          status: 'payload_too_large',
+          errors: [`image exceeds ${Math.round(MAX_SLIDESHOW_IMAGE_BYTES / (1024 * 1024))} MB`],
+        });
+      }
+      if (!imageBytesMatch(ext, buf)) {
+        return reply.code(415).send({
+          status: 'unsupported_media_type',
+          errors: ['image bytes do not match the declared content type'],
+        });
+      }
+
+      const dir = slideshow.uploadsDir();
+      // Timestamp + random suffix so rapid uploads never collide and the id is unique.
+      const name = `photo-${Date.now()}-${randomBytes(4).toString('hex')}.${ext}`;
+      const dest = join(dir, name);
+      const tmp = `${dest}.tmp`;
+      try {
+        await fsp.mkdir(dir, { recursive: true });
+        await fsp.writeFile(tmp, buf);
+        await fsp.rename(tmp, dest);
+      } catch (err) {
+        await fsp.rm(tmp, { force: true }).catch(() => undefined);
+        request.log.error({ err }, 'slideshow photo write failed');
+        return reply.code(500).send({ status: 'write_failed' });
+      }
+      slideshow.invalidate(); // the new photo must show up in the returned manifest
+      return { status: 'ok', manifest: slideshow.manifest() };
+    },
+  );
+
+  // Delete an uploaded photo by id. Folder-sourced images are read-only (400):
+  // the operator manages those files on the host.
+  app.delete<{ Params: { id: string } }>('/api/v1/slideshow/photos/:id', async (request, reply) => {
+    const id = request.params.id;
+    const resolved = slideshow.resolveImage(id);
+    if (!resolved) return reply.code(404).send({ status: 'not_found' });
+    if (!slideshow.isUploaded(id)) {
+      return reply.code(400).send({
+        status: 'bad_request',
+        errors: ['only uploaded photos can be deleted; folder sources are read-only'],
+      });
+    }
+    try {
+      await fsp.rm(join(resolved.baseDir, resolved.relPath), { force: true });
+    } catch (err) {
+      request.log.error({ err }, 'slideshow photo delete failed');
+      return reply.code(500).send({ status: 'delete_failed' });
+    }
+    slideshow.invalidate(); // the removed photo must be gone from the returned manifest
+    return { status: 'ok', manifest: slideshow.manifest() };
+  });
+
   // --- API: service tile catalog (ordered + grouped) ---------------------
   app.get('/api/v1/services', async () => {
     return catalog.getCatalog();
@@ -447,6 +721,41 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     reply.header('Cache-Control', 'public, max-age=86400');
     reply.type(cached.contentType);
     return reply.send(createReadStream(cached.path));
+  });
+
+  // Rich detail metadata for an item (#123): overview, runtime, genres, cast, …
+  // Resolved from the provider on first open and cached, so a re-open costs no
+  // API call. Always returns a valid item — with no provider or no match it
+  // degrades to the filename-derived projection (the screen just shows less).
+  //
+  // Sanitized so no raw provider image URL reaches the browser (NFR-9): the
+  // poster is swapped for our own proxied/cached route and cast `profile_url`s
+  // (raw TMDB CDN) are dropped — cast images are a follow-up that needs a
+  // poster-style proxy. The richer text fields are what the UI renders.
+  app.get<{ Params: { id: string } }>('/api/v1/library/:id/metadata', async (request, reply) => {
+    const item = libraryService?.get(request.params.id);
+    if (!item) return reply.code(404).send({ status: 'not_found' });
+
+    const poster = cachedPosterUrl(item);
+    const sanitize = (media: MediaItem): MediaItem => {
+      const out: MediaItem = { ...media };
+      // Swap the raw provider poster for our proxied/cached route (or drop it).
+      if (poster) out.artwork = { poster_url: poster };
+      else delete out.artwork;
+      // Keep cast name/character but drop raw TMDB headshot URLs (no proxy yet).
+      if (out.cast) {
+        out.cast = out.cast.map((c) => ({
+          name: c.name,
+          ...(c.character ? { character: c.character } : {}),
+        }));
+      }
+      return out;
+    };
+
+    const base = mediaItemFromLibraryItem(item);
+    if (!metadataService?.enabled) return sanitize(base);
+    const rich = await metadataService.resolveDetails(metadataQueryForLibraryItem(item));
+    return sanitize(rich ?? base);
   });
 
   // Search (#43, FR-B3). v1 returns local-library matches only, grouped into
@@ -579,6 +888,38 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     libraryService?.clearResume(request.params.id);
     return { status: 'ok' };
   });
+
+  // Mark an item watched/completed (#155) — recorded when it plays to the end,
+  // and used to compute "Next Up". No-op (still 200) when the item is unknown or
+  // the library is unavailable, so a fire-and-forget call from the player never
+  // errors the UI.
+  app.post<{ Params: { id: string } }>('/api/v1/library/:id/watched', async (request) => {
+    if (libraryService?.get(request.params.id)) libraryService.markWatched(request.params.id);
+    return { status: 'ok' };
+  });
+
+  // Home rows derived from local resume/watch state (#155). Both degrade to an
+  // empty list on a cold cache or without a library — never an error.
+  app.get<{ Querystring: { limit?: string | string[] } }>(
+    '/api/v1/home/continue',
+    async (request) => {
+      if (!libraryService) return { items: [] };
+      const limit = clampInt(oneValue(request.query.limit), HOME_ROW_DEFAULT, 1, HOME_ROW_MAX);
+      const items = libraryService
+        .listContinueWatching(limit)
+        .map((e) => ({ ...e, item: withArtwork(e.item) }));
+      return { items };
+    },
+  );
+
+  app.get<{ Querystring: { limit?: string | string[] } }>(
+    '/api/v1/home/next-up',
+    async (request) => {
+      if (!libraryService) return { items: [] };
+      const limit = clampInt(oneValue(request.query.limit), HOME_ROW_DEFAULT, 1, HOME_ROW_MAX);
+      return { items: libraryService.listNextUp(limit).map(withArtwork) };
+    },
+  );
 
   // Subtitle tracks for an item (FR-C7): list, then fetch one as WebVTT. Both
   // require the file to be inside a library root (same containment as /stream).

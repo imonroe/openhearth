@@ -1,5 +1,5 @@
 # Release: on a version tag, build and publish the multi-arch container image to
-# GHCR (#54). Tagging `vX.Y.Z` on `main` (per the branching convention) produces
+# GHCR (#54). Tagging `X.Y.Z` on `main` (per the branching convention) produces
 # `ghcr.io/imonroe/openhearth:X.Y.Z`, `:X.Y`, and `:latest` (latest only for a
 # non-prerelease semver, via metadata-action's default `latest=auto`).
 name: Release
@@ -7,7 +7,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - '*.*.*'
 
 permissions:
   contents: read

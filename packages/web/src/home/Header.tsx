@@ -36,6 +36,15 @@ export function Header({ title }: { title: string }): ReactNode {
         >
           ⚙ Settings
         </button>
+        <button
+          type="button"
+          className={`header__action ${isFocused(HEADER_ROW, 2) ? 'is-focused' : ''}`}
+          aria-label="Slideshow"
+          onMouseEnter={() => focusAt({ row: HEADER_ROW, col: 2 })}
+          onClick={() => activate({ row: HEADER_ROW, col: 2 })}
+        >
+          ▦ Slideshow
+        </button>
       </div>
     </header>
   );

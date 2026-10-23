@@ -259,6 +259,7 @@ A few things that trip people up — worth reading before you file a bug:
 | [Upgrading & images](docs/deployment/upgrading.md)                                                | Published image tags, pinning, and the upgrade path.                                                                                                                           |
 | [Home/Back guarantee](docs/home-back.md)                                                          | How the reserved Home/Back interception works.                                                                                                                                 |
 | [Remote-control protocol](docs/protocol.md)                                                       | The HTTP + WebSocket control contract a third-party client (e.g. a phone remote) implements against.                                                                           |
+| [Competitive landscape](docs/competitive-landscape.md)                                            | Prior art & alternatives — how OpenHearth compares to other OSS HTPC launchers, dashboards, and media servers, and where it's differentiated.                                  |
 | [DEVELOPER.md](DEVELOPER.md)                                                                      | Building from source, the monorepo architecture, and contributing.                                                                                                             |
 
 ### Advanced topics

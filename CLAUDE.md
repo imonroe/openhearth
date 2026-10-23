@@ -10,11 +10,9 @@ The full requirements live in [docs/prd.md](docs/prd.md). The implementation str
 
 ## Status
 
-The codebase is in **Phase 0 (pre-scaffolding)**. The workspace, packages, and Docker image do not yet exist. All implementation follows the plan in `docs/implementation_plan.md`, targeting **M0** first.
+**v1.0.0 shipped** (2026-06-24). All Must and Should functional requirements are implemented and tested — see [docs/v1-audit.md](docs/v1-audit.md) for the full coverage map. Active development continues on `dev` with post-v1.0 polish: screensaver, wallpaper/settings, A–Z jump rail, library grid virtualization, richer movie metadata, and the CDP-backed kiosk Home/Back daemon ([ADR 0001](docs/adr/0001-kiosk-home-back-cdp-daemon.md)).
 
-## Planned Commands
-
-Once scaffolded (pnpm workspaces with `packages/shared`, `packages/server`, `packages/web`):
+## Commands
 
 ```sh
 pnpm build          # build all packages
@@ -40,7 +38,7 @@ docker-compose up --build
 
 The system has two logical pieces that communicate **only** via a documented HTTP + WebSocket API (the "seam"):
 
-- **Brain** (`packages/server`): Fastify (Node 20 + TypeScript). Serves the web UI bundle, the API, WebSocket control endpoint, media streaming, and runs ffmpeg child processes for transcoding.
+- **Brain** (`packages/server`): Fastify (Node 22 + TypeScript). Serves the web UI bundle, the API, WebSocket control endpoint, media streaming, and runs ffmpeg child processes for transcoding.
 - **Face** (`packages/web`): React 18 + TypeScript + Vite SPA. Runs in a Chromium kiosk (`--kiosk --app=http://localhost:8080`). Pure client of the API — imports nothing from `server/`.
 - **Shared** (`packages/shared`): TypeScript types and JSON Schemas for the protocol, config, and media models. Imported by both `server` and `web`. This is what enforces the seam at compile time.
 
@@ -64,7 +62,7 @@ The system has two logical pieces that communicate **only** via a documented HTT
 | B — Aggregator | Cross-service discovery | Foundation only in v1 (normalized metadata model, stub search). Full unified search is v1.x. |
 | C — Player | Local/self-hosted media | Native ad-free playback with ffmpeg transcoding fallback. |
 
-## Repository Layout (planned)
+## Repository Layout
 
 ```
 packages/
@@ -88,19 +86,21 @@ config.example/         — seed config shipped to users
   openhearth.yaml
   services.yaml
   services.d/           — community service definitions (netflix.yaml, youtube.yaml, …)
-docker/Dockerfile       — multi-stage: build web + server → slim Node 20 + ffmpeg runtime
+docker/Dockerfile       — multi-stage: build web + server → slim Node 22 + ffmpeg runtime
 docker-compose.yml      — reference compose
 docs/
   prd.md                — requirements (the "what")
   implementation_plan.md — implementation strategy (the "how")
-  protocol.md           — (Phase 5) versioned remote-control protocol spec
+  protocol.md           — versioned remote-control protocol spec
   config-reference.md   — config schema documentation
+  v1-audit.md           — Must-FR coverage & Should/Could triage for v1.0
+  adr/                  — architecture decision records
   deployment/           — windows-kiosk.md, linux-kiosk.md
 designs/                — wireframes, focus maps, visual language artifacts
   designs_1.pen         — source designs (all 15 screens + components, Pencil format)
   design-system.md      — authoritative visual spec and developer handoff reference
   screen-inventory.md   — screen list, navigation map, per-screen design notes
-scripts/kiosk/          — example Chromium kiosk launch shortcuts/units
+scripts/kiosk/          — example Chromium kiosk launch shortcuts/units + home-guard extension
 ```
 
 ## Remote-Control Protocol
@@ -173,3 +173,13 @@ The focus system is the most critical part of this UI. Every interactive element
 - **Integration** (Vitest + supertest): API routes, streaming, WS round-trips
 - **E2E** (Playwright): focus navigation, tile launch, **Home/Back return** (must-pass), player controls, resume
 - The Home/Back guarantee and graceful config failure get dedicated, must-pass tests — they are the behaviors most likely to silently regress
+
+## Standard development process
+
+- Pull the latest version of the `dev` branch, and then create a feature branch.
+- Do the work on your feature branch.
+- When it's ready, push it to the Github repo and open a PR.
+- Spawn a subagent to do an adversarial review of the PR.
+- Respond to the subagent's feedback, and ask for a re-review
+- Continue this loop until the PR is clean, passes tests, and has no more issues.
+- Notify me when the PR is ready.  Unless I indicate that it's OK for you to merge it, wait for me to merge it.

@@ -40,18 +40,41 @@ test.describe('Home/Back guarantee (must-pass)', () => {
     await expect(page.locator('.is-focused')).toHaveCount(1);
   });
 
-  test('the remote browser keys (BrowserHome/BrowserBack) also return home', async ({ page }) => {
-    await launchFakeFlix(page);
+  for (const key of ['BrowserBack', 'BrowserHome'] as const) {
+    test(`the remote browser key (${key}) also returns home`, async ({ page }) => {
+      await launchFakeFlix(page);
 
-    // A real TV remote sends BrowserHome/BrowserBack, which the extension also
-    // reserves — but Playwright can't synthesize those media keys physically, so
-    // dispatch a faithful keydown the extension's window listener will receive.
-    await page.evaluate(() => {
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'BrowserBack', bubbles: true, cancelable: true }),
-      );
+      // A real TV remote sends BrowserHome/BrowserBack, which the extension also
+      // reserves (config.js `returnKeys`) — but Playwright can't synthesize those
+      // media keys physically, so dispatch a faithful keydown the extension's
+      // window listener will receive.
+      await page.evaluate((k) => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }),
+        );
+      }, key);
+
+      await page.waitForURL(`${HOME_ORIGIN}/`);
+      await expect(page.getByText('FakeFlix', { exact: true })).toBeVisible();
     });
+  }
 
+  test('Home returns home when pressed inside a service cross-origin iframe', async ({ page }) => {
+    // Some service players host the video in a foreign-origin <iframe>. When Home
+    // is pressed with focus inside that frame, the content script there cannot
+    // reach window.top to navigate it, so it asks the extension's background
+    // worker to move the whole tab. This proves that path (the Sling failure mode).
+    // We load the embedded variant directly: the parent is on localhost:8090, the
+    // iframe on 127.0.0.1:8090 — same server, different origin.
+    await page.goto(`${STUB_ORIGIN}/?embed=1`);
+    await expect(page.locator('#service-name')).toHaveText('FakeFlix');
+
+    // Move focus INTO the cross-origin iframe, then press Home from there.
+    const frame = page.frameLocator('#player-frame');
+    await frame.locator('#inner-focus').click();
+    await page.keyboard.press('Home');
+
+    // The background worker navigates the entire tab back to OpenHearth.
     await page.waitForURL(`${HOME_ORIGIN}/`);
     await expect(page.getByText('FakeFlix', { exact: true })).toBeVisible();
   });

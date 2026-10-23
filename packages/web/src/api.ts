@@ -6,11 +6,18 @@ import {
   PROTOCOL_VERSION,
   type ActionName,
   type Config,
+  type ContinueWatchingResponse,
   type LibraryListResponse,
+  type MediaItem,
+  type NextUpResponse,
   type PlaybackInfo,
   type ResumePosition,
   type ServiceCatalog,
+  type SlideshowImageContentType,
+  type SlideshowManifest,
   type SubtitleTrack,
+  type UiSettingsPatchBody,
+  type WallpaperContentType,
 } from '@openhearth/shared';
 
 export interface ConfigResponse {
@@ -50,6 +57,30 @@ export async function fetchLibrary(
   return (await res.json()) as LibraryListResponse;
 }
 
+/** Fetch the "Continue Watching" row entries (in-progress items) (#155). */
+export async function fetchContinueWatching(
+  signal?: AbortSignal,
+  limit = 20,
+): Promise<ContinueWatchingResponse> {
+  const res = await fetch(`/api/v1/home/continue?limit=${limit}`, { signal });
+  if (!res.ok) throw new Error(`GET /api/v1/home/continue failed: ${res.status}`);
+  return (await res.json()) as ContinueWatchingResponse;
+}
+
+/** Fetch the "Next Up" row items (next unwatched episode per series) (#155). */
+export async function fetchNextUp(signal?: AbortSignal, limit = 20): Promise<NextUpResponse> {
+  const res = await fetch(`/api/v1/home/next-up?limit=${limit}`, { signal });
+  if (!res.ok) throw new Error(`GET /api/v1/home/next-up failed: ${res.status}`);
+  return (await res.json()) as NextUpResponse;
+}
+
+/** Mark an item watched/completed (fire-and-forget) — drives "Next Up" (#155). */
+export function markWatched(id: string): void {
+  void fetch(`/api/v1/library/${encodeURIComponent(id)}/watched`, { method: 'POST' }).catch(
+    (err: unknown) => console.error('OpenHearth: mark watched failed', err),
+  );
+}
+
 /** URL for an item's playable stream; `startSec` offsets a transcode (?t=). */
 export function libraryStreamUrl(id: string, startSec = 0): string {
   const base = `/api/v1/library/${encodeURIComponent(id)}/stream`;
@@ -69,6 +100,24 @@ export async function fetchPlaybackInfo(
     const res = await fetch(`/api/v1/library/${encodeURIComponent(id)}/playback`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as PlaybackInfo;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch rich detail metadata (overview, runtime, genres, cast, …) for an item
+ * (#123), or null on failure. Resolved + cached server-side, so the detail
+ * screen calls this on open and a re-open costs no provider round-trip.
+ */
+export async function fetchItemMetadata(
+  id: string,
+  signal?: AbortSignal,
+): Promise<MediaItem | null> {
+  try {
+    const res = await fetch(`/api/v1/library/${encodeURIComponent(id)}/metadata`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as MediaItem;
   } catch {
     return null;
   }
@@ -114,6 +163,104 @@ export function clearResume(id: string): void {
   void fetch(`/api/v1/library/${encodeURIComponent(id)}/resume`, { method: 'DELETE' }).catch(
     (err: unknown) => console.error('OpenHearth: clear resume failed', err),
   );
+}
+
+/**
+ * Persist a UI settings patch (theme, wallpaper enabled/opacity) back to the
+ * config volume (#118). Returns the reloaded config so the caller can apply it
+ * immediately without waiting for the next poll.
+ */
+export async function updateUiSettings(patch: UiSettingsPatchBody): Promise<ConfigResponse> {
+  const res = await fetch('/api/v1/ui/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`PUT /api/v1/ui/settings failed: ${res.status}`);
+  return (await res.json()) as ConfigResponse;
+}
+
+/** Upload a wallpaper image (base64). Returns the new config snapshot (#118). */
+export async function uploadWallpaper(
+  contentType: WallpaperContentType,
+  dataBase64: string,
+): Promise<{ image: string; config: Config }> {
+  const res = await fetch('/api/v1/ui/wallpaper', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content_type: contentType, data_base64: dataBase64 }),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = (await res.json()) as { errors?: string[] };
+      detail = body.errors?.join('; ') ?? '';
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail || `POST /api/v1/ui/wallpaper failed: ${res.status}`);
+  }
+  return (await res.json()) as { image: string; config: Config };
+}
+
+/** Remove the current wallpaper and clear the config (#118). */
+export async function deleteWallpaper(): Promise<ConfigResponse> {
+  const res = await fetch('/api/v1/ui/wallpaper', { method: 'DELETE' });
+  if (!res.ok) throw new Error(`DELETE /api/v1/ui/wallpaper failed: ${res.status}`);
+  return (await res.json()) as ConfigResponse;
+}
+
+/**
+ * URL for the current wallpaper image. The `v` param is the stored image path
+ * (which carries a per-upload timestamp), so the URL changes whenever a new
+ * image is uploaded — busting any cached copy.
+ */
+export function wallpaperUrl(image: string): string {
+  return `/api/v1/ui/wallpaper?v=${encodeURIComponent(image)}`;
+}
+
+/** Fetch the resolved slideshow manifest (image ids + playback settings) (#164). */
+export async function fetchSlideshowManifest(signal?: AbortSignal): Promise<SlideshowManifest> {
+  const res = await fetch('/api/v1/slideshow/manifest', { signal });
+  if (!res.ok) throw new Error(`GET /api/v1/slideshow/manifest failed: ${res.status}`);
+  return (await res.json()) as SlideshowManifest;
+}
+
+/** URL for a slideshow image by its opaque id (#164). */
+export function slideshowImageUrl(id: string): string {
+  return `/api/v1/slideshow/image/${encodeURIComponent(id)}`;
+}
+
+/** Upload a slideshow photo (base64). Returns the updated manifest (#164). */
+export async function uploadSlideshowPhoto(
+  contentType: SlideshowImageContentType,
+  dataBase64: string,
+): Promise<SlideshowManifest> {
+  const res = await fetch('/api/v1/slideshow/photos', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content_type: contentType, data_base64: dataBase64 }),
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const body = (await res.json()) as { errors?: string[] };
+      detail = body.errors?.join('; ') ?? '';
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail || `POST /api/v1/slideshow/photos failed: ${res.status}`);
+  }
+  return ((await res.json()) as { manifest: SlideshowManifest }).manifest;
+}
+
+/** Delete an uploaded slideshow photo by id. Returns the updated manifest (#164). */
+export async function deleteSlideshowPhoto(id: string): Promise<SlideshowManifest> {
+  const res = await fetch(`/api/v1/slideshow/photos/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`DELETE /api/v1/slideshow/photos failed: ${res.status}`);
+  return ((await res.json()) as { manifest: SlideshowManifest }).manifest;
 }
 
 /** Resolve the artwork URL for a tile: remote URL as-is, bare filename via the

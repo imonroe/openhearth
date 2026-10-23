@@ -5,12 +5,12 @@
 # Multi-stage:
 #   1. builder  — installs the full pnpm workspace and compiles web + server.
 #   2. deploy   — prunes to a self-contained, production-only server bundle.
-#   3. runtime  — slim Node 20 + ffmpeg serving the built SPA + API on :8080.
+#   3. runtime  — slim Node 22 + ffmpeg serving the built SPA + API on :8080.
 #
 # The runtime layer carries no build toolchain (no pnpm store, no devDeps, no
 # TypeScript) — only Node, ffmpeg, the compiled JS, and production deps.
 
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22
 
 # ---------------------------------------------------------------------------
 # Stage 1 — builder: install workspace + build web and server

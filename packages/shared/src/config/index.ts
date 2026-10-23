@@ -51,14 +51,140 @@ export const serverConfigSchema = z
 /** A single home-screen row (PRD §10.2). Tightened as the UI lands (#21/#23). */
 export const uiRowSchema = z
   .object({
-    /** What the row renders. */
-    type: z.enum(['services', 'library']),
+    /**
+     * What the row renders. `continue_watching` and `next_up` (#155) are derived
+     * from local resume/watch state — they carry no `group`/`source` and simply
+     * disappear when empty (e.g. a cold cache).
+     */
+    type: z.enum(['services', 'library', 'continue_watching', 'next_up']),
     /** Service grouping to show (for `type: services`). */
     group: z.string().optional(),
     /** Library source id to show (for `type: library`). */
     source: z.string().optional(),
+    /** Override the row heading (defaults per type, e.g. "Continue Watching"). */
+    title: z.string().optional(),
+    /** Max tiles for `continue_watching`/`next_up` rows (1–100). */
+    limit: z.number().int().min(1).max(100).optional(),
   })
   .strict();
+
+/**
+ * Custom home-screen wallpaper (#118). The image is stored under the config
+ * volume (set via the Settings upload, or hand-dropped and referenced here).
+ */
+export const wallpaperConfigSchema = z
+  .object({
+    /** Render the wallpaper behind the UI. Defaults to off. */
+    enabled: z.boolean().optional(),
+    /**
+     * Image path relative to the config dir (e.g. `wallpaper/background.jpg`).
+     * Written by the Settings upload; may also be hand-edited to point at any
+     * image dropped into the config volume. `..` and absolute paths are rejected
+     * by the server when serving the file.
+     */
+    image: z.string().optional(),
+    /** Wallpaper opacity, 0 (invisible) – 1 (opaque). Defaults to 1. */
+    opacity: z.number().min(0).max(1).optional(),
+  })
+  .strict();
+
+export type WallpaperConfig = z.infer<typeof wallpaperConfigSchema>;
+
+/**
+ * Available screensavers (#126). One procedurally-generated saver to start
+ * (`aurora`); the list is the extension point — new savers are added here and
+ * picked up by the Settings selector and the web screensaver registry. The
+ * value is a stable id, not a display label.
+ */
+export const SCREENSAVERS = ['aurora'] as const;
+export type ScreensaverType = (typeof SCREENSAVERS)[number];
+
+/** Default idle timeout (minutes) before the screensaver activates. */
+export const SCREENSAVER_DEFAULT_TIMEOUT_MINUTES = 5;
+/** Upper bound on the configurable idle timeout (minutes). */
+export const SCREENSAVER_MAX_TIMEOUT_MINUTES = 240;
+
+/**
+ * Idle screensaver (#126). After `timeoutMinutes` with no interaction the kiosk
+ * shows the selected saver full-screen; any interaction dismisses it. The saver
+ * is procedurally generated and animates across the whole frame to avoid panel
+ * burn-in. Off only while a video is actively playing (handled client-side).
+ */
+export const screensaverConfigSchema = z
+  .object({
+    /** Activate the screensaver on idle. Defaults to on. */
+    enabled: z.boolean().optional(),
+    /** Idle minutes before activation (1 – {@link SCREENSAVER_MAX_TIMEOUT_MINUTES}). */
+    timeoutMinutes: z.number().int().min(1).max(SCREENSAVER_MAX_TIMEOUT_MINUTES).optional(),
+    /** Which saver to show. Defaults to the first entry in {@link SCREENSAVERS}. */
+    type: z.enum(SCREENSAVERS).optional(),
+  })
+  .strict();
+
+export type ScreensaverConfig = z.infer<typeof screensaverConfigSchema>;
+
+/**
+ * Slideshow / digital photo frame (#164). Cycles through user photos on the TV.
+ * Usable both as the idle screensaver (`useAsScreensaver`) and on demand from the
+ * home screen. Images come from two sources, unioned: photos uploaded through the
+ * Settings modal (stored under `config/slideshow/uploads/`) and host-mapped
+ * folders declared in `sources`. See {@link docs/slideshow-plan.md}.
+ */
+export const SLIDESHOW_TRANSITIONS = ['cut', 'fade', 'crossfade', 'wipe'] as const;
+export type SlideshowTransition = (typeof SLIDESHOW_TRANSITIONS)[number];
+
+export const SLIDESHOW_ORDERS = ['sequential', 'shuffle'] as const;
+export type SlideshowOrder = (typeof SLIDESHOW_ORDERS)[number];
+
+/** Default transition between images. */
+export const SLIDESHOW_DEFAULT_TRANSITION: SlideshowTransition = 'crossfade';
+/** Default image order. */
+export const SLIDESHOW_DEFAULT_ORDER: SlideshowOrder = 'sequential';
+/** Default seconds each image is shown. */
+export const SLIDESHOW_DEFAULT_INTERVAL_SECONDS = 8;
+/** Lower bound on the per-image interval (seconds). */
+export const SLIDESHOW_MIN_INTERVAL_SECONDS = 3;
+/** Upper bound on the per-image interval (seconds). */
+export const SLIDESHOW_MAX_INTERVAL_SECONDS = 3600;
+
+/**
+ * A host-mapped folder scanned for images (#164). Mirrors `library.sources[]`:
+ * folders can't be picked from the sandboxed browser, so they're declared here
+ * by the operator and only what's mounted is visible.
+ */
+export const slideshowSourceSchema = z
+  .object({
+    /** Stable id used to derive image ids; also referenced in the UI. */
+    id: z.string(),
+    label: z.string().optional(),
+    /** Host-mapped path inside the container (e.g. `/photos`). Read-only. */
+    path: z.string(),
+    /** Descend into subfolders. Defaults to off (top-level only). */
+    recursive: z.boolean().optional(),
+  })
+  .strict();
+export type SlideshowSource = z.infer<typeof slideshowSourceSchema>;
+
+export const slideshowConfigSchema = z
+  .object({
+    /** Show the slideshow as the idle screensaver instead of a procedural saver. */
+    useAsScreensaver: z.boolean().optional(),
+    /** Seconds each image is shown ({@link SLIDESHOW_MIN_INTERVAL_SECONDS}–{@link SLIDESHOW_MAX_INTERVAL_SECONDS}). */
+    intervalSeconds: z
+      .number()
+      .int()
+      .min(SLIDESHOW_MIN_INTERVAL_SECONDS)
+      .max(SLIDESHOW_MAX_INTERVAL_SECONDS)
+      .optional(),
+    /** Transition played between images. Defaults to `crossfade`. */
+    transition: z.enum(SLIDESHOW_TRANSITIONS).optional(),
+    /** Sequential (folder/upload order) or shuffle. Defaults to sequential. */
+    order: z.enum(SLIDESHOW_ORDERS).optional(),
+    /** Host-mapped folders scanned for images (#164). */
+    sources: z.array(slideshowSourceSchema).optional(),
+  })
+  .strict();
+export type SlideshowConfig = z.infer<typeof slideshowConfigSchema>;
 
 /** UI / home-screen options. */
 export const uiConfigSchema = z
@@ -67,8 +193,116 @@ export const uiConfigSchema = z
     theme: z.enum(['dark', 'light']).optional(),
     /** Ordered layout of the home screen. */
     rows: z.array(uiRowSchema).optional(),
+    /** Custom background wallpaper (#118). */
+    wallpaper: wallpaperConfigSchema.optional(),
+    /** Idle screensaver (#126). */
+    screensaver: screensaverConfigSchema.optional(),
+    /** Slideshow / digital photo frame (#164). */
+    slideshow: slideshowConfigSchema.optional(),
   })
   .strict();
+
+export type UiConfig = z.infer<typeof uiConfigSchema>;
+
+/**
+ * Body for `PUT /api/v1/ui/settings` (#118): the UI-editable subset of `ui.*`
+ * the Settings modal can persist. `wallpaper.image` is intentionally NOT here —
+ * it's set only by the upload/delete endpoints, never as a free-form path.
+ */
+export const uiSettingsPatchSchema = z
+  .object({
+    theme: z.enum(['dark', 'light']).optional(),
+    wallpaper: z
+      .object({
+        enabled: z.boolean().optional(),
+        opacity: z.number().min(0).max(1).optional(),
+      })
+      .strict()
+      .optional(),
+    /** Screensaver settings the modal can persist (#126). */
+    screensaver: screensaverConfigSchema.optional(),
+    /**
+     * Slideshow settings the modal can persist (#164). `sources[].path` is
+     * intentionally NOT here — folders are declared in YAML, never as a
+     * free-form path from the browser (same rule as `wallpaper.image`).
+     */
+    slideshow: z
+      .object({
+        useAsScreensaver: z.boolean().optional(),
+        intervalSeconds: z
+          .number()
+          .int()
+          .min(SLIDESHOW_MIN_INTERVAL_SECONDS)
+          .max(SLIDESHOW_MAX_INTERVAL_SECONDS)
+          .optional(),
+        transition: z.enum(SLIDESHOW_TRANSITIONS).optional(),
+        order: z.enum(SLIDESHOW_ORDERS).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export type UiSettingsPatchBody = z.infer<typeof uiSettingsPatchSchema>;
+
+/** Accepted wallpaper image content types → file extension (#118). */
+export const WALLPAPER_CONTENT_TYPES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+} as const;
+
+export type WallpaperContentType = keyof typeof WALLPAPER_CONTENT_TYPES;
+
+/** Body for `POST /api/v1/ui/wallpaper` (#118): a base64-encoded image upload. */
+export const wallpaperUploadSchema = z
+  .object({
+    content_type: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    /** Base64 (no data-URL prefix) of the raw image bytes. */
+    data_base64: z.string().min(1),
+  })
+  .strict();
+
+export type WallpaperUploadBody = z.infer<typeof wallpaperUploadSchema>;
+
+/** Accepted slideshow image content types → file extension (#164). */
+export const SLIDESHOW_IMAGE_CONTENT_TYPES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+} as const;
+
+export type SlideshowImageContentType = keyof typeof SLIDESHOW_IMAGE_CONTENT_TYPES;
+
+/** Body for `POST /api/v1/slideshow/photos` (#164): a base64-encoded image upload. */
+export const slideshowUploadSchema = z
+  .object({
+    content_type: z.enum(['image/png', 'image/jpeg', 'image/webp', 'image/gif']),
+    /** Base64 (no data-URL prefix) of the raw image bytes. */
+    data_base64: z.string().min(1),
+  })
+  .strict();
+
+export type SlideshowUploadBody = z.infer<typeof slideshowUploadSchema>;
+
+/** One image in a resolved slideshow manifest — an opaque id, never a path. */
+export interface SlideshowManifestImage {
+  /** Opaque, stable id; the client requests `GET /api/v1/slideshow/image/:id`. */
+  id: string;
+  /** True when this image was uploaded (deletable) vs. folder-sourced (read-only). */
+  uploaded: boolean;
+}
+
+/** Resolved slideshow manifest returned by `GET /api/v1/slideshow/manifest` (#164). */
+export interface SlideshowManifest {
+  images: SlideshowManifestImage[];
+  settings: {
+    intervalSeconds: number;
+    transition: SlideshowTransition;
+    order: SlideshowOrder;
+  };
+}
 
 /** A local-media library source (plain folder scan is the v1 default). */
 export const librarySourceSchema = z

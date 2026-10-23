@@ -64,11 +64,32 @@ export const availabilityEntrySchema = z
 export type AvailabilityEntry = z.infer<typeof availabilityEntrySchema>;
 
 /**
+ * A cast member on a title. `profile_url` is reserved for a future cast-image
+ * proxy (like the poster cache) and is unset in v1 — the UI renders names only.
+ */
+export const castMemberSchema = z
+  .object({
+    name: z.string().min(1),
+    /** The role they play, when known. */
+    character: z.string().optional(),
+    /** Provider-hosted headshot URL; reserved for a future image proxy. */
+    profile_url: z.string().optional(),
+  })
+  .strict();
+
+export type CastMember = z.infer<typeof castMemberSchema>;
+
+/**
  * The normalized media item. `ids` is a free-form map of source → external id
  * (e.g. `{ tmdb: "603", imdb: "tt0133093" }`) so any provider can contribute
  * identifiers without a schema change. `id` is OpenHearth's own stable id for
  * the item (e.g. the library item id, or `<provider>:<kind>:<id>` for a pure
  * metadata result).
+ *
+ * The richer fields (`runtime_minutes`, `genres`, `cast`, `directors`,
+ * `tagline`, `rating`) are populated by a full details lookup (#123) and are all
+ * optional — a search-level result or a library item without enrichment is still
+ * a valid item.
  */
 export const mediaItemSchema = z
   .object({
@@ -81,6 +102,18 @@ export const mediaItemSchema = z
     ids: z.record(z.string(), z.string()).optional(),
     /** One-line synopsis when available. */
     overview: z.string().optional(),
+    /** Runtime in whole minutes (movie runtime, or a TV episode's runtime). */
+    runtime_minutes: z.number().int().positive().nullable().optional(),
+    /** Genre names (e.g. `["Science Fiction", "Drama"]`). */
+    genres: z.array(z.string().min(1)).optional(),
+    /** Principal cast, best-first, capped by the provider. */
+    cast: z.array(castMemberSchema).optional(),
+    /** Director name(s) (creators for a series). */
+    directors: z.array(z.string()).optional(),
+    /** Marketing tagline, when present. */
+    tagline: z.string().optional(),
+    /** Average rating on a 0–10 scale, when available. */
+    rating: z.number().min(0).max(10).nullable().optional(),
     /** Reserved for a future availability provider; unused in v1. */
     availability: z.array(availabilityEntrySchema).optional(),
   })

@@ -16,7 +16,7 @@ for working-in-the-repo conventions see [CLAUDE.md](CLAUDE.md).
 OpenHearth is two logical pieces that communicate **only** through a documented
 HTTP + WebSocket API (the "seam"):
 
-- **Brain** (`packages/server`) — Fastify on Node 20 + TypeScript. Serves the web
+- **Brain** (`packages/server`) — Fastify on Node 22 + TypeScript. Serves the web
   bundle, the REST API, the WebSocket control endpoint, media streaming, and runs
   ffmpeg child processes for transcoding.
 - **Face** (`packages/web`) — React 18 + TypeScript + Vite SPA. Runs in a Chromium
@@ -84,7 +84,7 @@ Any cross-import is a bug.
 
 ## Building from source
 
-Requires **Node 20+** and **pnpm** (see [`.nvmrc`](.nvmrc)).
+Requires **Node 22.23.4+** and **pnpm** (see [`.nvmrc`](.nvmrc)).
 
 ```sh
 pnpm install      # install all workspace dependencies
@@ -118,7 +118,7 @@ docker compose up --build
 
 Drop the `build:` block to pull the published `ghcr.io/imonroe/openhearth:latest`
 instead. The multi-stage [`docker/Dockerfile`](docker/Dockerfile) builds web +
-server and produces a slim Node 20 + ffmpeg runtime.
+server and produces a slim Node 22 + ffmpeg runtime.
 
 ---
 

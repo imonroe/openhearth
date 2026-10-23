@@ -4,13 +4,14 @@ Example scripts and shortcuts for launching the OpenHearth 10-foot UI in a
 Chromium **kiosk** on power-on. These are references to copy and adapt — paths
 and the server URL must be edited for your machine.
 
-| File                                                   | Host    | Purpose                                                                                            |
-| ------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------- |
-| [`openhearth-kiosk.sh`](openhearth-kiosk.sh)           | Linux   | Chromium kiosk launcher (fullscreen, no chrome, Home-guard loaded).                                |
-| [`openhearth-kiosk.service`](openhearth-kiosk.service) | Linux   | systemd **user** service that auto-starts and restarts the kiosk.                                  |
-| [`openhearth-kiosk.desktop`](openhearth-kiosk.desktop) | Linux   | XDG autostart entry for desktop environments.                                                      |
-| [`openhearth-kiosk.bat`](openhearth-kiosk.bat)         | Windows | Chrome/Edge kiosk launcher for the Startup folder / Task Scheduler.                                |
-| [`home-guard/`](home-guard/)                           | both    | The Chromium extension that enforces the Home/Back guarantee on launched services (FR-A3 / NFR-5). |
+| File                                                   | Host    | Purpose                                                                                                                                                                                              |
+| ------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`openhearth-kiosk.sh`](openhearth-kiosk.sh)           | Linux   | Chromium kiosk launcher (fullscreen, no chrome, Home-guard loaded).                                                                                                                                  |
+| [`openhearth-kiosk.service`](openhearth-kiosk.service) | Linux   | systemd **user** service that auto-starts and restarts the kiosk.                                                                                                                                    |
+| [`openhearth-kiosk.desktop`](openhearth-kiosk.desktop) | Linux   | XDG autostart entry for desktop environments.                                                                                                                                                        |
+| [`openhearth-kiosk.bat`](openhearth-kiosk.bat)         | Windows | Chrome/Edge kiosk launcher for the Startup folder / Task Scheduler.                                                                                                                                  |
+| [`home-guard/`](home-guard/)                           | both    | The Chromium extension that enforces the Home/Back guarantee on launched services (FR-A3 / NFR-5).                                                                                                   |
+| [`home-daemon/`](home-daemon/)                         | Linux   | **Prototype** OS-level key-grab + CDP daemon ([ADR 0001](../../docs/adr/0001-kiosk-home-back-cdp-daemon.md)): the durable Home/Back fix for services (e.g. Sling) that defeat the in-page extension. |
 
 ## Setup guides
 
@@ -21,3 +22,14 @@ and the server URL must be edited for your machine.
 > `--load-extension`. That extension is the browser-level half of the Home/Back
 > guarantee — without it, the Home key won't return from a launched service.
 > Keep the flag.
+>
+> **Use un-branded Chromium / Chrome For Testing**, not branded Google Chrome (or
+> Edge): Chrome 137+ ignores `--load-extension`, so the Home-guard never loads.
+> See each deployment guide's Troubleshooting for branded-Chrome workarounds.
+> Deployment settings (home URL, return keys, debug) live in
+> [`home-guard/config.js`](home-guard/config.js).
+>
+> By default the launchers use your normal browser profile — the extension you
+> installed by hand lives there and Home/Back just works. If you need a dedicated
+> kiosk profile, see the optional `PROFILE_DIR` instructions in each launcher
+> script.

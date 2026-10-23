@@ -94,13 +94,51 @@ describe('buildHomeModel', () => {
   });
 
   it('rowLengths includes the header count and the library See All tile', () => {
-    // header(2), services(2), library(3 entries + 1 See All) (#124).
-    expect(rowLengths(buildHomeModel(config, catalog, library))).toEqual([2, 2, 4]);
+    // header(3: Search, Settings, Slideshow), services(2), library(3 + See All).
+    expect(rowLengths(buildHomeModel(config, catalog, library))).toEqual([3, 2, 4]);
   });
 
   it('firstContentRow skips the header and empty rows', () => {
     expect(firstContentRow(buildHomeModel(config, catalog, library))).toBe(1);
     // When the services row is empty, focus enters on the library row (index 2).
     expect(firstContentRow(buildHomeModel(config, { groups: [], errors: [] }, library))).toBe(2);
+  });
+
+  it('builds Continue Watching + Next Up rows from dynamic data (#155)', () => {
+    const cfg: Config = {
+      ui: {
+        rows: [{ type: 'continue_watching' }, { type: 'next_up', title: 'Up Next', limit: 1 }],
+      },
+    };
+    const model = buildHomeModel(cfg, catalog, undefined, {
+      continueWatching: [
+        {
+          item: libItem({ id: 'm1', title: 'Alpha' }),
+          position_sec: 60,
+          updated_at: 2,
+          progress: 0.5,
+        },
+      ],
+      nextUp: [
+        libItem({ id: 'e1', kind: 'episode', title: 'Show', season: 1, episode: 2 }),
+        libItem({ id: 'e2', kind: 'episode', title: 'Other', season: 1, episode: 3 }),
+      ],
+    });
+    const cont = model.rows[1]!;
+    const next = model.rows[2]!;
+    expect(cont).toMatchObject({ kind: 'continue', label: 'Continue Watching', itemCount: 1 });
+    // title override + limit applied.
+    expect(next).toMatchObject({ kind: 'nextup', label: 'Up Next', itemCount: 1 });
+    if (next.kind === 'nextup') expect(next.entries).toHaveLength(1);
+  });
+
+  it('omits empty Continue Watching / Next Up rows entirely (#155)', () => {
+    const cfg: Config = {
+      ui: { rows: [{ type: 'continue_watching' }, { type: 'next_up' }] },
+    };
+    // No dynamic data (cold cache) → the derived rows vanish, leaving only the header.
+    const model = buildHomeModel(cfg, catalog, undefined, {});
+    expect(model.rows).toHaveLength(1);
+    expect(model.rows[0]!.kind).toBe('header');
   });
 });

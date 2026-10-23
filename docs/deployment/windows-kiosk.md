@@ -12,24 +12,37 @@ mode pointed at it, launched automatically when the kiosk user logs in.
 
 - The OpenHearth server running and reachable at `http://localhost:8080` (or your
   host/port) — e.g. via Docker Desktop.
-- Google Chrome (or Microsoft Edge — both are Chromium and take the same flags).
+- A Chromium-family browser. **Which one depends on whether you stream
+  DRM-protected services** (Netflix, Sling, YouTube TV, Max…):
+  - **You do** → use **branded [Google Chrome](https://www.google.com/chrome/)**
+    and load the Home-guard by hand. Only branded Chrome ships Google's Widevine
+    CDM; un-branded Chromium and Chrome For Testing can't decrypt those streams.
+    See [Streaming DRM-protected services](#streaming-drm-protected-services) —
+    the recommended setup for most users.
+  - **You don't** (free/self-hosted content only) → un-branded
+    [Chromium](https://www.chromium.org/) or
+    [Chrome For Testing](https://googlechromelabs.github.io/chrome-for-testing/)
+    works with the `--load-extension` launcher as-is. Branded Chrome 137+ (and
+    current Edge) silently ignore that flag, so the Home-guard won't load on them
+    without the manual step below.
 - This repo's `scripts\kiosk\` folder available on the machine.
 
 ## 1. The launcher
 
 [`scripts\kiosk\openhearth-kiosk.bat`](../../scripts/kiosk/openhearth-kiosk.bat)
 starts the browser with the kiosk flags (fullscreen, no chrome/infobars, autoplay
-allowed for the player, the Home-guard extension loaded) using a dedicated,
-persistent profile. Edit the paths at the top of the file:
+allowed for the player, the Home-guard extension loaded). Edit the paths at the
+top of the file:
 
 - `OPENHEARTH_URL` — your server URL.
 - `BROWSER` — path to `chrome.exe` (or `msedge.exe`).
 - `HOME_GUARD_DIR` — defaults to the `home-guard` folder next to the script.
 
 > **If you change `OPENHEARTH_URL`** away from `http://localhost:8080`, you must
-> also set `HOME_URL` in [`home-guard\content.js`](../../scripts/kiosk/home-guard/content.js)
-> to the same origin, or the Home/Back guarantee breaks (the extension is
-> hardcoded to the home origin). See the
+> also set `homeUrl` in [`home-guard\config.js`](../../scripts/kiosk/home-guard/config.js)
+> to the same origin, or the Home/Back guarantee breaks (the guard can't tell
+> OpenHearth's own pages from a service). `config.js` is also where you add a
+> return key if your remote/keyboard's Home/Back button isn't recognized. See the
 > [home-guard README](../../scripts/kiosk/home-guard/README.md) step 1.
 
 Double-click the `.bat` to test: the browser should fill the screen with the
@@ -39,6 +52,46 @@ OpenHearth home and no address bar.
 mouse pointer. With a D-pad/keyboard remote and no mouse it never appears; if you
 need it hidden with a mouse attached, use a small utility such as *AutoHideMouseCursor*
 or *NoMouse*. (Windows has no built-in idle-hide.)
+
+**Dedicated kiosk profile (optional).** By default, the launcher uses Chrome's
+normal profile — the one you installed the Home-guard extension into. If you'd
+prefer an isolated profile (useful when the kiosk account is also your daily
+driver), uncomment the `PROFILE_DIR` line in the `.bat` and add
+`--user-data-dir="%PROFILE_DIR%"` to the `start` command. If you do, install the
+extension into *that* profile first: launch Chrome once with the same
+`--user-data-dir` flag, go to `chrome://extensions`, enable Developer mode, and
+Load unpacked → the `home-guard` folder.
+
+## Streaming DRM-protected services
+
+Netflix, Sling, YouTube TV, Max and friends are **DRM-protected** and need
+Google's **Widevine** CDM to decrypt. Widevine ships **only in branded Google
+Chrome** (and Edge) — **not** in un-branded Chromium or Chrome For Testing. But
+branded Chrome 137+ ignores the `--load-extension` flag the launcher uses for the
+Home-guard. So to get **both** DRM playback **and** the Home/Back guarantee, run
+branded Chrome and load the Home-guard **once, by hand**:
+
+1. If your server isn't at `http://localhost:8080`, set `homeUrl` in
+   [`home-guard\config.js`](../../scripts/kiosk/home-guard/config.js) first.
+2. Open Chrome normally (your everyday profile — the launcher uses the same
+   profile by default).
+3. Go to `chrome://extensions`, enable **Developer mode** (top-right), click
+   **Load unpacked**, and select the `scripts\kiosk\home-guard` folder.
+4. The extension now **persists in your profile across reboots** — the kiosk
+   picks it up on every launch. You do **not** need `--load-extension` to work
+   (the ignored flag in the `.bat` is harmless).
+
+Verify: launch a service tile, confirm DRM playback works, and press **Home** to
+confirm you return to OpenHearth (that proves the unpacked Home-guard is active).
+
+> **Caveat — this is a stopgap.** Chrome shows a "Disable developer-mode
+> extensions" bubble on startup and may auto-disable the extension after some
+> updates. If Home ever stops returning, re-open `chrome://extensions` and confirm
+> **OpenHearth Home Guard** is still enabled. For a fully silent, update-proof
+> install, package the extension as a `.crx` and force-install it via an
+> enterprise policy (`ExtensionSettings` / `ExtensionInstallForcelist`); the
+> durable fix is tracked in
+> [ADR 0001](../adr/0001-kiosk-home-back-cdp-daemon.md).
 
 ## 2. Auto-start on log on
 
@@ -79,14 +132,42 @@ key returns to OpenHearth — that proves the Home-guard extension loaded.
 
 - **A console window flashes:** set the Startup shortcut to *Run: Minimized*
   (Option A), or run via Task Scheduler (Option B).
-- **Home doesn't return from a service:** the extension didn't load — verify
-  `HOME_GUARD_DIR` resolves to `scripts\kiosk\home-guard`, and that `HOME_URL` in
-  `content.js` matches your `OPENHEARTH_URL`. On a managed/enterprise machine,
-  check that extension-install policy isn't blocking the unpacked load (you may
-  need to pair with `--disable-extensions-except=<home-guard dir>`). See the
+- **"WARNING: Chrome is already running":** the launcher detects an existing
+  Chrome session and warns that kiosk flags may not apply. Close all Chrome
+  windows and re-run, or enable the dedicated `PROFILE_DIR` option in the `.bat`
+  (uncomment the line) — an isolated profile avoids the singleton collision.
+- **Home doesn't return from a service:** the extension didn't load. The most
+  common cause on Windows is **branded Google Chrome 137+ (or Edge) ignoring**
+  `--load-extension`** as a security measure. Fix it one of these ways:
+  1. Use un-branded **Chromium** or **Chrome For Testing** for the kiosk (set
+     `BROWSER` to its `chrome.exe`) — they still honour `--load-extension`.
+  2. Keep branded Chrome but load the extension once by hand: open
+     `chrome://extensions`, enable **Developer mode**, click **Load unpacked**,
+     and pick the `scripts\kiosk\home-guard` folder. It persists in your profile
+     across launches — no `--load-extension` needed.
+  3. As a stopgap while it still works, the launcher already passes
+     `--disable-features=DisableLoadExtensionCommandLineSwitch` to re-enable the
+     flag on branded builds; Google is removing that toggle, so don't rely on it.
+
+  Also verify `HOME_GUARD_DIR` resolves to `scripts\kiosk\home-guard` and that
+  `homeUrl` in `home-guard\config.js` matches your `OPENHEARTH_URL`. On a
+  managed/enterprise machine, check that extension-install policy isn't blocking
+  the unpacked load. See the
   [home-guard README](../../scripts/kiosk/home-guard/README.md).
+- **Your remote/keyboard has no Home key:** many compact Bluetooth keyboard +
+  trackpad combos don't send `Home`/`BrowserHome`/`BrowserBack`. Set
+  `debug: true` in [`home-guard\config.js`](../../scripts/kiosk/home-guard/config.js),
+  reload the kiosk, launch a service, press the button you want to use, and read
+  the key name it logs to the browser console (`F12`). Add that string to
+  `returnKeys` in `config.js` and set `debug` back to `false`. (A remote with a
+  dedicated Home or Back button is the smoothest 10-foot experience.)
 - **Can't reach the server:** confirm Docker Desktop is running and the port is
   published; `http://localhost:8080/api/v1/health` should return JSON.
 - **Auth enabled?** If you set `server.auth.token`, the bundled UI doesn't yet
   attach it to its own requests; bind the server to `127.0.0.1` for a single-box
   kiosk instead (see [config-reference.md](../config-reference.md) § Security).
+- **Using a dedicated kiosk profile?** If you uncommented the `PROFILE_DIR` line
+  in the `.bat` for profile isolation, make sure the Home-guard extension was
+  installed into *that* profile (launch Chrome once with the same
+  `--user-data-dir`, then load the extension there). An extension installed in
+  your default profile won't be visible to the dedicated profile.

@@ -34,6 +34,19 @@ maximally adversarial page that registers its own `document_start` capture
 listener is not a hard spec guarantee — but in practice the content script wins,
 and this is the most robust mechanism available short of an OS-level key grabber.)
 
+### Returning home (background worker)
+
+When a reserved key fires, `content.js` doesn't navigate the page itself — it
+messages the background service worker (`background.js`), which calls
+`chrome.tabs.update` on the **whole tab**. This matters when the key is pressed
+inside a service's **cross-origin `<iframe>`** (some players host the video in a
+foreign-origin frame): from that frame the content script can't reach
+`window.top` to navigate it, but the worker can move the entire tab. If the
+messaging channel is ever unavailable, `content.js` falls back to navigating the
+top frame directly. The worker needs no extra permissions, and only this
+extension's own content scripts can message it — a launched service's page
+scripts cannot forge a "return home" message.
+
 ### Back keys
 
 Only `Home`/`BrowserHome` (and `BrowserBack` as a convenience) return to
@@ -41,15 +54,57 @@ OpenHearth from a service page. `Escape` and `Backspace` are **deliberately not*
 hijacked here — services use them for fullscreen/overlays — so they remain
 in-app navigation only.
 
+## Configure
+
+All deployment settings live in [`config.js`](config.js) — you never edit
+`content.js`. It exposes three values:
+
+- `homeUrl` — the origin OpenHearth is served from. Must match `OPENHEARTH_URL`
+  in the launch script. (Default `http://localhost:8080/`.)
+- `returnKeys` — the `KeyboardEvent.key` values that return to OpenHearth from a
+  service page. Default `['Home', 'BrowserHome', 'BrowserBack']`. Add your
+  device's key here if its Home/Back button isn't recognized (see below). Avoid
+  `Escape`/`Backspace` — services use them.
+- `debug` — set `true` to log every key you press on a service page to the
+  console, so you can discover what your remote/keyboard emits. Leave `false` in
+  production.
+
+**No Home key on your keyboard?** Many compact Bluetooth keyboard/trackpad combos
+have none of the default keys. Set `debug: true`, reload the extension, open a
+service, press the button you want to use, read the logged key name from the
+browser console, add it to `returnKeys`, and set `debug` back to `false`.
+
 ## Install (kiosk)
 
-1. Edit `content.js` if OpenHearth is not at `http://localhost:8080`.
-2. Load the extension into the kiosk Chromium profile, either:
-   - **Unpacked (dev/manual):** `chrome://extensions` → enable Developer mode →
-     "Load unpacked" → select this `home-guard/` folder; or
+1. Edit [`config.js`](config.js) if OpenHearth is not at `http://localhost:8080`.
+2. Load the extension into your Chromium profile, either:
+   - **Unpacked (dev/manual):** open Chrome/Chromium normally, go to
+     `chrome://extensions` → enable Developer mode → "Load unpacked" → select
+     this `home-guard/` folder. The extension persists in your profile across
+     reboots — no `--load-extension` flag needed.
    - **Kiosk launch flag:** start Chromium with
      `--load-extension=/path/to/scripts/kiosk/home-guard` (wired into the
-     auto-launch scripts in #49).
+     auto-launch scripts). Only works with un-branded Chromium / Chrome For
+     Testing.
+
+   > **Branded Chrome 137+ ignores `--load-extension`.** Google disabled that
+   > switch in branded Google Chrome (and Edge) for security. Two paths:
+   >
+   > - **Streaming DRM services (Netflix, Sling, YouTube TV…)?** You must use
+   >   **branded Google Chrome** — only it ships the Widevine CDM; un-branded
+   >   Chromium and Chrome For Testing can't decrypt those streams. Load this
+   >   extension by hand (the "Unpacked" path above) into your Chrome profile;
+   >   the launcher uses the same profile by default, so the extension is picked
+   >   up automatically. See the "Streaming DRM-protected services" recipe in
+   >   [`docs/deployment/linux-kiosk.md`](../../../docs/deployment/linux-kiosk.md)
+   >   / [`windows-kiosk.md`](../../../docs/deployment/windows-kiosk.md).
+   > - **Free / self-hosted content only?** Un-branded **Chromium** / **Chrome For
+   >   Testing** still honour `--load-extension`, so the launch scripts work as-is.
+   >
+   > The launch scripts also pass
+   > `--disable-features=DisableLoadExtensionCommandLineSwitch` as a best-effort
+   > re-enable on branded builds, but Google is removing that toggle — don't rely
+   > on it.
 
 ## Per-service quirks
 
@@ -65,6 +120,9 @@ here so it can feed back into the catalog (`notes:` field) and these docs:
 
 ## Reserved keys
 
-`RETURN_KEYS` in `content.js` mirrors the canonical list in
-`packages/web/src/reserved.ts`. Keep them in sync. The physical "Home" button on
-a typical remote/keyboard emits `Home`; some emit `BrowserHome`/`BrowserBack`.
+The default `returnKeys` in `config.js` mirror the canonical list in
+`packages/web/src/reserved.ts` (minus `Escape`/`Backspace`, which the guard
+deliberately leaves to the service). Keep the defaults in sync. The physical
+"Home" button on a typical remote/keyboard emits `Home`; some emit
+`BrowserHome`/`BrowserBack`; compact Bluetooth keyboards may emit none of them
+(use `debug` to find out, then extend `returnKeys`).

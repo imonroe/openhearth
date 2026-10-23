@@ -161,3 +161,46 @@ describe('CacheStore — metadata cache (#41)', () => {
     store.close();
   });
 });
+
+describe('CacheStore — resume & watched (#155)', () => {
+  it('round-trips and clears a resume position', () => {
+    const store = new CacheStore(':memory:');
+    expect(store.getResumePosition('a1')).toBeUndefined(); // cold
+    store.setResumePosition('a1', 120, 5000);
+    expect(store.getResumePosition('a1')).toEqual({ position_sec: 120, updated_at: 5000 });
+    store.clearResumePosition('a1');
+    expect(store.getResumePosition('a1')).toBeUndefined();
+    store.close();
+  });
+
+  it('lists resume positions joined to items, newest first, excluding orphans', () => {
+    const store = new CacheStore(':memory:');
+    store.upsertLibraryItem(item({ id: 'a', title: 'Alpha' }));
+    store.upsertLibraryItem(item({ id: 'b', title: 'Bravo' }));
+    store.setResumePosition('a', 30, 1000);
+    store.setResumePosition('b', 60, 2000);
+    // A resume row whose item was pruned must not surface (JOIN drops it).
+    store.setResumePosition('ghost', 10, 3000);
+
+    const rows = store.listResumePositions();
+    expect(rows.map((r) => r.item.id)).toEqual(['b', 'a']); // updated_at DESC
+    expect(rows[0]).toMatchObject({ position_sec: 60, updated_at: 2000 });
+    expect(rows.find((r) => r.item.id === 'ghost')).toBeUndefined();
+
+    expect(store.listResumePositions(1).map((r) => r.item.id)).toEqual(['b']); // limit
+    store.close();
+  });
+
+  it('records and lists watched items', () => {
+    const store = new CacheStore(':memory:');
+    expect(store.listWatched().size).toBe(0);
+    store.markWatched('e1', 100);
+    store.markWatched('e2', 200);
+    store.markWatched('e1', 300); // idempotent upsert
+    const watched = store.listWatched();
+    expect(watched.get('e1')).toBe(300);
+    expect(watched.get('e2')).toBe(200);
+    expect(watched.size).toBe(2);
+    store.close();
+  });
+});

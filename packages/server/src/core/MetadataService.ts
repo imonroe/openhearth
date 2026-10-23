@@ -41,6 +41,20 @@ export function metadataCacheKey(query: MetadataQuery): string {
 }
 
 /**
+ * Cache key for a *full details* lookup (#123). Namespaced apart from
+ * {@link metadataCacheKey} so the richer details entry never collides with the
+ * lightweight list entry for the same title.
+ */
+export function metadataDetailsCacheKey(query: MetadataQuery): string {
+  return JSON.stringify([
+    'details',
+    query.kind ?? 'any',
+    query.title.trim().toLowerCase(),
+    query.year ?? null,
+  ]);
+}
+
+/**
  * Build the metadata lookup for a scanned library item (#42). The library item's
  * `kind` maps onto the provider hint (`movie`/`episode → tv`); `other` searches
  * both. Episodes carry the show title, so a whole series resolves to one poster.
@@ -81,10 +95,18 @@ export interface MetadataArtwork {
   backdrop_url?: string;
 }
 
+/** A cast member, mapped from a provider's credits. */
+export interface MetadataCastMember {
+  name: string;
+  character?: string;
+  profile_url?: string;
+}
+
 /**
  * A provider-agnostic metadata result. `ref` is an opaque, round-trippable
  * handle (`<provider>:<kind>:<id>`) that {@link MetadataProvider.details} accepts;
- * callers never parse it.
+ * callers never parse it. The richer fields below are populated by `details`
+ * (not by `search`) and are all optional.
  */
 export interface MetadataResult {
   ref: string;
@@ -93,6 +115,14 @@ export interface MetadataResult {
   year?: number | null;
   overview?: string;
   artwork: MetadataArtwork;
+  /** Runtime in whole minutes. */
+  runtime_minutes?: number;
+  genres?: string[];
+  cast?: MetadataCastMember[];
+  directors?: string[];
+  tagline?: string;
+  /** Average rating on a 0–10 scale. */
+  rating?: number;
 }
 
 /** The seam every metadata provider implements. No provider specifics leak out. */
@@ -134,6 +164,12 @@ export function mediaItemFromMetadata(result: MetadataResult): MediaItem {
     ...(result.overview ? { overview: result.overview } : {}),
     ...(Object.keys(artwork).length > 0 ? { artwork } : {}),
     ...(ids ? { ids } : {}),
+    ...(result.runtime_minutes != null ? { runtime_minutes: result.runtime_minutes } : {}),
+    ...(result.genres && result.genres.length > 0 ? { genres: result.genres } : {}),
+    ...(result.cast && result.cast.length > 0 ? { cast: result.cast } : {}),
+    ...(result.directors && result.directors.length > 0 ? { directors: result.directors } : {}),
+    ...(result.tagline ? { tagline: result.tagline } : {}),
+    ...(result.rating != null ? { rating: result.rating } : {}),
   };
 }
 
@@ -249,6 +285,47 @@ export class MetadataService {
       const results = await this.provider.search(query);
       const best = pickBestMatch(results, query);
       item = best ? mediaItemFromMetadata(best) : null;
+    } catch {
+      return null; // transient failure: don't cache, retry next time
+    }
+
+    this.cache?.setMetadata(key, {
+      item,
+      fetched_at: now,
+      expires_at: now + (item ? this.positiveTtlMs : this.negativeTtlMs),
+    });
+    return item;
+  }
+
+  /**
+   * Resolve a library item to a *full* {@link MediaItem} — overview, runtime,
+   * genres, cast, etc. — for the detail screen (#123), cached under a separate
+   * details key so repeat opens cost no API call.
+   *
+   * Cold path: search for the best match, then fetch its full details; if the
+   * details call fails we fall back to the search-level result so the screen
+   * still gets overview/poster. Same graceful contract as {@link resolveMedia}:
+   * no provider → null (never touches the cache); a transient error → null
+   * without caching (retried next time). The cache is disposable.
+   */
+  async resolveDetails(query: MetadataQuery): Promise<MediaItem | null> {
+    const key = metadataDetailsCacheKey(query);
+    const now = this.now();
+    const cached = this.cache?.getMetadata(key);
+    if (cached && cached.expires_at > now) return cached.item;
+
+    if (!this.provider) return null;
+
+    let item: MediaItem | null;
+    try {
+      const results = await this.provider.search(query);
+      const best = pickBestMatch(results, query);
+      if (!best) {
+        item = null;
+      } else {
+        const detailed = await this.provider.details(best.ref);
+        item = mediaItemFromMetadata(detailed ?? best);
+      }
     } catch {
       return null; // transient failure: don't cache, retry next time
     }

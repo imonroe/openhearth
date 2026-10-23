@@ -56,22 +56,141 @@ located error.
 | `ui.title` | string | `OpenHearth` | `My Living Room` |
 | `ui.theme` | `dark` \| `light` | `dark` | `dark` |
 | `ui.rows` | list of [row](#ui-row) | _(none)_ | see below |
+| `ui.wallpaper` | [wallpaper](#ui-wallpaper) | _(none)_ | Custom home-screen background. |
+| `ui.screensaver` | [screensaver](#ui-screensaver) | _(on, 5 min)_ | Idle screensaver. |
+| `ui.slideshow` | [slideshow](#ui-slideshow) | _(off)_ | Slideshow / digital photo frame. |
 
-#### `ui` row
+#### `ui` wallpaper
 
-Each row renders either the service grid or a library shelf, in order.
+A custom image rendered full-bleed behind the home screen, with the tiles and
+header in front (#118). Editable here by hand, or from the in-app **Settings**
+modal (gear icon in the header), which uploads an image into the config volume
+and writes these keys for you (comments in this file are preserved).
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Show the wallpaper. |
+| `image` | string | _(none)_ | Path **relative to the config dir** (e.g. `wallpaper/background-1.png`). Raster only (PNG/JPEG/WebP); `..` and absolute paths are rejected. Usually set by the Settings upload. |
+| `opacity` | number `0`–`1` | `1` | Wallpaper opacity. Lower values fade it toward the background (the "transparency level"). |
+
+```yaml
+ui:
+  wallpaper:
+    enabled: true
+    image: wallpaper/background-1.png
+    opacity: 0.8
+```
+
+> Uploaded wallpapers are stored under `config/wallpaper/`. Settings changes made
+> in the app are written back to this file in place — your comments and layout
+> survive. If `openhearth.yaml` has a YAML syntax error, the app won't overwrite
+> it; fix the error first.
+
+#### `ui` screensaver
+
+After the interface sits idle for `timeoutMinutes`, a full-screen screensaver
+takes over to prevent panel burn-in (#126). Any key, click, or remote press
+dismisses it instantly and returns you to exactly where you were. It never
+appears while a video is playing. Editable here or from the in-app **Settings**
+modal.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | boolean | `true` | Activate the screensaver on idle. |
+| `timeoutMinutes` | integer `1`–`240` | `5` | Idle minutes before it starts. |
+| `type` | `aurora` | `aurora` | Which screensaver to show. `aurora` is slowly drifting colour fields with a wandering clock. |
+
+```yaml
+ui:
+  screensaver:
+    enabled: true
+    timeoutMinutes: 10
+    type: aurora
+```
+
+<a id="ui-slideshow"></a>
+
+#### `ui` slideshow
+
+A slideshow / digital photo frame (#164). It cycles through your photos on the
+TV and can run two ways: as the **idle screensaver** (set `useAsScreensaver:
+true`) and **on demand** from the home-screen header. Images come from two
+sources, combined: photos **uploaded** through the in-app **Settings** modal
+(stored under `config/slideshow/uploads/`) and any host-mapped **folders** you
+declare in `sources`. Full design: [`slideshow-plan.md`](./slideshow-plan.md).
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `useAsScreensaver` | boolean | `false` | Show the slideshow on idle instead of the screensaver. With no images available it falls back to the configured screensaver, so the idle screen is never blank. |
+| `intervalSeconds` | integer `3`–`3600` | `8` | Seconds each image is shown. |
+| `transition` | `cut` \| `fade` \| `crossfade` \| `wipe` | `crossfade` | Animation between images. `cut` is instant; `fade` goes through black; `crossfade` dissolves; `wipe` reveals with a moving edge. |
+| `order` | `sequential` \| `shuffle` | `sequential` | Play in folder/upload order, or shuffle. |
+| `sources` | list of [source](#ui-slideshow-source) | _(none)_ | Host-mapped folders scanned for images. |
+
+<a id="ui-slideshow-source"></a>
+
+Each `sources[]` entry:
 
 | Field | Required | Type | Notes |
 |---|---|---|---|
-| `type` | yes | `services` \| `library` | What the row renders. |
+| `id` | yes | string | Stable id (used to derive image ids). |
+| `label` | no | string | Display label. |
+| `path` | yes | string | Host-mapped path inside the container (e.g. `/photos`). Read-only; scanned for raster images (PNG/JPEG/WebP/GIF). Symlinks that escape the folder are ignored. |
+| `recursive` | no | boolean | Descend into subfolders. Defaults to `false` (top level only). |
+
+```yaml
+ui:
+  slideshow:
+    useAsScreensaver: true
+    intervalSeconds: 10
+    transition: crossfade
+    order: shuffle
+    sources:
+      - id: photos
+        label: Family Photos
+        path: /photos # mount `./my-photos:/photos:ro`
+        recursive: false
+```
+
+> Uploaded photos are stored under `config/slideshow/uploads/` (add or remove
+> them from **Settings**). Folder `sources` are configured here — folders can't
+> be chosen from the sandboxed browser, so the container only ever sees what you
+> mount. Like all image routes, serving is raster-only, path-contained, and
+> `nosniff` (no SVG).
+
+#### `ui` row
+
+Each row renders a service grid, a library shelf, or a derived row, in order.
+
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `type` | yes | `services` \| `library` \| `continue_watching` \| `next_up` | What the row renders. |
 | `group` | no | string | For `type: services` — which service `group` to show. |
 | `source` | no | string | For `type: library` — which `library.sources[].id` to show. |
+| `title` | no | string | Override the row heading (for `continue_watching`/`next_up`). |
+| `limit` | no | integer `1`–`100` | Max tiles for `continue_watching`/`next_up`. |
+
+**Continue Watching / Next Up** (#155) are derived from your **local** resume and
+watch history — no telemetry, nothing leaves the box:
+
+- `continue_watching` — items you've started but not finished, most-recently-watched
+  first. Selecting one jumps straight into the player (which offers resume vs. start
+  over). An item watched to the end (or past ~95% of a known duration) drops off.
+- `next_up` — the next unwatched episode for each series you've made progress in.
+  An episode is recorded "watched" when it plays to the end; Next Up then surfaces
+  the following episode (skipping any episode you're already mid-way through — that
+  one shows in Continue Watching instead).
+
+Both rows **only appear when they have something to show** — a cold `cache/` or
+nothing in progress simply hides them (they're rebuilt from the disposable cache).
 
 ```yaml
 ui:
   title: OpenHearth
   theme: dark
   rows:
+    - { type: continue_watching }
+    - { type: next_up, title: Up Next, limit: 10 }
     - { type: services, group: Streaming }
     - { type: library, source: movies }
 ```

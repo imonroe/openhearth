@@ -8,6 +8,7 @@ import { buildApp } from './app.js';
 import { ConfigService } from './core/ConfigService.js';
 import { CacheStore } from './core/CacheStore.js';
 import { LibraryService } from './core/LibraryService.js';
+import { MetadataService, type MetadataProvider } from './core/MetadataService.js';
 
 let dir: string;
 let cfg: ConfigService;
@@ -28,19 +29,33 @@ function item(over: Partial<LibraryItem>): LibraryItem {
 }
 
 /** Build the app with a library backed by an in-memory store seeded with items. */
-async function makeApp(items: LibraryItem[] = [], withLibrary = true): Promise<void> {
+async function makeApp(
+  items: LibraryItem[] = [],
+  withLibrary = true,
+  metadataProvider?: MetadataProvider,
+): Promise<void> {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'oh-libapi-'));
   cfg = new ConfigService({ configDir: dir });
   await cfg.load();
   store = new CacheStore(':memory:');
   store.upsertLibraryItems(items);
   const libraryService = new LibraryService({ store, getSources: () => [] });
+  // Build the metadata service against this run's store (so resolveDetails caches
+  // into the same DB the library uses).
+  const metadataService = metadataProvider
+    ? new MetadataService(metadataProvider, { cache: store })
+    : undefined;
   app = buildApp({
     configService: cfg,
     logLevel: 'silent',
     ...(withLibrary ? { libraryService } : {}),
+    ...(metadataService ? { metadataService } : {}),
   });
   await app.ready();
+}
+
+function fakeProvider(over: Partial<MetadataProvider> = {}): MetadataProvider {
+  return { name: 'fake', search: async () => [], details: async () => null, ...over };
 }
 
 const seed: LibraryItem[] = [
@@ -164,6 +179,58 @@ describe('GET /api/v1/library/:id', () => {
     await makeApp(seed, false);
     const res = await app.inject({ url: '/api/v1/library/e1' });
     expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('GET /api/v1/library/:id/metadata (#123)', () => {
+  it('returns rich details, sanitized (no raw provider image URLs)', async () => {
+    const provider = fakeProvider({
+      search: async () => [
+        { ref: 'tmdb:movie:1', kind: 'movie', title: 'Alpha', year: 2001, artwork: {} },
+      ],
+      details: async () => ({
+        ref: 'tmdb:movie:1',
+        kind: 'movie',
+        title: 'Alpha',
+        year: 2001,
+        overview: 'A film.',
+        runtime_minutes: 120,
+        genres: ['Drama'],
+        cast: [
+          { name: 'Ada Lovelace', character: 'Self', profile_url: 'https://image.tmdb.org/x.jpg' },
+        ],
+        directors: ['Dee Rector'],
+        rating: 7.5,
+        artwork: { poster_url: 'https://image.tmdb.org/p.jpg' },
+      }),
+    });
+    await makeApp(seed, true, provider);
+
+    const body = (await app.inject({ url: '/api/v1/library/m1/metadata' })).json();
+    expect(body).toMatchObject({
+      id: 'tmdb:movie:1',
+      title: 'Alpha',
+      overview: 'A film.',
+      runtime_minutes: 120,
+      genres: ['Drama'],
+      directors: ['Dee Rector'],
+      rating: 7.5,
+    });
+    // Cast keeps name/character but the raw TMDB profile URL is stripped (NFR-9).
+    expect(body.cast).toEqual([{ name: 'Ada Lovelace', character: 'Self' }]);
+    // No raw provider poster URL leaks (no cached/proxied poster here → no artwork).
+    expect(JSON.stringify(body)).not.toContain('image.tmdb.org');
+  });
+
+  it('degrades to the filename projection with no provider', async () => {
+    await makeApp(seed); // no metadataService
+    const body = (await app.inject({ url: '/api/v1/library/m1/metadata' })).json();
+    expect(body).toEqual({ id: 'm1', title: 'Alpha', kind: 'movie', year: 2001 });
+  });
+
+  it('404s an unknown id', async () => {
+    await makeApp(seed);
+    expect((await app.inject({ url: '/api/v1/library/nope/metadata' })).statusCode).toBe(404);
   });
 });
 

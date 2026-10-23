@@ -44,6 +44,34 @@ describe('seedConfigDir', () => {
     expect(fs.readFileSync(path.join(configDir, 'openhearth.yaml'), 'utf8')).toContain('9999');
   });
 
+  it('returns config-nonempty-missing-primary when config dir is non-empty but lacks openhearth.yaml', () => {
+    const configDir = path.join(root, 'config');
+    fs.mkdirSync(configDir);
+    // Directory is non-empty (has a file), but not the primary config
+    fs.writeFileSync(path.join(configDir, 'some-other-file.txt'), 'hello');
+    const result = seedConfigDir(configDir, seedDir);
+    expect(result.seeded).toBe(false);
+    expect(result.reason).toBe('config-nonempty-missing-primary');
+    expect(result.hint).toBeDefined();
+    expect(result.hint).toContain('openhearth.yaml');
+    expect(result.hint).toContain('not found');
+  });
+
+  it('detects the common config.example/ nested-layout mistake', () => {
+    const configDir = path.join(root, 'config');
+    fs.mkdirSync(configDir);
+    // Simulate: user copied the config.example/ folder itself into /config
+    const nested = path.join(configDir, 'config.example');
+    fs.mkdirSync(nested);
+    fs.writeFileSync(path.join(nested, 'openhearth.yaml'), 'server:\n  port: 9090\n');
+    const result = seedConfigDir(configDir, seedDir);
+    expect(result.seeded).toBe(false);
+    expect(result.reason).toBe('config-nonempty-missing-primary');
+    expect(result.hint).toContain('config.example');
+    expect(result.hint).toContain('copy its *contents*');
+    expect(result.hint).toContain('openhearth.yaml');
+  });
+
   it('reports when there is no seed directory', () => {
     const result = seedConfigDir(path.join(root, 'config'), path.join(root, 'nope'));
     expect(result).toEqual({ seeded: false, reason: 'no-seed-dir' });

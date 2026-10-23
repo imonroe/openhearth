@@ -173,6 +173,13 @@ async function main(): Promise<void> {
     );
   }
 
+  // Surface the most common first-run misconfiguration: /config is non-empty but
+  // openhearth.yaml is missing, usually because the user copied the config.example/
+  // folder itself rather than its contents (NFR-4 non-fatal).
+  if (seed.reason === 'config-nonempty-missing-primary') {
+    app.log.warn(seed.hint);
+  }
+
   try {
     await app.listen({ port, host: HOST });
   } catch (err) {
