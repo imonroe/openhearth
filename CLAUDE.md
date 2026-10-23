@@ -38,7 +38,7 @@ docker-compose up --build
 
 The system has two logical pieces that communicate **only** via a documented HTTP + WebSocket API (the "seam"):
 
-- **Brain** (`packages/server`): Fastify (Node 20 + TypeScript). Serves the web UI bundle, the API, WebSocket control endpoint, media streaming, and runs ffmpeg child processes for transcoding.
+- **Brain** (`packages/server`): Fastify (Node 22 + TypeScript). Serves the web UI bundle, the API, WebSocket control endpoint, media streaming, and runs ffmpeg child processes for transcoding.
 - **Face** (`packages/web`): React 18 + TypeScript + Vite SPA. Runs in a Chromium kiosk (`--kiosk --app=http://localhost:8080`). Pure client of the API — imports nothing from `server/`.
 - **Shared** (`packages/shared`): TypeScript types and JSON Schemas for the protocol, config, and media models. Imported by both `server` and `web`. This is what enforces the seam at compile time.
 
@@ -86,7 +86,7 @@ config.example/         — seed config shipped to users
   openhearth.yaml
   services.yaml
   services.d/           — community service definitions (netflix.yaml, youtube.yaml, …)
-docker/Dockerfile       — multi-stage: build web + server → slim Node 20 + ffmpeg runtime
+docker/Dockerfile       — multi-stage: build web + server → slim Node 22 + ffmpeg runtime
 docker-compose.yml      — reference compose
 docs/
   prd.md                — requirements (the "what")
